@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+
+# Recordings, exports and analysis dumps stay out of the repository
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.aac
+*.aif
+*.aiff
+*.ogg
+*.opus
+*.csv

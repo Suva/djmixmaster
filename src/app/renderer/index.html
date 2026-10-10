@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
+  <title>DJ Mix Master</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <button id="open">Open recording…</button>
+    <span id="file-name">No recording open</span>
+    <span class="spacer"></span>
+    <span id="export-status"></span>
+    <button id="export" class="primary" disabled>Export mix…</button>
+  </header>
+  <div id="progress" hidden>
+    <div id="progress-bar"></div>
+    <span id="progress-label"></span>
+  </div>
+
+  <main>
+    <section id="workspace">
+      <div id="empty">
+        <p class="empty-title">Open a recording to start</p>
+        <p>Drop an MP3, WAV or FLAC here, or use Open recording.</p>
+      </div>
+
+      <div id="views" hidden>
+        <div class="region-bar">
+          <span class="region-title">Mix region</span>
+          <label>Start <input id="region-start" type="text" spellcheck="false"></label>
+          <label>End <input id="region-end" type="text" spellcheck="false"></label>
+          <span>Length <output id="region-length"></output></span>
+          <span class="spacer"></span>
+          <button id="select-all">Whole recording</button>
+        </div>
+        <canvas id="overview"></canvas>
+        <p class="hint">Drag on the recording above to mark the mix. Drag an edge to adjust it, or the middle to move it. Click inside the mix to listen from there.</p>
+        <div class="transport">
+          <button id="play" title="Space">Play</button>
+          <output id="play-time">0:00:00</output>
+          <div class="toggle" role="group" aria-label="What to listen to">
+            <button id="hear-original" title="A switches between the two">Original</button>
+            <button id="hear-levelled" class="on" title="A switches between the two">Levelled</button>
+          </div>
+          <span class="spacer"></span>
+          <span id="meter"></span>
+        </div>
+        <canvas id="detail"></canvas>
+        <div id="readout">&nbsp;</div>
+      </div>
+    </section>
+
+    <aside>
+      <h2>Levelling</h2>
+      <div class="control">
+        <div class="control-head">
+          <label for="target">Target loudness</label>
+          <output id="target-value"></output>
+        </div>
+        <input id="target" type="range" min="-20" max="-5" step="0.5" value="-10" disabled>
+        <label class="check"><input id="target-auto" type="checkbox" checked> Keep the mix's own level</label>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="window">Breakdown length</label>
+          <output id="window-value"></output>
+        </div>
+        <input id="window" type="range" min="30" max="300" step="10">
+        <p class="note">Quieter passages shorter than this keep the gain of the track around them.</p>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="smooth">Transition time</label>
+          <output id="smooth-value"></output>
+        </div>
+        <input id="smooth" type="range" min="2" max="40" step="1">
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="bass">Bass weight</label>
+          <output id="bass-value"></output>
+        </div>
+        <input id="bass" type="range" min="0" max="1" step="0.05">
+        <p class="note">0 matches perceived loudness, 100% matches the level of the kick and bass.</p>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="boost">Most boost</label>
+          <output id="boost-value"></output>
+        </div>
+        <input id="boost" type="range" min="0" max="12" step="0.5">
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="cut">Most cut</label>
+          <output id="cut-value"></output>
+        </div>
+        <input id="cut" type="range" min="0" max="18" step="0.5">
+      </div>
+
+      <h2>Limiter</h2>
+      <div class="control">
+        <div class="control-head">
+          <label for="ceiling">Peak ceiling</label>
+          <output id="ceiling-value"></output>
+        </div>
+        <input id="ceiling" type="range" min="-3" max="0" step="0.1" value="-1">
+      </div>
+
+      <h2>This mix</h2>
+      <dl id="stats">
+        <dt>Loudness now</dt><dd id="stat-in">–</dd>
+        <dt>After levelling</dt><dd id="stat-out">–</dd>
+        <dt>Gain range</dt><dd id="stat-gain">–</dd>
+        <dt>Limiter</dt><dd id="stat-limiter">–</dd>
+      </dl>
+      <button id="reset">Reset settings</button>
+    </aside>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>

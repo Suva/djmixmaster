@@ -1,0 +1,27 @@
+{
+  "name": "djmaster",
+  "version": "0.1.0",
+  "description": "Levels the loudness of DJ mixes track by track without pumping the breakdowns",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "djmaster": "src/cli.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node scripts/build.mjs && electron .",
+    "build": "node scripts/build.mjs",
+    "master": "node src/cli.ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "electron": "^44.7.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.8.0"
+  },
+  "main": "dist/main.cjs"
+}
