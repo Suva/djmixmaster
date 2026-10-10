@@ -67,6 +67,16 @@ test('bass correction levels the bass and the rest separately', () => {
   assert.ok(Math.abs(run(1, 1).bass - 1) < 0.1, 'the cap bounds the change');
 });
 
+test('a hand adjustment raises its stretch and ramps at the edges', () => {
+  const n = 12000;
+  const flat = new Float32Array(n).fill(-10);
+  const measured = { shortTerm: flat, lowShortTerm: flat, restShortTerm: flat } as Measurement;
+  const { gainDb } = level(measured, DEFAULT_LEVEL_OPTIONS, undefined, [{ start: 4000, end: 8000, db: 2 }]);
+  assert.ok(Math.abs(gainDb[6000] - 2) < 0.01, 'full change inside');
+  assert.ok(Math.abs(gainDb[1000]) < 0.01 && Math.abs(gainDb[11000]) < 0.01, 'nothing outside');
+  assert.ok(Math.abs(gainDb[4000] - 1) < 0.1, 'half way at the edge');
+});
+
 test('shelf moves the bass and leaves the highs', () => {
   const amplitude = (hz: number, gainDb: number) => {
     const shelf = new LowShelf(44100, 1);

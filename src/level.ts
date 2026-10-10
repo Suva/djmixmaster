@@ -1,4 +1,4 @@
-import { fullEnergyEnvelope, gainCurve, median, type LevelOptions } from './gain-curve.ts';
+import { adjustmentCurve, fullEnergyEnvelope, gainCurve, median, type Adjustment, type LevelOptions } from './gain-curve.ts';
 
 export interface LoudnessCurves {
   /** Short-term loudness in LUFS per 100 ms block. */
@@ -35,9 +35,12 @@ export interface Levelling {
  * Derives the gain curves from measured loudness. Cheap, so it can be re-run on
  * every settings change. Without a target in `options`, the result keeps the
  * mix's own level, or, when `headroom` is given, is made as loud as fits under
- * the ceiling without leaning on the limiter.
+ * the ceiling without leaning on the limiter. `adjustments` are manual changes
+ * laid on top of the automatic gain.
  */
-export function level(curves: LoudnessCurves, options: LevelOptions, headroom?: Headroom): Levelling {
+export function level(
+  curves: LoudnessCurves, options: LevelOptions, headroom?: Headroom, adjustments: Adjustment[] = [],
+): Levelling {
   const envelope = fullEnergyEnvelope(curves.shortTerm, options);
   const typicalLufs = median(envelope);
   const bass =
@@ -73,6 +76,8 @@ export function level(curves: LoudnessCurves, options: LevelOptions, headroom?: 
   // whole mix by one fixed amount.
   const reference = median(envelope);
   const gainDb = gainCurve(envelope, reference, options);
+  const manual = adjustmentCurve(adjustments, gainDb.length, options);
+  for (let i = 0; i < gainDb.length; i++) gainDb[i] += manual[i];
   let targetLufs = options.targetLufs ?? typicalLufs;
   if (options.targetLufs === undefined && headroom) {
     // Where the peaks of the music would land after levelling. A recording made

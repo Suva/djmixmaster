@@ -1,15 +1,21 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
-import { stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
+import { deserialize, serialize } from 'node:v8';
+import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
-import type { Job, JobMessage, RenderRequest } from './api.ts';
+import type { Job, JobMessage, Remembered, RenderRequest } from './api.ts';
 
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aif', 'aiff', 'ogg', 'opus'];
 /** Development aid: save a picture of the window here once a file is drawn, then quit. */
 const SCREENSHOT = process.env.DJMASTER_SHOT;
+// Automated checks keep their own memory, so they never touch the user's saved work.
+if (SCREENSHOT) app.setPath('userData', process.env.DJMASTER_SHOT_DATA ?? join(tmpdir(), 'djmaster-check'));
 
 /**
  * The window and the recording it plays are served from one origin, so the
@@ -134,7 +140,72 @@ ipcMain.handle('media-url', (_event, path: string) => {
   return `${ORIGIN}/media/${media.id}`;
 });
 
-ipcMain.handle('measure', (_event, input: string) => runJob({ kind: 'measure', input }));
+// ---------------------------------------------------------------------------
+// What is kept between sessions, all under the app's own data folder:
+// analyses (so a long recording is only analysed once), the mixes marked in
+// each recording, and the settings last in use.
+
+const ANALYSES_KEPT = 20;
+const stored = (folder: string, key: string, extension: string) =>
+  join(app.getPath('userData'), folder, `${createHash('sha1').update(key).digest('hex')}.${extension}`);
+const defaultsFile = () => join(app.getPath('userData'), 'last-settings.json');
+
+async function readJson(file: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async function writeStored(file: string, data: string | Uint8Array) {
+  await mkdir(join(file, '..'), { recursive: true });
+  await writeFile(file, data);
+}
+
+/** Drops the analyses that have gone unused the longest. */
+async function pruneAnalyses(folder: string) {
+  const files = await Promise.all(
+    (await readdir(folder)).map(async (name) => ({ path: join(folder, name), used: (await stat(join(folder, name))).mtimeMs })),
+  );
+  files.sort((a, b) => b.used - a.used);
+  await Promise.all(files.slice(ANALYSES_KEPT).map((file) => rm(file.path, { force: true })));
+}
+
+ipcMain.handle('measure', async (_event, input: string) => {
+  // A changed file gets a different key and is analysed afresh.
+  const info = await stat(input);
+  const file = stored('analyses', `${ANALYSIS_VERSION}|${input}|${info.size}|${info.mtimeMs}`, 'bin');
+  try {
+    const cached = deserialize(await readFile(file));
+    await utimes(file, new Date(), new Date()); // counts as used, for pruning
+    return cached;
+  } catch {
+    // Not analysed before, or the stored copy is unreadable.
+  }
+  const measured = await runJob({ kind: 'measure', input });
+  try {
+    await writeStored(file, serialize(measured));
+    await pruneAnalyses(join(file, '..'));
+  } catch (error) {
+    console.error('Could not store the analysis:', error);
+  }
+  return measured;
+});
+
+ipcMain.handle('recall', async (_event, path: string): Promise<Remembered> => ({
+  session: await readJson(stored('sessions', path, 'json')),
+  defaults: await readJson(defaultsFile()),
+}));
+
+/** Saves follow one another, so an older one can never land on top of a newer one. */
+let saving: Promise<unknown> = Promise.resolve();
+ipcMain.on('remember', (_event, path: string, remembered: Remembered) => {
+  saving = saving
+    .then(() => writeStored(stored('sessions', path, 'json'), JSON.stringify(remembered.session)))
+    .then(() => writeStored(defaultsFile(), JSON.stringify(remembered.defaults)))
+    .catch((error) => console.error('Could not save the session:', error));
+});
 
 ipcMain.handle('render', (_event, request: RenderRequest) => {
   if (resolve(request.output) === resolve(request.input)) {

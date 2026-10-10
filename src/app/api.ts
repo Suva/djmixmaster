@@ -11,6 +11,14 @@ export interface RenderRequest {
   ceilingDb: number | null;
 }
 
+/** What is remembered between sessions. The window decides what goes in; the main process only stores it. */
+export interface Remembered {
+  /** The mixes last marked in this recording, if it has been opened before. */
+  session: unknown;
+  /** The settings last in use, for recordings opened for the first time. */
+  defaults: unknown;
+}
+
 /** What the window may ask the main process to do. */
 export interface Api {
   pickFile(): Promise<string | null>;
@@ -18,6 +26,8 @@ export interface Api {
   initialFile(): Promise<string | null>;
   pathForFile(file: File): string;
   measure(path: string): Promise<Measurement>;
+  recall(path: string): Promise<Remembered>;
+  remember(path: string, remembered: Remembered): void;
   /** Address the window can play this recording from. */
   mediaUrl(path: string): Promise<string>;
   pickOutput(suggested: string): Promise<string | null>;

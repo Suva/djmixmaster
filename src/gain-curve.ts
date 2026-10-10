@@ -157,6 +157,25 @@ function boxSmooth(values: Float32Array, width: number): Float32Array {
   return out;
 }
 
+/** A manual change to the gain over a stretch of the curve. */
+export interface Adjustment {
+  /** First block of the stretch and the block just past its end, counted from the start of the curve. */
+  start: number;
+  end: number;
+  db: number;
+}
+
+/** Manual adjustments as a gain curve in dB. Their edges ramp like the automatic transitions do. */
+export function adjustmentCurve(adjustments: Adjustment[], length: number, options: LevelOptions): Float32Array {
+  const steps = new Float32Array(length);
+  if (adjustments.length === 0) return steps;
+  for (const { start, end, db } of adjustments) {
+    for (let i = Math.max(0, start); i < Math.min(length, end); i++) steps[i] += db;
+  }
+  const width = Math.max(1, Math.round(options.smoothSeconds / HOP_SECONDS));
+  return boxSmooth(boxSmooth(steps, width), width);
+}
+
 /** Gain in dB per block that moves the envelope onto the reference level. */
 export function gainCurve(envelope: Float32Array, referenceLufs: number, options: LevelOptions): Float32Array {
   const n = envelope.length;

@@ -1,5 +1,6 @@
 // Canvas drawing for the recording overview and the three-lane detail view.
 
+import type { Adjustment } from '../../gain-curve.ts';
 import { HOP_SECONDS } from '../../loudness.ts';
 
 const COLOR = {
@@ -170,9 +171,22 @@ export interface Detail {
   gainDb: Float32Array;
   /** Bass shelf gain, or null when bass correction is off. */
   bassDb: Float32Array | null;
+  /** Manual gain changes, in blocks counted from the start of the mix. */
+  adjustments: Adjustment[];
   targetLufs: number;
   /** Limiter ceiling as a linear sample value. */
   ceiling: number;
+}
+
+const LANE_GAP = 10;
+
+/** Where the three lanes of the detail view sit, top to bottom, for a canvas of this height. */
+export function detailLanes(height: number) {
+  const usable = height - AXIS;
+  const wave = { top: 0, height: Math.round(usable * 0.38) };
+  const loudness = { top: wave.height + LANE_GAP, height: Math.round(usable * 0.38) - LANE_GAP };
+  const gainTop = loudness.top + loudness.height + LANE_GAP;
+  return { wave, loudness, gain: { top: gainTop, height: usable - gainTop } };
 }
 
 function laneLabel(ctx: CanvasRenderingContext2D, x: number, y: number, parts: [string, string][]) {
@@ -195,6 +209,8 @@ function laneLabel(ctx: CanvasRenderingContext2D, x: number, y: number, parts: [
  */
 export function drawDetail(
   canvas: HTMLCanvasElement, detail: Detail, view: Region, hoverX: number | null, playhead: number | null,
+  /** Index of the adjustment under the pointer or being dragged, if any. */
+  activeAdjustment: number | null,
 ) {
   const { ctx, width, height } = fit(canvas);
   const plot = width - GUTTER;
@@ -204,10 +220,8 @@ export function drawDetail(
   const shown = <T extends Float32Array>(values: T) => values.subarray(view.start, view.end);
 
   const usable = height - AXIS;
-  const gap = 10;
-  const waveLane = { top: 0, height: Math.round(usable * 0.38) };
-  const loudLane = { top: waveLane.height + gap, height: Math.round(usable * 0.38) - gap };
-  const gainLane = { top: loudLane.top + loudLane.height + gap, height: usable - (loudLane.top + loudLane.height + gap) };
+  const gap = LANE_GAP;
+  const { wave: waveLane, loudness: loudLane, gain: gainLane } = detailLanes(height);
 
   const gridLine = (y: number, label: string) => {
     ctx.fillStyle = COLOR.grid;
@@ -315,6 +329,22 @@ export function drawDetail(
     for (let db = Math.ceil(lo / step) * step; db <= hi; db += step) {
       gridLine(toY(db), `${db > 0 ? '+' : ''}${db}`);
     }
+    // Manual adjustments as bands behind the curve.
+    detail.adjustments.forEach((adjustment, index) => {
+      const x0 = GUTTER + Math.max(0, ((adjustment.start - view.start) / n) * plot);
+      const x1 = GUTTER + Math.min(plot, ((adjustment.end - view.start) / n) * plot);
+      if (x1 <= x0) return;
+      const active = index === activeAdjustment;
+      ctx.fillStyle = active ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.07)';
+      ctx.fillRect(x0, gainLane.top, x1 - x0, gainLane.height);
+      ctx.fillStyle = active ? COLOR.hover : COLOR.text;
+      ctx.fillRect(Math.round(x0), gainLane.top, 1, gainLane.height);
+      ctx.fillRect(Math.round(x1) - 1, gainLane.top, 1, gainLane.height);
+      if (x1 - x0 > 44) {
+        ctx.textAlign = 'center';
+        ctx.fillText(`${adjustment.db >= 0 ? '+' : ''}${adjustment.db.toFixed(1)} dB`, (x0 + x1) / 2, gainLane.top + gainLane.height - 9);
+      }
+    });
     const cols = columns(shown(detail.gainDb), plot, 'mean');
     const zero = toY(0);
     ctx.fillStyle = 'rgba(242, 168, 59, 0.22)';

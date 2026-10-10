@@ -1,9 +1,9 @@
-import { DEFAULT_LEVEL_OPTIONS, type LevelOptions } from '../../gain-curve.ts';
+import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
 import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import type { Measurement } from '../../master.ts';
 import type { Api } from '../api.ts';
-import { clock, drawDetail, drawOverview, GUTTER, type Detail, type Region } from './draw.ts';
+import { clock, detailLanes, drawDetail, drawOverview, GUTTER, type Detail, type Region } from './draw.ts';
 import { Player } from './player.ts';
 
 declare global {
@@ -38,13 +38,21 @@ interface Mix {
   region: Region;
   options: LevelOptions;
   ceilingDb: number;
+  /** Manual gain changes, in blocks of the recording. */
+  adjustments: Adjustment[];
 }
 
 let recording: Recording | null = null;
 /** Every marked mix, in the order they occur in the recording. They never overlap. */
 let mixes: Mix[] = [];
 /** The selected mix: the one the detail view, the settings and playback apply to. */
-let mix: Mix = { name: 'Mix 1', region: { start: 0, end: 0 }, options: { ...DEFAULT_LEVEL_OPTIONS }, ceilingDb: DEFAULT_CEILING_DB };
+let mix: Mix = {
+  name: 'Mix 1',
+  region: { start: 0, end: 0 },
+  options: { ...DEFAULT_LEVEL_OPTIONS },
+  ceilingDb: DEFAULT_CEILING_DB,
+  adjustments: [],
+};
 let mixesCreated = 0;
 /** Part of the selected mix the detail view shows, in blocks of the recording. */
 let view: Region = { start: 0, end: 0 };
@@ -70,6 +78,7 @@ let recomputeQueued = false;
 let drawQueued = false;
 
 function scheduleRecompute() {
+  scheduleSave();
   if (recomputeQueued) return;
   recomputeQueued = true;
   requestAnimationFrame(() => {
@@ -93,7 +102,8 @@ function scheduleDraw() {
       start: clamp(view.start - mix.region.start, 0, length - 1),
       end: clamp(view.end - mix.region.start, 1, length),
     };
-    drawDetail(detailCanvas, detail, shown, hoverX, playhead - mix.region.start);
+    const active = grab && 'adjustment' in grab ? grab.adjustment : grab?.made ?? hoveredAdjustment;
+    drawDetail(detailCanvas, detail, shown, hoverX, playhead - mix.region.start, active ? mix.adjustments.indexOf(active) : null);
   });
 }
 
@@ -115,11 +125,13 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
   const peaksIn = measured.peaks.subarray(start, end);
   const blocksIn = measured.blocks.subarray(start, end);
   const n = end - start;
+  const adjustments = m.adjustments.map((a) => ({ start: a.start - start, end: a.end - start, db: a.db }));
 
   const levelling = level(
     { shortTerm, lowShortTerm: measured.lowShortTerm.subarray(start, end), restShortTerm },
     m.options,
     { peaks: peaksIn, ceilingDb: m.ceilingDb },
+    adjustments,
   );
   const { gainDb, targetLufs } = levelling;
   const bassDb = m.options.bassCorrection > 0 ? levelling.bassDb : null;
@@ -155,7 +167,7 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
   }
 
   return {
-    detail: { startBlock: start, peaksIn, peaksOut, bodyOut, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, targetLufs, ceiling },
+    detail: { startBlock: start, peaksIn, peaksOut, bodyOut, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, adjustments, targetLufs, ceiling },
     stats: {
       loudnessIn: integratedLoudness(blocksIn),
       loudnessOut: integratedLoudness(blocksOut),
@@ -183,6 +195,7 @@ function recompute() {
     $('readout').textContent = message(error);
     setStats(null);
   }
+  showAdjustments();
   scheduleDraw();
 }
 
@@ -252,6 +265,7 @@ function showMix() {
   $('export-all-group').hidden = !several;
   $('export-all').textContent = `Export all ${mixes.length}…`;
   $<HTMLButtonElement>('delete-mix').disabled = !several;
+  scheduleSave();
   scheduleDraw();
 }
 
@@ -285,6 +299,7 @@ function addMix(region: Region) {
     region,
     options: { ...mix.options },
     ceilingDb: mix.ceilingDb,
+    adjustments: [],
   };
   mixes.push(added);
   select(added);
@@ -506,26 +521,145 @@ $('zoom-fit').addEventListener('click', () => setView(mix.region.start, mix.regi
 detailCanvas.addEventListener('mousemove', (event) => {
   hoverX = event.clientX - detailCanvas.getBoundingClientRect().left;
   const block = detailBlock(event);
+  const found = grab ? null : adjustmentAt(event);
+  hoveredAdjustment = found?.adjustment ?? null;
+  if (!grab) {
+    detailCanvas.style.cursor = found ? (found.part === 'level' ? 'ns-resize' : 'ew-resize') : inGainLane(event) ? 'col-resize' : 'pointer';
+  }
   if (detail && block !== null) {
     const i = clamp(Math.floor(block - mix.region.start), 0, detail.gainDb.length - 1);
+    const shownAdjustment = grab && 'adjustment' in grab ? grab.adjustment : grab?.made ?? hoveredAdjustment;
     $('readout').textContent =
       `${clock((detail.startBlock + i) * HOP_SECONDS)}    original ${lufs(detail.loudnessIn[i])}` +
       `    gain ${db(detail.gainDb[i])}${detail.bassDb ? `    bass ${db(detail.bassDb[i])}` : ''}` +
-      `    levelled ${lufs(detail.loudnessOut[i])}`;
+      `    levelled ${lufs(detail.loudnessOut[i])}` +
+      (shownAdjustment ? `    adjusted by hand ${db(shownAdjustment.db)}: drag up or down, drag an edge to resize, double-click to remove` : '');
   }
   scheduleDraw();
 });
 
 detailCanvas.addEventListener('mouseleave', () => {
   hoverX = null;
+  hoveredAdjustment = null;
   $('readout').textContent = ' ';
   scheduleDraw();
 });
 
 detailCanvas.addEventListener('click', (event) => {
+  // The end of a drag is not a click.
+  if (grabMoved) return;
   const block = detailBlock(event);
   if (block !== null) seek(block * HOP_SECONDS);
 });
+
+// ---------------------------------------------------------------------------
+// Manual adjustments: stretches of the gain lane raised or lowered by hand
+
+const MIN_ADJUSTMENT_BLOCKS = Math.round(5 / HOP_SECONDS);
+const MAX_ADJUSTMENT_DB = 12;
+/** How far the pointer travels for one decibel when dragging an adjustment up or down. */
+const PIXELS_PER_DB = 20;
+const GRAB_PX = 5;
+
+type Grab =
+  | { kind: 'create'; anchor: number; x: number; made: Adjustment | null }
+  | { kind: 'level'; adjustment: Adjustment; y: number; db: number; made?: undefined }
+  | { kind: 'start' | 'end'; adjustment: Adjustment; made?: undefined };
+let grab: Grab | null = null;
+let grabMoved = false;
+let hoveredAdjustment: Adjustment | null = null;
+
+function inGainLane(event: MouseEvent): boolean {
+  const rect = detailCanvas.getBoundingClientRect();
+  const lane = detailLanes(rect.height).gain;
+  const y = event.clientY - rect.top;
+  return event.clientX - rect.left >= GUTTER && y >= lane.top && y <= lane.top + lane.height;
+}
+
+/** The adjustment under the pointer and which part of it: an edge, or the middle that sets its level. */
+function adjustmentAt(event: MouseEvent): { adjustment: Adjustment; part: 'start' | 'end' | 'level' } | null {
+  const block = detailBlock(event);
+  if (block === null || !inGainLane(event)) return null;
+  const reach = (GRAB_PX * (view.end - view.start)) / (detailCanvas.clientWidth - GUTTER);
+  for (const adjustment of mix.adjustments) {
+    if (Math.abs(block - adjustment.start) <= reach) return { adjustment, part: 'start' };
+    if (Math.abs(block - adjustment.end) <= reach) return { adjustment, part: 'end' };
+  }
+  const inside = mix.adjustments.find((a) => block > a.start && block < a.end);
+  return inside ? { adjustment: inside, part: 'level' } : null;
+}
+
+detailCanvas.addEventListener('mousedown', (event) => {
+  grabMoved = false;
+  if (!recording || busy || !detail || !inGainLane(event)) return;
+  const found = adjustmentAt(event);
+  if (!found) grab = { kind: 'create', anchor: detailBlock(event)!, x: event.clientX, made: null };
+  else if (found.part === 'level') grab = { kind: 'level', adjustment: found.adjustment, y: event.clientY, db: found.adjustment.db };
+  else grab = { kind: found.part, adjustment: found.adjustment };
+  event.preventDefault();
+});
+
+window.addEventListener('mousemove', (event) => {
+  if (!grab) return;
+  const rect = detailCanvas.getBoundingClientRect();
+  const fraction = clamp((event.clientX - rect.left - GUTTER) / (rect.width - GUTTER), 0, 1);
+  const block = Math.round(view.start + fraction * (view.end - view.start));
+  if (grab.kind === 'create') {
+    // Dragging sideways across the lane marks a new stretch.
+    if (!grab.made) {
+      if (Math.abs(event.clientX - grab.x) < GRAB_PX) return;
+      grab.made = { start: block, end: block, db: 0 };
+      mix.adjustments.push(grab.made);
+    }
+    grab.made.start = Math.round(Math.min(block, grab.anchor));
+    grab.made.end = Math.round(Math.max(block, grab.anchor));
+  } else if (grab.kind === 'level') {
+    const moved = grab.db - (event.clientY - grab.y) / PIXELS_PER_DB;
+    grab.adjustment.db = clamp(Math.round(moved * 10) / 10, -MAX_ADJUSTMENT_DB, MAX_ADJUSTMENT_DB);
+  } else if (grab.kind === 'start') {
+    grab.adjustment.start = Math.min(block, grab.adjustment.end - MIN_ADJUSTMENT_BLOCKS);
+  } else {
+    grab.adjustment.end = Math.max(block, grab.adjustment.start + MIN_ADJUSTMENT_BLOCKS);
+  }
+  grabMoved = true;
+  scheduleRecompute();
+});
+
+window.addEventListener('mouseup', () => {
+  if (!grab) return;
+  // A stretch too short to hear as a change of level is taken as a slip.
+  const made = grab.kind === 'create' ? grab.made : null;
+  if (made && made.end - made.start < MIN_ADJUSTMENT_BLOCKS) removeAdjustment(made);
+  grab = null;
+  scheduleRecompute();
+});
+
+detailCanvas.addEventListener('dblclick', (event) => {
+  const found = adjustmentAt(event);
+  if (found) removeAdjustment(found.adjustment);
+});
+
+function removeAdjustment(adjustment: Adjustment) {
+  mix.adjustments = mix.adjustments.filter((a) => a !== adjustment);
+  if (hoveredAdjustment === adjustment) hoveredAdjustment = null;
+  scheduleRecompute();
+}
+
+function showAdjustments() {
+  const stat = $('stat-adjustments');
+  const count = mix.adjustments.length;
+  if (count === 0) {
+    stat.textContent = 'none';
+    return;
+  }
+  const clear = document.createElement('a');
+  clear.textContent = 'clear';
+  clear.addEventListener('click', () => {
+    mix.adjustments = [];
+    scheduleRecompute();
+  });
+  stat.replaceChildren(`${count} by hand · `, clear);
+}
 
 // ---------------------------------------------------------------------------
 // Live preview
@@ -756,16 +890,9 @@ async function open(path: string) {
     $('file-name').classList.add('loaded');
     $('empty').hidden = true;
     $('views').hidden = false;
-    // A new recording starts as one mix covering all of it, keeping the settings in use.
-    const whole: Mix = {
-      name: 'Mix 1',
-      region: { start: 0, end: measured.peaks.length },
-      options: { ...mix.options },
-      ceilingDb: mix.ceilingDb,
-    };
-    mixes = [whole];
-    mixesCreated = 1;
-    select(whole);
+    const restored = restore(await api.recall(path), measured.peaks.length);
+    select(mixes[restored.selected]);
+    if (restored.fromLastTime) $('export-status').textContent = 'Picked up where you left off.';
     requestAnimationFrame(() => requestAnimationFrame(() => api.painted()));
   } catch (error) {
     $('export-status').textContent = `Could not open ${name}: ${message(error)}`;
@@ -778,6 +905,90 @@ $('open').addEventListener('click', async () => {
   const path = await api.pickFile();
   if (path) open(path);
 });
+
+// ---------------------------------------------------------------------------
+// Remembering the work on a recording between sessions
+
+interface Session {
+  version: 1;
+  /** Length of the recording in blocks when saved; a different length means a different file. */
+  blocks: number;
+  selected: number;
+  mixesCreated: number;
+  mixes: Mix[];
+}
+
+interface Defaults {
+  options: LevelOptions;
+  ceilingDb: number;
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+function saveNow() {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  if (!recording || mixes.length === 0) return;
+  const session: Session = {
+    version: 1,
+    blocks: recording.measured.peaks.length,
+    selected: Math.max(0, mixes.indexOf(mix)),
+    mixesCreated,
+    mixes,
+  };
+  const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb };
+  api.remember(recording.path, { session, defaults });
+}
+
+/** Saves shortly after the last change, so dragging does not write on every frame. */
+function scheduleSave() {
+  if (!recording) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 400);
+}
+
+window.addEventListener('beforeunload', () => {
+  if (saveTimer !== undefined) saveNow();
+});
+
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+/**
+ * Sets up the mixes for a newly opened recording: the ones marked in it last
+ * time, or else a single mix covering all of it with the settings last in use.
+ * What comes back from disk is checked, since it may be old or damaged.
+ */
+function restore(remembered: { session: unknown; defaults: unknown }, total: number) {
+  const savedDefaults = remembered.defaults as Partial<Defaults> | null;
+  const defaults: Defaults = {
+    options: { ...DEFAULT_LEVEL_OPTIONS, ...(savedDefaults?.options ?? {}) },
+    ceilingDb: isNumber(savedDefaults?.ceilingDb) ? savedDefaults.ceilingDb : DEFAULT_CEILING_DB,
+  };
+
+  const session = remembered.session as Partial<Session> | null;
+  const usable =
+    session?.version === 1 && session.blocks === total && Array.isArray(session.mixes)
+      ? session.mixes.filter((m) => isNumber(m?.region?.start) && isNumber(m?.region?.end) && m.region.start >= 0 && m.region.end <= total && m.region.end > m.region.start)
+      : [];
+  if (usable.length > 0) {
+    mixes = usable.map((m, index) => ({
+      name: typeof m.name === 'string' && m.name ? m.name : `Mix ${index + 1}`,
+      region: { start: Math.round(m.region.start), end: Math.round(m.region.end) },
+      options: { ...DEFAULT_LEVEL_OPTIONS, ...(m.options ?? {}) },
+      ceilingDb: isNumber(m.ceilingDb) ? m.ceilingDb : DEFAULT_CEILING_DB,
+      adjustments: (Array.isArray(m.adjustments) ? m.adjustments : []).filter(
+        (a) => isNumber(a?.start) && isNumber(a?.end) && isNumber(a?.db) && a.end > a.start,
+      ),
+    }));
+    mixesCreated = Math.max(mixes.length, isNumber(session!.mixesCreated) ? session!.mixesCreated : 0);
+    const selected = isNumber(session!.selected) ? clamp(session!.selected, 0, mixes.length - 1) : 0;
+    return { selected, fromLastTime: true };
+  }
+
+  mixes = [{ name: 'Mix 1', region: { start: 0, end: total }, ...defaults, adjustments: [] }];
+  mixesCreated = 1;
+  return { selected: 0, fromLastTime: false };
+}
 
 /** File-name-safe version of a mix name. */
 const fileName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'mix';

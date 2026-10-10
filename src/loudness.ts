@@ -2,6 +2,8 @@
 // momentary, short-term and integrated loudness can all be derived afterwards.
 
 export const HOP_SECONDS = 0.1;
+/** Bump whenever a recording would measure differently, so that stored analyses are redone. */
+export const ANALYSIS_VERSION = 1;
 /** Loudness reported for digital silence. */
 export const SILENCE_LUFS = -120;
 
