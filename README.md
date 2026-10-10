@@ -50,6 +50,9 @@ Running from the project needs Node 24 or newer and ffmpeg on the machine
 - **Undo and redo**: Cmd+Z and Shift+Cmd+Z cover every change to the mixes.
 - **Remembers your work**: mixes, settings and adjustments are saved per
   recording and restored when you open it again.
+- **Exact preview in every format**: recordings the built-in player cannot
+  seek in exactly (variable-bitrate MP3s) or cannot play (AIFF) are decoded by
+  ffmpeg from the playhead instead, at the cost of a moment's delay on each jump.
 - **Export formats**: WAV and FLAC (24-bit), MP3 (320 kbps), AAC (256 kbps).
 
 ### Building the Mac app
@@ -117,9 +120,6 @@ Set `DJMASTER_FFMPEG` to use a specific binary.
 - **Lossy formats overshoot.** MP3 and AAC encoding reshape the waveform after
   the limiter, so their peaks can land a little above the ceiling (around
   0.7 dB in one test). Lower the ceiling for those exports if it matters.
-- **Seeking in the preview** can be slightly off in variable-bitrate MP3s,
-  which shifts the gain against the audio by the same amount. Exports are not
-  affected.
 - **Long quiet passages.** A passage quieter than the rest for longer than the
   breakdown length counts as a quieter track and is raised, up to the boost
   limit.

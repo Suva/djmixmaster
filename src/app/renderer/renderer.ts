@@ -93,7 +93,7 @@ function scheduleDraw() {
   requestAnimationFrame(() => {
     drawQueued = false;
     if (!recording) return;
-    const playhead = player.audio.currentTime / HOP_SECONDS;
+    const playhead = player.time / HOP_SECONDS;
     drawOverview(overview, { peaks: recording.measured.peaks, body: recording.body }, overviewShown, mixes.map((m) => m.region), mixes.indexOf(mix), view, playhead);
     if (!detail) return;
     // The curves can be one frame behind the region while it is being dragged.
@@ -493,7 +493,7 @@ function detailBlock(event: MouseEvent): number | null {
 
 /** Zoom buttons work around the playhead when it is in view, otherwise around the middle. */
 function zoomCentre(): number {
-  const playhead = player.audio.currentTime / HOP_SECONDS;
+  const playhead = player.time / HOP_SECONDS;
   return playhead > view.start && playhead < view.end ? playhead : (view.start + view.end) / 2;
 }
 
@@ -683,29 +683,29 @@ function bassAt(seconds: number): number {
 
 function seek(seconds: number) {
   if (!recording) return;
-  player.audio.currentTime = seconds;
+  player.seek(seconds);
   showPlayback();
 }
 
 function showPlayback() {
-  $('play-time').textContent = clock(player.audio.currentTime);
+  $('play-time').textContent = clock(player.time);
   scheduleDraw();
 }
 
 /** Keeps the sound and the playhead in step with the audio while it plays. */
 function follow() {
-  if (!recording || player.audio.paused) return;
-  const time = player.audio.currentTime;
+  if (!recording || player.paused) return;
+  const time = player.time;
   const { start, end } = mix.region;
   if (time >= end * HOP_SECONDS) {
     // Playback covers the selected mix only.
-    player.audio.pause();
-    player.audio.currentTime = start * HOP_SECONDS;
+    player.pause();
+    player.seek(start * HOP_SECONDS);
   } else if (time < start * HOP_SECONDS) {
-    player.audio.currentTime = start * HOP_SECONDS;
+    player.seek(start * HOP_SECONDS);
   }
   // When zoomed in, turn the page as the playhead runs off the edge.
-  const playhead = player.audio.currentTime / HOP_SECONDS;
+  const playhead = player.time / HOP_SECONDS;
   const span = view.end - view.start;
   if (span < end - start && (playhead < view.start || playhead >= view.end)) {
     setView(playhead - span * 0.05, playhead + span * 0.95);
@@ -720,13 +720,13 @@ function follow() {
 
 async function togglePlay() {
   if (!recording || busy) return;
-  if (!player.audio.paused) {
-    player.audio.pause();
+  if (!player.paused) {
+    player.pause();
     return;
   }
-  const time = player.audio.currentTime;
+  const time = player.time;
   if (time < mix.region.start * HOP_SECONDS || time >= mix.region.end * HOP_SECONDS - 0.5) {
-    player.audio.currentTime = mix.region.start * HOP_SECONDS;
+    player.seek(mix.region.start * HOP_SECONDS);
   }
   try {
     await player.play();
@@ -741,21 +741,21 @@ function setHearLevelled(levelled: boolean) {
   $('hear-original').classList.toggle('on', !levelled);
 }
 
-player.audio.addEventListener('play', () => {
+player.onPlay = () => {
   $('play').textContent = 'Pause';
   follow();
-});
-player.audio.addEventListener('pause', () => {
+};
+player.onPause = () => {
   $('play').textContent = 'Play';
   $('meter').textContent = '';
   showPlayback();
-});
-player.audio.addEventListener('seeked', showPlayback);
+};
+player.onSeek = showPlayback;
 
 // Hold the readings briefly so the numbers can be read.
 let held = { peak: 0, gain: 1, since: 0 };
 player.onReport = ({ peak, gain }) => {
-  if (player.audio.paused) return;
+  if (player.paused) return;
   const now = performance.now();
   if (now - held.since > 600) held = { peak: 0, gain: 1, since: now };
   held.peak = Math.max(held.peak, peak);
@@ -763,8 +763,8 @@ player.onReport = ({ peak, gain }) => {
   const peakDb = 20 * Math.log10(Math.max(held.peak, 1e-6));
   const limiting = -20 * Math.log10(held.gain);
   $('meter').textContent =
-    `gain ${hearLevelled ? db(20 * Math.log10(gainAt(player.audio.currentTime))) : 'off'}` +
-    (hearLevelled && detail?.bassDb ? `    bass ${db(bassAt(player.audio.currentTime))}` : '') +
+    `gain ${hearLevelled ? db(20 * Math.log10(gainAt(player.time))) : 'off'}` +
+    (hearLevelled && detail?.bassDb ? `    bass ${db(bassAt(player.time))}` : '') +
     `    peak ${peakDb.toFixed(1)} dBFS    limiter ${limiting < 0.05 ? 'idle' : `-${limiting.toFixed(1)} dB`}`;
 };
 
@@ -1109,7 +1109,7 @@ function showExported(text: string, reveal: string) {
 
 async function exportMix() {
   if (!recording || busy) return;
-  player.audio.pause();
+  player.pause();
   const base = recording.path.replace(/\.[^./\\]+$/, '');
   const suggested = mixes.length > 1 ? `${base} - ${fileName(mix.name)}.wav` : `${base} mastered.wav`;
   const output = await api.pickOutput(suggested);
@@ -1131,7 +1131,7 @@ async function exportMix() {
 /** Exports every mix into one folder, numbered in the order they occur in the recording. */
 async function exportAll() {
   if (!recording || busy) return;
-  player.audio.pause();
+  player.pause();
   const folder = await api.pickFolder();
   if (!folder) return;
   const extension = $<HTMLSelectElement>('format').value;

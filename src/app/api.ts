@@ -19,6 +19,17 @@ export interface Remembered {
   defaults: unknown;
 }
 
+/** Where the window's player gets a recording from. */
+export interface MediaSource {
+  url: string;
+  /**
+   * False when the player can be given the file itself. True when it cannot
+   * seek in it exactly: `url` then serves the audio decoded from the position
+   * given as `?t=<seconds>` onwards.
+   */
+  streamed: boolean;
+}
+
 export type MenuCommand = 'open' | 'undo' | 'redo';
 
 /** What the window may ask the main process to do. */
@@ -30,8 +41,8 @@ export interface Api {
   measure(path: string): Promise<Measurement>;
   recall(path: string): Promise<Remembered>;
   remember(path: string, remembered: Remembered): void;
-  /** Address the window can play this recording from. */
-  mediaUrl(path: string): Promise<string>;
+  /** How the window can play this recording. */
+  mediaUrl(path: string): Promise<MediaSource>;
   pickOutput(suggested: string): Promise<string | null>;
   pickFolder(): Promise<string | null>;
   /** Which of these files already exist. */

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, type MenuItemConstructorOptions } from 'electron';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
@@ -7,9 +8,11 @@ import { extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
+import { CHANNELS, ffmpeg, probe } from '../audio-io.ts';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
-import type { Job, JobMessage, MenuCommand, Remembered, RenderRequest } from './api.ts';
+import type { Job, JobMessage, MediaSource, MenuCommand, Remembered, RenderRequest } from './api.ts';
+import { needsStreaming, streamingWavHeader } from './playback.ts';
 
 // The same name, and so the same data folder, whether run from the project or as the packaged app.
 app.setName('DJ Mix Master');
@@ -41,7 +44,7 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 /** The one recording the window may play, and the id in its address. */
-let media = { id: 0, path: '' };
+let media = { id: 0, path: '', sampleRate: 0 };
 
 /** Serves the open recording with byte ranges, which is what lets the player seek. */
 async function serveMedia(request: Request): Promise<Response> {
@@ -68,9 +71,34 @@ async function serveMedia(request: Request): Promise<Response> {
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
+/**
+ * Serves the open recording decoded from `?t=<seconds>` onwards, as a WAV file
+ * of unknown length. ffmpeg lands exactly where asked in every format, which
+ * the window's own player does not.
+ */
+function serveStream(request: Request): Response {
+  const from = Math.max(0, Number(new URL(request.url).searchParams.get('t')) || 0);
+  const args = ['-v', 'error', '-nostdin', '-ss', String(from), '-i', media.path, '-map', 'a:0', '-ac', String(CHANNELS), '-f', 'f32le', '-'];
+  const decoder = spawn(ffmpeg(), args, { stdio: ['ignore', 'pipe', 'ignore'] });
+  const header = streamingWavHeader(media.sampleRate, CHANNELS);
+  const audio = Readable.from(
+    (async function* () {
+      try {
+        yield header;
+        yield* decoder.stdout;
+      } finally {
+        // The player moved on or went away; stop decoding.
+        decoder.kill();
+      }
+    })(),
+  );
+  return new Response(Readable.toWeb(audio) as ReadableStream, { headers: { 'Content-Type': 'audio/wav' } });
+}
+
 function serve(request: Request): Promise<Response> | Response {
   const { pathname } = new URL(request.url);
   if (pathname === `/media/${media.id}` && media.path) return serveMedia(request);
+  if (pathname === `/stream/${media.id}` && media.path) return serveStream(request);
   const file = pathname.slice(1);
   if (APP_FILES.includes(file)) return net.fetch(pathToFileURL(join(__dirname, file)).toString());
   return new Response(null, { status: 404 });
@@ -152,9 +180,10 @@ ipcMain.handle('confirm', async (_event, message: string, detail: string, action
   return result.response === 0;
 });
 
-ipcMain.handle('media-url', (_event, path: string) => {
-  media = { id: media.id + 1, path };
-  return `${ORIGIN}/media/${media.id}`;
+ipcMain.handle('media-url', async (_event, path: string): Promise<MediaSource> => {
+  const [streamed, info] = await Promise.all([needsStreaming(path), probe(path)]);
+  media = { id: media.id + 1, path, sampleRate: info.sampleRate };
+  return { url: `${ORIGIN}/${streamed ? 'stream' : 'media'}/${media.id}`, streamed };
 });
 
 // ---------------------------------------------------------------------------

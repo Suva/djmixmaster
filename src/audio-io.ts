@@ -27,7 +27,7 @@ let ffmpegPath: string | undefined;
  * points this at its own copy), else the first on PATH or in the usual
  * install folders.
  */
-function ffmpeg(): string {
+export function ffmpeg(): string {
   if (!ffmpegPath) {
     const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
     const dirs = [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...FALLBACK_DIRS];
