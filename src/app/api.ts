@@ -38,6 +38,8 @@ export interface Api {
   render(request: RenderRequest): Promise<RenderResult>;
   reveal(path: string): void;
   onProgress(listener: (fraction: number) => void): void;
+  /** A recording handed to the app from outside while it is running. */
+  onOpenFile(listener: (path: string) => void): void;
   /** Tells the main process the window has drawn a loaded file. */
   painted(): void;
 }

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232833"/>
+      <stop offset="1" stop-color="#101216"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+  <!-- Uneven bars: the mix as recorded -->
+  <g fill="#6b7280">
+    <rect x="212" y="372" width="56" height="280" rx="28"/>
+    <rect x="304" y="262" width="56" height="500" rx="28"/>
+    <rect x="396" y="402" width="56" height="220" rx="28"/>
+    <rect x="488" y="232" width="56" height="560" rx="28"/>
+    <rect x="580" y="352" width="56" height="320" rx="28"/>
+    <rect x="672" y="282" width="56" height="460" rx="28"/>
+    <rect x="764" y="412" width="56" height="200" rx="28"/>
+  </g>
+  <!-- The same bars brought to one level -->
+  <g fill="#3ddc97">
+    <rect x="212" y="352" width="56" height="320" rx="28"/>
+    <rect x="304" y="352" width="56" height="320" rx="28"/>
+    <rect x="396" y="352" width="56" height="320" rx="28"/>
+    <rect x="488" y="352" width="56" height="320" rx="28"/>
+    <rect x="580" y="352" width="56" height="320" rx="28"/>
+    <rect x="672" y="352" width="56" height="320" rx="28"/>
+    <rect x="764" y="352" width="56" height="320" rx="28"/>
+  </g>
+</svg>
