@@ -9,6 +9,7 @@ const COLOR = {
   before: '#6b7280',
   after: '#3ddc97',
   gain: '#f2a83b',
+  bass: '#6aa9ff',
   warn: '#ff5d5d',
   hover: '#e6e8ec',
 };
@@ -112,6 +113,8 @@ export interface Detail {
   loudnessIn: Float32Array;
   loudnessOut: Float32Array;
   gainDb: Float32Array;
+  /** Bass shelf gain, or null when bass correction is off. */
+  bassDb: Float32Array | null;
   targetLufs: number;
   /** Limiter ceiling as a linear sample value. */
   ceiling: number;
@@ -230,8 +233,8 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
     let lo = -3;
     let hi = 3;
     for (let i = 0; i < n; i++) {
-      lo = Math.min(lo, detail.gainDb[i] - 1);
-      hi = Math.max(hi, detail.gainDb[i] + 1);
+      lo = Math.min(lo, detail.gainDb[i] - 1, (detail.bassDb?.[i] ?? 0) - 1);
+      hi = Math.max(hi, detail.gainDb[i] + 1, (detail.bassDb?.[i] ?? 0) + 1);
     }
     const toY = (db: number) => gainLane.top + 16 + ((hi - db) / (hi - lo)) * (gainLane.height - 20);
     const step = hi - lo > 12 ? 6 : 3;
@@ -246,7 +249,10 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
       ctx.fillRect(GUTTER + x, Math.min(y, zero), 1, Math.abs(y - zero));
     }
     line(cols, toY, COLOR.gain, 1.5);
-    laneLabel(ctx, GUTTER + 8, gainLane.top + 10, [['Gain (dB)', COLOR.gain]]);
+    if (detail.bassDb) line(columns(detail.bassDb, plot, 'mean'), toY, COLOR.bass, 1.5);
+    laneLabel(ctx, GUTTER + 8, gainLane.top + 10, [
+      ['Gain (dB)', COLOR.label], ['whole mix', COLOR.gain], ...(detail.bassDb ? [['bass only', COLOR.bass] as [string, string]] : []),
+    ]);
   }
 
   const startSeconds = detail.startBlock * HOP_SECONDS;

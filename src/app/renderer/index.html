@@ -79,11 +79,18 @@
       </div>
       <div class="control">
         <div class="control-head">
-          <label for="bass">Bass weight</label>
+          <label for="bass">Bass correction</label>
           <output id="bass-value"></output>
         </div>
         <input id="bass" type="range" min="0" max="1" step="0.05">
-        <p class="note">0 matches perceived loudness, 100% matches the level of the kick and bass.</p>
+        <p class="note">Evens out the kick and bass between tracks with a slow EQ, leaving mids and highs alone.</p>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="bass-max">Most bass change</label>
+          <output id="bass-max-value"></output>
+        </div>
+        <input id="bass-max" type="range" min="0" max="6" step="0.5">
       </div>
       <div class="control">
         <div class="control-head">

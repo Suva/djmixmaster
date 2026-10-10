@@ -17,6 +17,14 @@ export interface LevelOptions {
    * level of the bass and kick, values in between blend the two.
    */
   bassWeight: number;
+  /**
+   * How much of the difference in bass level between tracks is evened out with
+   * a slow low-shelf EQ, from 0 (none) to 1 (all of it). Unlike `bassWeight`
+   * this leaves the mids and highs where the loudness levelling put them.
+   */
+  bassCorrection: number;
+  /** Most the bass of a track is raised or lowered by that EQ. */
+  maxBassDb: number;
   /** Loudness the full-energy sections are brought to. Defaults to the mix's own typical level. */
   targetLufs?: number;
   /** Most a quiet track is raised, and a loud one lowered, relative to the mix's typical level. */
@@ -32,6 +40,8 @@ export const DEFAULT_LEVEL_OPTIONS: LevelOptions = {
   windowSeconds: 100,
   percentile: 0.9,
   bassWeight: 0,
+  bassCorrection: 0,
+  maxBassDb: 3,
   maxBoostDb: 6,
   maxCutDb: 12,
   smoothSeconds: 10,

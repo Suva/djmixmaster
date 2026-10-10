@@ -74,13 +74,21 @@ function recompute() {
   const { measured } = recording;
   const { start, end } = region;
   const shortTerm = measured.shortTerm.subarray(start, end);
+  const restShortTerm = measured.restShortTerm.subarray(start, end);
   const peaksIn = measured.peaks.subarray(start, end);
   const blocksIn = measured.blocks.subarray(start, end);
   const n = end - start;
 
   let levelling;
   try {
-    levelling = level({ shortTerm, lowShortTerm: measured.lowShortTerm.subarray(start, end) }, options);
+    levelling = level(
+      {
+        shortTerm,
+        lowShortTerm: measured.lowShortTerm.subarray(start, end),
+        restShortTerm,
+      },
+      options,
+    );
   } catch (error) {
     detail = null;
     $('readout').textContent = error instanceof Error ? error.message : String(error);
@@ -90,6 +98,7 @@ function recompute() {
   }
 
   const { gainDb, targetLufs } = levelling;
+  const bassDb = options.bassCorrection > 0 ? levelling.bassDb : null;
   const ceiling = Math.pow(10, ceilingDb / 20);
   const peaksOut = new Float32Array(n);
   const loudnessOut = new Float32Array(n);
@@ -101,9 +110,16 @@ function recompute() {
   for (let i = 0; i < n; i++) {
     const g = gainDb[i];
     const linear = Math.pow(10, g / 20);
-    peaksOut[i] = peaksIn[i] * linear;
-    loudnessOut[i] = shortTerm[i] + g;
-    blocksOut[i] = blocksIn[i] * linear * linear;
+    // Bass carries much of the peak level, so count half of its change as an estimate.
+    peaksOut[i] = peaksIn[i] * linear * Math.pow(10, (bassDb?.[i] ?? 0) / 40);
+    // The bass shelf only moves the share of the loudness that sits in the low band.
+    let shelved = 0;
+    if (bassDb && bassDb[i] !== 0) {
+      const lowShare = Math.max(0, 1 - Math.pow(10, (restShortTerm[i] - shortTerm[i]) / 10));
+      shelved = 10 * Math.log10(1 + lowShare * (Math.pow(10, bassDb[i] / 10) - 1));
+    }
+    loudnessOut[i] = shortTerm[i] + g + shelved;
+    blocksOut[i] = blocksIn[i] * linear * linear * Math.pow(10, shelved / 10);
     minGain = Math.min(minGain, g);
     maxGain = Math.max(maxGain, g);
     if (peaksOut[i] > ceiling) {
@@ -112,7 +128,7 @@ function recompute() {
     }
   }
 
-  detail = { startBlock: start, peaksIn, peaksOut, loudnessIn: shortTerm, loudnessOut, gainDb, targetLufs, ceiling };
+  detail = { startBlock: start, peaksIn, peaksOut, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, targetLufs, ceiling };
   setStats({
     loudnessIn: integratedLoudness(blocksIn),
     loudnessOut: integratedLoudness(blocksOut),
@@ -270,7 +286,8 @@ detailCanvas.addEventListener('mousemove', (event) => {
     const i = Math.min(n - 1, Math.floor(((hoverX - GUTTER) / (rect.width - GUTTER)) * n));
     $('readout').textContent =
       `${clock((detail.startBlock + i) * HOP_SECONDS)}    original ${lufs(detail.loudnessIn[i])}` +
-      `    gain ${db(detail.gainDb[i])}    levelled ${lufs(detail.loudnessOut[i])}`;
+      `    gain ${db(detail.gainDb[i])}${detail.bassDb ? `    bass ${db(detail.bassDb[i])}` : ''}` +
+      `    levelled ${lufs(detail.loudnessOut[i])}`;
   }
   scheduleDraw();
 });
@@ -290,15 +307,21 @@ detailCanvas.addEventListener('click', (event) => {
 // ---------------------------------------------------------------------------
 // Live preview
 
-/** Linear gain the levelling applies at a time in the recording. */
-function gainAt(seconds: number): number {
-  if (!detail) return 1;
-  const curve = detail.gainDb;
-  // Each gain value sits at the centre of its block, as in the export.
+/** Value in dB of a per-block curve of the mix at a time in the recording. */
+function curveAt(curve: Float32Array, seconds: number): number {
+  // Each value sits at the centre of its block, as in the export.
   const position = Math.max(0, Math.min(curve.length - 1, seconds / HOP_SECONDS - region.start - 0.5));
   const i = Math.min(curve.length - 2, Math.floor(position));
-  const gainDb = i < 0 ? curve[0] : curve[i] + (curve[i + 1] - curve[i]) * (position - i);
-  return Math.pow(10, gainDb / 20);
+  return i < 0 ? curve[0] : curve[i] + (curve[i + 1] - curve[i]) * (position - i);
+}
+
+/** Linear gain the levelling applies at a time in the recording. */
+function gainAt(seconds: number): number {
+  return detail ? Math.pow(10, curveAt(detail.gainDb, seconds) / 20) : 1;
+}
+
+function bassAt(seconds: number): number {
+  return detail?.bassDb ? curveAt(detail.bassDb, seconds) : 0;
 }
 
 function seek(seconds: number) {
@@ -323,7 +346,7 @@ function follow() {
   } else if (time < region.start * HOP_SECONDS) {
     player.audio.currentTime = region.start * HOP_SECONDS;
   }
-  player.apply(hearLevelled ? gainAt(time) : 1, { ceilingDb, bypass: !hearLevelled });
+  player.apply(hearLevelled ? gainAt(time) : 1, hearLevelled ? bassAt(time) : 0, { ceilingDb, bypass: !hearLevelled });
   showPlayback();
   requestAnimationFrame(follow);
 }
@@ -374,6 +397,7 @@ player.onReport = ({ peak, gain }) => {
   const limiting = -20 * Math.log10(held.gain);
   $('meter').textContent =
     `gain ${hearLevelled ? db(20 * Math.log10(gainAt(player.audio.currentTime))) : 'off'}` +
+    (hearLevelled && detail?.bassDb ? `    bass ${db(bassAt(player.audio.currentTime))}` : '') +
     `    peak ${peakDb.toFixed(1)} dBFS    limiter ${limiting < 0.05 ? 'idle' : `-${limiting.toFixed(1)} dB`}`;
 };
 
@@ -412,7 +436,8 @@ const sliders: Slider[] = [
     format: (v) => `up to ${Math.round(v * options.percentile)} s`,
   },
   { id: 'smooth', get: () => options.smoothSeconds, set: (v) => (options.smoothSeconds = v), format: (v) => `${v * 2} s` },
-  { id: 'bass', get: () => options.bassWeight, set: (v) => (options.bassWeight = v), format: (v) => `${Math.round(v * 100)}%` },
+  { id: 'bass', get: () => options.bassCorrection, set: (v) => (options.bassCorrection = v), format: (v) => (v === 0 ? 'off' : `${Math.round(v * 100)}%`) },
+  { id: 'bass-max', get: () => options.maxBassDb, set: (v) => (options.maxBassDb = v), format: (v) => `±${v.toFixed(1)} dB` },
   { id: 'boost', get: () => options.maxBoostDb, set: (v) => (options.maxBoostDb = v), format: (v) => db(v) },
   { id: 'cut', get: () => options.maxCutDb, set: (v) => (options.maxCutDb = v), format: (v) => db(-v) },
   { id: 'ceiling', get: () => ceilingDb, set: (v) => (ceilingDb = v), format: (v) => `${v.toFixed(1)} dBFS` },
@@ -527,6 +552,7 @@ async function exportMix() {
       start: region.start * HOP_SECONDS,
       end: region.end * HOP_SECONDS,
       gainDb: detail.gainDb,
+      bassDb: detail.bassDb ?? new Float32Array(detail.gainDb.length),
       ceilingDb,
     });
     const peakDb = 20 * Math.log10(Math.max(result.peak, 1e-9));

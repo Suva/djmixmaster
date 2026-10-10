@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { DEFAULT_LEVEL_OPTIONS } from '../src/gain-curve.ts';
 import { Limiter } from '../src/limiter.ts';
+import { LowShelf } from '../src/shelf.ts';
 import { BlockEnergyMeter, HOP_SECONDS, integratedLoudness } from '../src/loudness.ts';
 import { level, measure, render, type Measurement } from '../src/master.ts';
 import { BREAKDOWN, SAMPLE_RATE, TRACK_LEVELS_DB, TRACK_SECONDS, writeSyntheticMix } from './synthetic-mix.ts';
@@ -37,6 +38,7 @@ test('bass weight shifts levelling from perceived loudness to bass level', () =>
   const measured = {
     shortTerm: new Float32Array(n).fill(-10),
     lowShortTerm: Float32Array.from({ length: n }, (_, i) => (i < n / 2 ? -14 : -18)),
+    restShortTerm: new Float32Array(n).fill(-13),
   } as Measurement;
   const step = (bassWeight: number) => {
     const { gainDb } = level(measured, { ...DEFAULT_LEVEL_OPTIONS, bassWeight });
@@ -45,6 +47,38 @@ test('bass weight shifts levelling from perceived loudness to bass level', () =>
   assert.ok(Math.abs(step(0)) < 0.01);
   assert.ok(Math.abs(step(0.5) - 2) < 0.1);
   assert.ok(Math.abs(step(1) - 4) < 0.1);
+});
+
+test('bass correction levels the bass and the rest separately', () => {
+  // Two ten-minute tracks. Above the bass they are equally loud; the second has 4 dB less bass.
+  const n = 12000;
+  const half = (first: number, second: number) => Float32Array.from({ length: n }, (_, i) => (i < n / 2 ? first : second));
+  const measured = { shortTerm: half(-10, -11), lowShortTerm: half(-14, -18), restShortTerm: half(-13, -13) } as Measurement;
+  const run = (bassCorrection: number, maxBassDb: number) => {
+    const { gainDb, bassDb } = level(measured, { ...DEFAULT_LEVEL_OPTIONS, bassCorrection, maxBassDb });
+    return { gain: gainDb[n - 1000] - gainDb[1000], bass: bassDb[n - 1000] - bassDb[1000] };
+  };
+  // Off: the second track is simply turned up as a whole, bass still 3 dB short.
+  assert.deepEqual(run(0, 6), { gain: 1, bass: 0 });
+  // Fully on: nothing above the bass moves, and the bass alone closes the gap.
+  assert.ok(Math.abs(run(1, 6).gain) < 0.05);
+  assert.ok(Math.abs(run(1, 6).bass - 4) < 0.1);
+  assert.ok(Math.abs(run(0.5, 6).bass - 2) < 0.1);
+  assert.ok(Math.abs(run(1, 1).bass - 1) < 0.1, 'the cap bounds the change');
+});
+
+test('shelf moves the bass and leaves the highs', () => {
+  const amplitude = (hz: number, gainDb: number) => {
+    const shelf = new LowShelf(44100, 1);
+    shelf.setGain(gainDb);
+    const samples = Float32Array.from({ length: 44100 }, (_, f) => 0.25 * Math.sin((2 * Math.PI * hz * f) / 44100));
+    shelf.process(samples, 0, samples.length);
+    return 20 * Math.log10(samples.subarray(22050).reduce((a, b) => Math.max(a, Math.abs(b)), 0) / 0.25);
+  };
+  assert.ok(Math.abs(amplitude(50, 3) - 3) < 0.3);
+  assert.ok(Math.abs(amplitude(50, -3) + 3) < 0.3);
+  assert.ok(Math.abs(amplitude(3000, 3)) < 0.1);
+  assert.ok(Math.abs(amplitude(50, 0)) < 0.001);
 });
 
 test('limiter holds the ceiling, keeps length and leaves quiet audio untouched', () => {

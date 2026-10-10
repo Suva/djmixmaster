@@ -27,6 +27,9 @@ Levelling
   --window <seconds>   Quiet passages shorter than about this are breakdowns (default: ${DEFAULT_LEVEL_OPTIONS.windowSeconds})
   --percentile <0-1>   Loudness percentile that counts as full energy (default: ${DEFAULT_LEVEL_OPTIONS.percentile})
   --bass-weight <0-1>  0 matches perceived loudness, 1 matches bass/kick level (default: ${DEFAULT_LEVEL_OPTIONS.bassWeight})
+  --bass-correction <0-1>
+                       How much of the bass difference between tracks a slow EQ evens out (default: ${DEFAULT_LEVEL_OPTIONS.bassCorrection})
+  --max-bass <dB>      Most that EQ raises or lowers a track's bass (default: ${DEFAULT_LEVEL_OPTIONS.maxBassDb})
   --max-boost <dB>     Most a quiet track is raised towards the rest (default: ${DEFAULT_LEVEL_OPTIONS.maxBoostDb})
   --max-cut <dB>       Most a loud track is lowered towards the rest (default: ${DEFAULT_LEVEL_OPTIONS.maxCutDb})
   --smooth <seconds>   How long a gain change takes (default: ${DEFAULT_LEVEL_OPTIONS.smoothSeconds})
@@ -95,6 +98,8 @@ function parseArgs(argv: string[]): Args {
       case '--window': args.options.windowSeconds = number(); break;
       case '--percentile': args.options.percentile = number(); break;
       case '--bass-weight': args.options.bassWeight = number(); break;
+      case '--bass-correction': args.options.bassCorrection = number(); break;
+      case '--max-bass': args.options.maxBassDb = number(); break;
       case '--max-boost': args.options.maxBoostDb = number(); break;
       case '--max-cut': args.options.maxCutDb = number(); break;
       case '--smooth': args.options.smoothSeconds = number(); break;
@@ -109,7 +114,9 @@ function parseArgs(argv: string[]): Args {
   if (positional.length !== 1) throw new Error('Expected exactly one input file');
   args.input = positional[0];
 
-  const { bassWeight } = args.options;
+  const { bassWeight, bassCorrection, maxBassDb: maxBass } = args.options;
+  if (!(bassCorrection >= 0 && bassCorrection <= 1)) throw new Error('--bass-correction must be between 0 and 1');
+  if (!(maxBass >= 0)) throw new Error('--max-bass must not be negative');
   if (!(bassWeight >= 0 && bassWeight <= 1)) throw new Error('--bass-weight must be between 0 and 1');
   const { percentile, windowSeconds, maxBoostDb, maxCutDb, smoothSeconds, slewDbPerSecond } = args.options;
   if (!(percentile > 0 && percentile < 1)) throw new Error('--percentile must be between 0 and 1');
@@ -143,7 +150,7 @@ function clock(seconds: number): string {
 }
 
 async function dumpCurves(file: string, before: Measurement, levelling: Levelling, after?: Measurement) {
-  const lines = [`time_s,short_term_lufs,low_band_db,full_energy_lufs,gain_db${after ? ',mastered_short_term_lufs' : ''}`];
+  const lines = [`time_s,short_term_lufs,low_band_db,full_energy_lufs,gain_db,bass_db${after ? ',mastered_short_term_lufs' : ''}`];
   for (let i = 0; i < before.shortTerm.length; i++) {
     const row = [
       ((i + 0.5) * HOP_SECONDS).toFixed(2),
@@ -151,6 +158,7 @@ async function dumpCurves(file: string, before: Measurement, levelling: Levellin
       before.lowShortTerm[i].toFixed(2),
       levelling.envelope[i].toFixed(2),
       levelling.gainDb[i].toFixed(2),
+      levelling.bassDb[i].toFixed(2),
     ];
     if (after) row.push((after.shortTerm[i] ?? NaN).toFixed(2));
     lines.push(row.join(','));
@@ -171,7 +179,7 @@ async function main() {
 
   const before = await measure(args.input, args.region, progress('Analysing'));
   const levelling = level(before, args.options);
-  const { gainDb } = levelling;
+  const { gainDb, bassDb } = levelling;
   const minGain = gainDb.reduce((a, b) => Math.min(a, b), Infinity);
   const maxGain = gainDb.reduce((a, b) => Math.max(a, b), -Infinity);
 
@@ -179,11 +187,16 @@ async function main() {
   console.log(`Input        ${lufs(before.integratedLufs)} integrated, peak ${dbfs(before.peak)}`);
   console.log(`Target       ${lufs(levelling.targetLufs)} for full-energy sections`);
   console.log(`Gain         ${db(minGain)} to ${db(maxGain)}`);
+  if (args.options.bassCorrection > 0) {
+    const minBass = bassDb.reduce((a, b) => Math.min(a, b), Infinity);
+    const maxBass = bassDb.reduce((a, b) => Math.max(a, b), -Infinity);
+    console.log(`Bass         ${db(minBass)} to ${db(maxBass)}`);
+  }
 
   let after: Measurement | undefined;
   if (!args.analyzeOnly) {
     const result = await render(
-      args.input, args.region, gainDb, output, { ceilingDb: args.ceilingDb }, progress('Rendering'),
+      args.input, args.region, gainDb, output, { ceilingDb: args.ceilingDb, bassDb }, progress('Rendering'),
     );
     after = result;
     console.log(`Output       ${lufs(result.integratedLufs)} integrated, peak ${dbfs(result.peak)}`);

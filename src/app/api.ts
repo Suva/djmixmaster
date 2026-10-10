@@ -7,6 +7,7 @@ export interface RenderRequest {
   start: number;
   end: number;
   gainDb: Float32Array;
+  bassDb: Float32Array;
   ceilingDb: number | null;
 }
 

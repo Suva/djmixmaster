@@ -60,20 +60,25 @@ export function energyToLufs(energy: number): number {
 
 /**
  * Streaming meter: feed interleaved samples, get one K-weighted energy value
- * per 100 ms, plus the energy of the low band alone for the same block.
+ * per 100 ms, plus the energy of the low band for the same block, both as it
+ * is and K-weighted (its share of the loudness).
  */
 export class BlockEnergyMeter {
   readonly #channels: number;
   readonly #hopFrames: number;
   readonly #weighting: [Biquad, Biquad];
   readonly #lowpass: [Biquad, Biquad];
-  /** Per channel: z1, z2 of each of the two stages, for the weighting and then the low band. */
+  /** Per channel, z1 and z2 of both stages of: the weighting, the low band, the weighted low band. */
   readonly #state: Float64Array;
+  /** One channel's low band for the run being measured. */
+  readonly #low: Float32Array;
   readonly #blocks: number[] = [];
   readonly #lowBlocks: number[] = [];
+  readonly #weightedLowBlocks: number[] = [];
   readonly #peaks: number[] = [];
   #blockSum = 0;
   #lowSum = 0;
+  #weightedLowSum = 0;
   #blockPeak = 0;
   #blockFill = 0;
   #peak = 0;
@@ -83,29 +88,42 @@ export class BlockEnergyMeter {
     this.#hopFrames = Math.round(sampleRate * HOP_SECONDS);
     this.#weighting = kWeighting(sampleRate);
     this.#lowpass = lowBand(sampleRate);
-    this.#state = new Float64Array(channels * 8);
+    this.#state = new Float64Array(channels * 12);
+    this.#low = new Float32Array(this.#hopFrames);
   }
 
   push(samples: Float32Array): void {
     const channels = this.#channels;
     const frames = samples.length / channels;
+    const low = this.#low;
     let frame = 0;
     while (frame < frames) {
       const count = Math.min(frames - frame, this.#hopFrames - this.#blockFill);
       for (let c = 0; c < channels; c++) {
-        this.#blockSum += this.#filterRun(samples, frame, count, c, this.#weighting, c * 8);
-        this.#lowSum += this.#filterRun(samples, frame, count, c, this.#lowpass, c * 8 + 4);
+        const first = frame * channels + c;
+        const state = c * 12;
+        this.#blockSum += this.#filter(samples, first, channels, count, this.#weighting, state, null);
+        this.#lowSum += this.#filter(samples, first, channels, count, this.#lowpass, state + 4, low);
+        this.#weightedLowSum += this.#filter(low, 0, 1, count, this.#weighting, state + 8, null);
       }
+      let peak = this.#blockPeak;
+      for (let i = frame * channels; i < (frame + count) * channels; i++) {
+        const abs = Math.abs(samples[i]);
+        if (abs > peak) peak = abs;
+      }
+      this.#blockPeak = peak;
       this.#blockFill += count;
       frame += count;
       if (this.#blockFill === this.#hopFrames) {
         this.#blocks.push(this.#blockSum / this.#hopFrames);
         this.#lowBlocks.push(this.#lowSum / this.#hopFrames);
+        this.#weightedLowBlocks.push(this.#weightedLowSum / this.#hopFrames);
         this.#peaks.push(this.#blockPeak);
         if (this.#blockPeak > this.#peak) this.#peak = this.#blockPeak;
-        this.#blockPeak = 0;
         this.#blockSum = 0;
         this.#lowSum = 0;
+        this.#weightedLowSum = 0;
+        this.#blockPeak = 0;
         this.#blockFill = 0;
       }
     }
@@ -131,21 +149,28 @@ export class BlockEnergyMeter {
     return Float64Array.from(this.#lowBlocks);
   }
 
-  /** Runs `count` frames of one channel through a two-stage filter and returns their summed squares. */
-  #filterRun(
-    samples: Float32Array, frame: number, count: number, channel: number, filters: [Biquad, Biquad], base: number,
+  /**
+   * K-weighted energy of everything above the low band, aligned with
+   * `blocks()`: the loudness that is left when the bass is taken out.
+   */
+  restBlocks(): Float64Array {
+    return Float64Array.from(this.#blocks, (total, i) => Math.max(total - this.#weightedLowBlocks[i], 0));
+  }
+
+  /**
+   * Runs `count` samples, `step` apart from `first`, through a two-stage
+   * filter. Returns their summed squares and, if `out` is given, stores them.
+   */
+  #filter(
+    samples: Float32Array, first: number, step: number, count: number,
+    filters: [Biquad, Biquad], base: number, out: Float32Array | null,
   ): number {
     const [s, h] = filters;
     const state = this.#state;
     let s1 = state[base], s2 = state[base + 1], h1 = state[base + 2], h2 = state[base + 3];
-    let peak = this.#blockPeak;
     let sum = 0;
-    const step = this.#channels;
-    const end = (frame + count) * step + channel;
-    for (let i = frame * step + channel; i < end; i += step) {
+    for (let n = 0, i = first; n < count; n++, i += step) {
       const x = samples[i];
-      const abs = x < 0 ? -x : x;
-      if (abs > peak) peak = abs;
       const y = s.b0 * x + s1;
       s1 = s.b1 * x - s.a1 * y + s2;
       s2 = s.b2 * x - s.a2 * y;
@@ -153,13 +178,13 @@ export class BlockEnergyMeter {
       h1 = h.b1 * y - h.a1 * z + h2;
       h2 = h.b2 * y - h.a2 * z;
       sum += z * z;
+      if (out) out[n] = z;
     }
     // Keep denormals out of the recursion once the input goes silent.
     state[base] = Math.abs(s1) < 1e-30 ? 0 : s1;
     state[base + 1] = Math.abs(s2) < 1e-30 ? 0 : s2;
     state[base + 2] = Math.abs(h1) < 1e-30 ? 0 : h1;
     state[base + 3] = Math.abs(h2) < 1e-30 ? 0 : h2;
-    this.#blockPeak = peak;
     return sum;
   }
 }
