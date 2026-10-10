@@ -19,6 +19,8 @@ export interface Remembered {
   defaults: unknown;
 }
 
+export type MenuCommand = 'open' | 'undo' | 'redo';
+
 /** What the window may ask the main process to do. */
 export interface Api {
   pickFile(): Promise<string | null>;
@@ -38,6 +40,8 @@ export interface Api {
   render(request: RenderRequest): Promise<RenderResult>;
   reveal(path: string): void;
   onProgress(listener: (fraction: number) => void): void;
+  /** A command chosen from the menu bar or by its keyboard shortcut. */
+  onMenu(listener: (command: MenuCommand) => void): void;
   /** A recording handed to the app from outside while it is running. */
   onOpenFile(listener: (path: string) => void): void;
   /** Tells the main process the window has drawn a loaded file. */

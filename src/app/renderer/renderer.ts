@@ -866,6 +866,7 @@ function setBusy(label: string | null) {
   $<HTMLButtonElement>('export').disabled = busy || !recording;
   $<HTMLButtonElement>('export-all').disabled = busy || !recording;
   $<HTMLButtonElement>('play').disabled = busy || !recording;
+  showHistory();
 }
 
 let progressLabel = '';
@@ -892,6 +893,10 @@ async function open(path: string) {
     $('views').hidden = false;
     const restored = restore(await api.recall(path), measured.peaks.length);
     select(mixes[restored.selected]);
+    undoSteps = [];
+    redoSteps = [];
+    settled = snapshot();
+    showHistory();
     if (restored.fromLastTime) $('export-status').textContent = 'Picked up where you left off.';
     requestAnimationFrame(() => requestAnimationFrame(() => api.painted()));
   } catch (error) {
@@ -938,6 +943,7 @@ function saveNow() {
   };
   const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb };
   api.remember(recording.path, { session, defaults });
+  settleHistory();
 }
 
 /** Saves shortly after the last change, so dragging does not write on every frame. */
@@ -989,6 +995,92 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
   mixesCreated = 1;
   return { selected: 0, fromLastTime: false };
 }
+
+// ---------------------------------------------------------------------------
+// Undo and redo
+//
+// Each step is a copy of all the mixes. Changes are gathered into steps the
+// same way they are saved: once nothing has changed for a moment, so a whole
+// drag or slider movement undoes in one go.
+
+interface Step {
+  /** The mixes as JSON, which is also what tells two states apart. */
+  mixes: string;
+  selected: number;
+  mixesCreated: number;
+}
+
+const MAX_UNDO_STEPS = 100;
+let undoSteps: Step[] = [];
+let redoSteps: Step[] = [];
+/** The state as of the last settled change. */
+let settled: Step | null = null;
+
+function snapshot(): Step {
+  return { mixes: JSON.stringify(mixes), selected: Math.max(0, mixes.indexOf(mix)), mixesCreated };
+}
+
+/** Records the changes since the last settled state, if any, as one undo step. */
+function settleHistory() {
+  if (!settled) return;
+  const now = snapshot();
+  if (now.mixes === settled.mixes) {
+    // Selecting another mix is not a change worth a step, but is remembered.
+    settled = now;
+    return;
+  }
+  undoSteps.push(settled);
+  if (undoSteps.length > MAX_UNDO_STEPS) undoSteps.shift();
+  redoSteps = [];
+  settled = now;
+  showHistory();
+}
+
+function showHistory() {
+  $<HTMLButtonElement>('undo').disabled = busy || undoSteps.length === 0;
+  $<HTMLButtonElement>('redo').disabled = busy || redoSteps.length === 0;
+}
+
+function applyStep(step: Step) {
+  mixes = JSON.parse(step.mixes);
+  mixesCreated = step.mixesCreated;
+  settled = step;
+  grab = null;
+  drag = null;
+  hoveredAdjustment = null;
+  select(mixes[clamp(step.selected, 0, mixes.length - 1)]);
+  showHistory();
+}
+
+function stepHistory(direction: 'undo' | 'redo') {
+  if (!recording || busy) return;
+  // Count a change still in progress as done, so that it is what gets undone.
+  if (saveTimer !== undefined) saveNow();
+  const [from, to] = direction === 'undo' ? [undoSteps, redoSteps] : [redoSteps, undoSteps];
+  const step = from.pop();
+  if (!step || !settled) return;
+  to.push(settled);
+  applyStep(step);
+}
+
+const undo = () => stepHistory('undo');
+const redo = () => stepHistory('redo');
+
+$('undo').addEventListener('click', undo);
+$('redo').addEventListener('click', redo);
+
+api.onMenu(async (command) => {
+  if (command === 'open') {
+    const path = busy ? null : await api.pickFile();
+    if (path) open(path);
+    return;
+  }
+  // While typing in a field, undo belongs to the text.
+  const field = document.activeElement;
+  if (field instanceof HTMLInputElement && field.type === 'text') document.execCommand(command);
+  else if (command === 'undo') undo();
+  else redo();
+});
 
 /** File-name-safe version of a mix name. */
 const fileName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'mix';

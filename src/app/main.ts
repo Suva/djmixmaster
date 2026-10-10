@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, type MenuItemConstructorOptions } from 'electron';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
-import type { Job, JobMessage, Remembered, RenderRequest } from './api.ts';
+import type { Job, JobMessage, MenuCommand, Remembered, RenderRequest } from './api.ts';
 
 // The same name, and so the same data folder, whether run from the project or as the packaged app.
 app.setName('DJ Mix Master');
@@ -266,8 +266,41 @@ function createWindow() {
   });
 }
 
+/**
+ * The menu bar. Undo and Redo go to the window instead of using the built-in
+ * roles, which only know about text fields; the window decides whether a text
+ * field or the mixes should take them.
+ */
+function buildMenu() {
+  const command = (label: string, accelerator: string, name: MenuCommand): MenuItemConstructorOptions => ({
+    label,
+    accelerator,
+    click: () => window?.webContents.send('menu', name),
+  });
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' } as MenuItemConstructorOptions] : []),
+    { label: 'File', submenu: [command('Open Recording…', 'CmdOrCtrl+O', 'open'), { type: 'separator' }, { role: 'close' }] },
+    {
+      label: 'Edit',
+      submenu: [
+        command('Undo', 'CmdOrCtrl+Z', 'undo'),
+        command('Redo', 'Shift+CmdOrCtrl+Z', 'redo'),
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    { label: 'View', submenu: [{ role: 'togglefullscreen' }, { type: 'separator' }, { role: 'toggleDevTools' }] },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(() => {
   protocol.handle(SCHEME, serve);
+  buildMenu();
   createWindow();
 });
 app.on('window-all-closed', () => app.quit());

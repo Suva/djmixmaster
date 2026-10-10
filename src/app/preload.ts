@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { Api } from './api.ts';
+import type { Api, MenuCommand } from './api.ts';
 
 const api: Api = {
   pickFile: () => ipcRenderer.invoke('pick-file'),
@@ -16,6 +16,7 @@ const api: Api = {
   render: (request) => ipcRenderer.invoke('render', request),
   reveal: (path) => ipcRenderer.send('reveal', path),
   onProgress: (listener) => ipcRenderer.on('progress', (_event, fraction: number) => listener(fraction)),
+  onMenu: (listener) => ipcRenderer.on('menu', (_event, command: MenuCommand) => listener(command)),
   onOpenFile: (listener) => ipcRenderer.on('open-file', (_event, path: string) => listener(path)),
   painted: () => ipcRenderer.send('painted'),
 };

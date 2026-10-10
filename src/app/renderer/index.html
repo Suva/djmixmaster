@@ -9,6 +9,10 @@
 <body>
   <header>
     <button id="open">Open recording…</button>
+    <div class="toggle" role="group" aria-label="History">
+      <button id="undo" title="Undo the last change" disabled>Undo</button>
+      <button id="redo" title="Redo the change just undone" disabled>Redo</button>
+    </div>
     <span id="file-name">No recording open</span>
     <span class="spacer"></span>
     <span id="export-status"></span>
