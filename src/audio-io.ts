@@ -20,48 +20,44 @@ export interface AudioInfo {
 
 /** Where Homebrew and friends put ffmpeg; shells started outside a login session often lack these. */
 const FALLBACK_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/opt/local/bin'];
-const tools = new Map<string, string>();
+let ffmpegPath: string | undefined;
 
-/** Full path of `ffmpeg` or `ffprobe`, looked up on PATH first and then in the usual install folders. */
-function tool(name: 'ffmpeg' | 'ffprobe'): string {
-  let found = tools.get(name);
-  if (!found) {
+/**
+ * Full path of ffmpeg: the one named by DJMASTER_FFMPEG (the packaged app
+ * points this at its own copy), else the first on PATH or in the usual
+ * install folders.
+ */
+function ffmpeg(): string {
+  if (!ffmpegPath) {
+    const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
     const dirs = [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...FALLBACK_DIRS];
-    const exe = process.platform === 'win32' ? `${name}.exe` : name;
-    found = dirs.map((dir) => join(dir, exe)).find((path) => existsSync(path));
-    if (!found) throw new Error(`${name} not found. Install ffmpeg (for example "brew install ffmpeg") or add it to PATH`);
-    tools.set(name, found);
+    const candidates = [process.env.DJMASTER_FFMPEG, ...dirs.map((dir) => join(dir, exe))];
+    ffmpegPath = candidates.find((path) => path && existsSync(path));
+    if (!ffmpegPath) throw new Error('ffmpeg not found. Install it (for example "brew install ffmpeg") or add it to PATH');
   }
-  return found;
+  return ffmpegPath;
 }
 
-function run(cmd: string, args: string[]): Promise<string> {
+/** Reads the sample rate and length from what ffmpeg reports about a file. */
+export function probe(file: string): Promise<AudioInfo> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    let err = '';
-    child.stdout.on('data', (d) => (out += d));
-    child.stderr.on('data', (d) => (err += d));
+    // With no output named, ffmpeg describes the input on stderr and stops.
+    const child = spawn(ffmpeg(), ['-hide_banner', '-nostdin', '-i', file], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let described = '';
+    child.stderr.on('data', (d) => (described += d));
     child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) resolve(out);
-      else reject(new Error(`${cmd} failed: ${err.trim() || `exit code ${code}`}`));
+    child.on('close', () => {
+      const sampleRate = Number(/Stream #.*: Audio: .*?(\d+) Hz/.exec(described)?.[1]);
+      if (!sampleRate) {
+        const reason = described.trim().split('\n').pop();
+        reject(new Error(`No audio found in ${file}${reason ? ` (${reason})` : ''}`));
+        return;
+      }
+      const length = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(described);
+      const duration = length ? Number(length[1]) * 3600 + Number(length[2]) * 60 + Number(length[3]) : 0;
+      resolve({ sampleRate, duration });
     });
   });
-}
-
-export async function probe(file: string): Promise<AudioInfo> {
-  const out = await run(tool('ffprobe'), [
-    '-v', 'error',
-    '-select_streams', 'a:0',
-    '-show_entries', 'stream=sample_rate:format=duration',
-    '-of', 'json',
-    file,
-  ]);
-  const json = JSON.parse(out);
-  const sampleRate = Number(json.streams?.[0]?.sample_rate);
-  if (!sampleRate) throw new Error(`No audio stream found in ${file}`);
-  return { sampleRate, duration: Number(json.format?.duration) || 0 };
 }
 
 /** Streams the region as interleaved stereo float32 chunks at the file's own sample rate. */
@@ -71,7 +67,7 @@ export async function* decode(file: string, region: Region = {}): AsyncGenerator
   if (region.end !== undefined) args.push('-to', String(region.end));
   args.push('-i', file, '-map', 'a:0', '-ac', String(CHANNELS), '-f', 'f32le', '-');
 
-  const child = spawn(tool('ffmpeg'), args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(ffmpeg(), args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let err = '';
   child.stderr.on('data', (d) => (err += d));
   const closed = once(child, 'close');
@@ -123,7 +119,7 @@ export function encode(output: string, sampleRate: number): Encoder {
     ...codecArgs(output),
     output,
   ];
-  const child = spawn(tool('ffmpeg'), args, { stdio: ['pipe', 'ignore', 'pipe'] });
+  const child = spawn(ffmpeg(), args, { stdio: ['pipe', 'ignore', 'pipe'] });
   let err = '';
   child.stderr.on('data', (d) => (err += d));
   // A dying encoder surfaces through its exit code; don't crash on the broken pipe first.

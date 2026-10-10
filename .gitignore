@@ -1,5 +1,6 @@
 node_modules/
 dist/
+release/
 .DS_Store
 
 # Recordings, exports and analysis dumps stay out of the repository

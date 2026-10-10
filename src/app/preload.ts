@@ -16,6 +16,7 @@ const api: Api = {
   render: (request) => ipcRenderer.invoke('render', request),
   reveal: (path) => ipcRenderer.send('reveal', path),
   onProgress: (listener) => ipcRenderer.on('progress', (_event, fraction: number) => listener(fraction)),
+  onOpenFile: (listener) => ipcRenderer.on('open-file', (_event, path: string) => listener(path)),
   painted: () => ipcRenderer.send('painted'),
 };
 

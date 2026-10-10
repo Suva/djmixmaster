@@ -1092,6 +1092,7 @@ new ResizeObserver(scheduleDraw).observe(detailCanvas);
 new ResizeObserver(scheduleDraw).observe(overview);
 
 syncControls();
+api.onOpenFile(open);
 api.initialFile().then((path) => {
   if (path) open(path);
 });

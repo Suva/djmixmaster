@@ -11,6 +11,13 @@ import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import type { Job, JobMessage, Remembered, RenderRequest } from './api.ts';
 
+// The same name, and so the same data folder, whether run from the project or as the packaged app.
+app.setName('DJ Mix Master');
+
+// The packaged app carries its own ffmpeg; workers inherit this when they start.
+const bundledFfmpeg = join(process.resourcesPath, 'bin', 'ffmpeg');
+if (app.isPackaged && existsSync(bundledFfmpeg)) process.env.DJMASTER_FFMPEG = bundledFfmpeg;
+
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aif', 'aiff', 'ogg', 'opus'];
 /** Development aid: save a picture of the window here once a file is drawn, then quit. */
 const SCREENSHOT = process.env.DJMASTER_SHOT;
@@ -91,10 +98,20 @@ function runJob(job: Job): Promise<unknown> {
   });
 }
 
+/** A recording dropped on the app's icon or chosen with "Open With" before the window was ready. */
+let openedFromFinder: string | null = null;
+
 function initialFile(): string | null {
+  if (openedFromFinder) return openedFromFinder;
   const argument = process.argv.slice(app.isPackaged ? 1 : 2).find((arg) => !arg.startsWith('-'));
   return argument && existsSync(argument) ? resolve(argument) : null;
 }
+
+app.on('open-file', (event, path) => {
+  event.preventDefault();
+  if (window) window.webContents.send('open-file', path);
+  else openedFromFinder = path;
+});
 
 ipcMain.handle('initial-file', initialFile);
 
