@@ -95,7 +95,8 @@ test('limiter holds the ceiling, keeps length and leaves quiet audio untouched',
   const ceiling = Math.pow(10, -1 / 20);
   const input = new Float32Array(2 * 50000);
   for (let i = 0; i < input.length; i++) input[i] = 0.2 * Math.sin(i * 0.01);
-  for (let f = 20000; f < 20400; f++) input[f * 2] = f % 2 ? 1.8 : -1.8;
+  // A loud burst well below the top of the spectrum, where sample peaks and true peaks agree.
+  for (let f = 20000; f < 20400; f++) input[f * 2] = 1.8 * Math.sin((2 * Math.PI * 1000 * f) / 44100);
   input[2 * 49999] = 3; // a peak in the very last frame must survive the flush
 
   const limiter = new Limiter(44100, 2, -1);
@@ -108,8 +109,27 @@ test('limiter holds the ceiling, keeps length and leaves quiet audio untouched',
 
   assert.equal(parts.length, input.length);
   assert.ok(parts.every((x) => Math.abs(x) <= ceiling + 1e-6));
-  assert.ok(Math.abs(Math.abs(parts[2 * 20100]) - ceiling) < 0.01, 'peaks sit at the ceiling');
+  const burstPeak = parts.slice(2 * 20100, 2 * 20300).reduce((peak, x) => Math.max(peak, Math.abs(x)), 0);
+  assert.ok(Math.abs(burstPeak - ceiling) < 0.01, 'peaks sit at the ceiling');
   for (let i = 0; i < 2 * 10000; i++) assert.ok(Math.abs(parts[i] - input[i]) < 1e-6);
+});
+
+test('limiter holds peaks that fall between the samples', () => {
+  // A sine at a quarter of the sample rate, sampled 45 degrees off its crests:
+  // every sample reads 3 dB below the waveform's real peak.
+  const amplitude = 1.2;
+  const frames = 20000;
+  const input = new Float32Array(frames * 2);
+  for (let f = 0; f < frames; f++) input[f * 2] = input[f * 2 + 1] = amplitude * Math.sin((Math.PI / 2) * f + Math.PI / 4);
+  const ceiling = Math.pow(10, -1 / 20);
+  assert.ok(amplitude * Math.SQRT1_2 < ceiling, 'no sample is over the ceiling');
+
+  const limiter = new Limiter(44100, 2, -1);
+  const output = [...limiter.process(input), ...limiter.flush()];
+  // For this signal the true peak is the sample peak times the square root of two.
+  const truePeak = output.slice(4000, -4000).reduce((peak, x) => Math.max(peak, Math.abs(x)), 0) * Math.SQRT2;
+  assert.ok(truePeak <= ceiling * 1.012, `true peak ${truePeak} stays within 0.1 dB of the ceiling`);
+  assert.ok(truePeak >= ceiling * 0.97, 'and is not pulled down further than needed');
 });
 
 /** Median short-term loudness between two times, skipping a margin at both ends. */

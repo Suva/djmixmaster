@@ -36,7 +36,7 @@ Levelling
   --slew <dB/s>        Fastest the gain may move (default: ${DEFAULT_LEVEL_OPTIONS.slewDbPerSecond})
 
 Limiter
-  --ceiling <dBFS>     Peak ceiling (default: -1)
+  --ceiling <dBTP>     True-peak ceiling (default: -1)
   --no-limiter         Leave peaks alone; boosted tracks may clip
 `;
 
