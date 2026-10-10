@@ -9,6 +9,19 @@ export interface LoudnessCurves {
   restShortTerm: Float32Array;
 }
 
+/** What decides how loud the result can be when no target is asked for. */
+export interface Headroom {
+  /** Highest absolute sample value per 100 ms block, linear. */
+  peaks: Float32Array;
+  /** Level in dBFS that peaks should stay under. */
+  ceilingDb: number;
+}
+
+/** Share of the music allowed to reach past the ceiling, where the limiter catches it. */
+const HEADROOM_OUTLIERS = 0.01;
+/** Most an automatic target raises a quiet recording. */
+const MAX_AUTO_RAISE_DB = 20;
+
 export interface Levelling {
   envelope: Float32Array;
   targetLufs: number;
@@ -18,8 +31,13 @@ export interface Levelling {
   bassDb: Float32Array;
 }
 
-/** Derives the gain curves from measured loudness. Cheap, so it can be re-run on every settings change. */
-export function level(curves: LoudnessCurves, options: LevelOptions): Levelling {
+/**
+ * Derives the gain curves from measured loudness. Cheap, so it can be re-run on
+ * every settings change. Without a target in `options`, the result keeps the
+ * mix's own level, or, when `headroom` is given, is made as loud as fits under
+ * the ceiling without leaning on the limiter.
+ */
+export function level(curves: LoudnessCurves, options: LevelOptions, headroom?: Headroom): Levelling {
   const envelope = fullEnergyEnvelope(curves.shortTerm, options);
   const typicalLufs = median(envelope);
   const bass =
@@ -54,7 +72,24 @@ export function level(curves: LoudnessCurves, options: LevelOptions): Levelling 
   // cut limits bound the correction between tracks; the target then moves the
   // whole mix by one fixed amount.
   const reference = median(envelope);
-  const targetLufs = options.targetLufs ?? typicalLufs;
-  const gainDb = gainCurve(envelope, reference, options).map((db) => db + targetLufs - typicalLufs);
+  const gainDb = gainCurve(envelope, reference, options);
+  let targetLufs = options.targetLufs ?? typicalLufs;
+  if (options.targetLufs === undefined && headroom) {
+    // Where the peaks of the music would land after levelling. A recording made
+    // too hot peaks at full scale all the way through, so raising any of its
+    // tracks would only feed the limiter; turn the whole mix down by that much.
+    const landed: number[] = [];
+    for (let i = 0; i < gainDb.length; i++) {
+      if (headroom.peaks[i] > 0 && curves.shortTerm[i] > typicalLufs - 20) {
+        landed.push(20 * Math.log10(headroom.peaks[i]) + gainDb[i] + bassDb[i] / 2);
+      }
+    }
+    if (landed.length > 0) {
+      landed.sort((a, b) => a - b);
+      const reach = landed[Math.floor((landed.length - 1) * (1 - HEADROOM_OUTLIERS))];
+      targetLufs = typicalLufs + Math.min(MAX_AUTO_RAISE_DB, headroom.ceilingDb - reach);
+    }
+  }
+  for (let i = 0; i < gainDb.length; i++) gainDb[i] += targetLufs - typicalLufs;
   return { envelope, targetLufs, gainDb, bassDb };
 }

@@ -22,8 +22,8 @@ Output
   --dump <file.csv>    Write the loudness and gain curves for inspection
 
 Levelling
-  --target <LUFS>      Loudness for full-energy sections (default: the mix's own typical level);
-                       set it higher to push the mix into the limiter
+  --target <LUFS>      Loudness for full-energy sections (default: as loud as fits under the
+                       ceiling without limiting); set it higher to push into the limiter
   --window <seconds>   Quiet passages shorter than about this are breakdowns (default: ${DEFAULT_LEVEL_OPTIONS.windowSeconds})
   --percentile <0-1>   Loudness percentile that counts as full energy (default: ${DEFAULT_LEVEL_OPTIONS.percentile})
   --bass-weight <0-1>  0 matches perceived loudness, 1 matches bass/kick level (default: ${DEFAULT_LEVEL_OPTIONS.bassWeight})
@@ -178,7 +178,7 @@ async function main() {
   }
 
   const before = await measure(args.input, args.region, progress('Analysing'));
-  const levelling = level(before, args.options);
+  const levelling = level(before, args.options, { peaks: before.peaks, ceilingDb: args.ceilingDb ?? 0 });
   const { gainDb, bassDb } = levelling;
   const minGain = gainDb.reduce((a, b) => Math.min(a, b), Infinity);
   const maxGain = gainDb.reduce((a, b) => Math.max(a, b), -Infinity);

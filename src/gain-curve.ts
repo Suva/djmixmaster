@@ -50,14 +50,16 @@ export const DEFAULT_LEVEL_OPTIONS: LevelOptions = {
 
 /** Anything quieter is treated as a gap in the music and does not steer the gain. */
 const GATE_LUFS = -50;
+/** So is anything this far below the loud parts of the region, such as the room after the music stops. */
+const RELATIVE_GATE_DB = 30;
 const BIN_DB = 0.1;
 const BINS = Math.round((10 - GATE_LUFS) / BIN_DB);
 
 /**
- * Sliding percentile over a centred window, skipping gated values. Entries
+ * Sliding percentile over a centred window, skipping values below `gate`. Entries
  * whose window holds nothing but gated values come back as NaN.
  */
-function slidingPercentile(values: Float32Array, half: number, percentile: number): Float32Array {
+function slidingPercentile(values: Float32Array, half: number, percentile: number, gate: number): Float32Array {
   const n = values.length;
   const histogram = new Uint32Array(BINS);
   let count = 0;
@@ -67,7 +69,7 @@ function slidingPercentile(values: Float32Array, half: number, percentile: numbe
   let lowest = BINS - 1;
   let highest = 0;
   for (let i = 0; i < n; i++) {
-    if (values[i] >= GATE_LUFS) {
+    if (values[i] >= gate) {
       lowest = Math.min(lowest, bin(values[i]));
       highest = Math.max(highest, bin(values[i]));
     }
@@ -80,13 +82,13 @@ function slidingPercentile(values: Float32Array, half: number, percentile: numbe
     const wantHi = Math.min(n, i + half + 1);
     const wantLo = Math.max(0, i - half);
     for (; hi < wantHi; hi++) {
-      if (values[hi] >= GATE_LUFS) {
+      if (values[hi] >= gate) {
         histogram[bin(values[hi])]++;
         count++;
       }
     }
     for (; lo < wantLo; lo++) {
-      if (values[lo] >= GATE_LUFS) {
+      if (values[lo] >= gate) {
         histogram[bin(values[lo])]--;
         count--;
       }
@@ -117,7 +119,9 @@ function slidingPercentile(values: Float32Array, half: number, percentile: numbe
 export function fullEnergyEnvelope(shortTerm: Float32Array, options: LevelOptions): Float32Array {
   const n = shortTerm.length;
   const half = Math.max(1, Math.round(options.windowSeconds / HOP_SECONDS / 2));
-  const lifted = slidingPercentile(shortTerm, half, options.percentile);
+  const loud = Float32Array.from(shortTerm).sort()[Math.floor(n * 0.9)];
+  const gate = Math.max(GATE_LUFS, loud - RELATIVE_GATE_DB);
+  const lifted = slidingPercentile(shortTerm, half, options.percentile, gate);
 
   // Stretches with nothing but silence around them inherit the nearest level.
   let last = NaN;
@@ -131,7 +135,7 @@ export function fullEnergyEnvelope(shortTerm: Float32Array, options: LevelOption
   }
   if (Number.isNaN(last)) throw new Error('The selected region is silent');
 
-  return slidingPercentile(lifted, half, 1 - options.percentile);
+  return slidingPercentile(lifted, half, 1 - options.percentile, GATE_LUFS);
 }
 
 export function median(values: Float32Array): number {

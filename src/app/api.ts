@@ -21,6 +21,10 @@ export interface Api {
   /** Address the window can play this recording from. */
   mediaUrl(path: string): Promise<string>;
   pickOutput(suggested: string): Promise<string | null>;
+  pickFolder(): Promise<string | null>;
+  /** Which of these files already exist. */
+  existing(paths: string[]): Promise<string[]>;
+  confirm(message: string, detail: string, action: string): Promise<boolean>;
   render(request: RenderRequest): Promise<RenderResult>;
   reveal(path: string): void;
   onProgress(listener: (fraction: number) => void): void;

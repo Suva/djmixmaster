@@ -12,6 +12,15 @@
     <span id="file-name">No recording open</span>
     <span class="spacer"></span>
     <span id="export-status"></span>
+    <span id="export-all-group" hidden>
+      <select id="format" title="Format for Export all">
+        <option value="wav">WAV</option>
+        <option value="flac">FLAC</option>
+        <option value="mp3">MP3</option>
+        <option value="m4a">AAC</option>
+      </select>
+      <button id="export-all" disabled>Export all…</button>
+    </span>
     <button id="export" class="primary" disabled>Export mix…</button>
   </header>
   <div id="progress" hidden>
@@ -27,16 +36,28 @@
       </div>
 
       <div id="views" hidden>
+        <div class="mix-tabs">
+          <span class="region-title">Mixes</span>
+          <div id="mix-tabs"></div>
+          <span class="spacer"></span>
+          <div class="toggle" role="group" aria-label="Zoom the recording">
+            <button id="overview-out" title="Zoom the recording out">−</button>
+            <button id="overview-in" title="Zoom the recording in">+</button>
+            <button id="overview-mix" title="Zoom to the selected mix">Mix</button>
+            <button id="overview-fit" title="Show the whole recording">All</button>
+          </div>
+        </div>
+        <canvas id="overview"></canvas>
+        <p class="hint">Drag across a free part of the recording to mark another mix. Drag a mix's edge to adjust it or its middle to move it. Click inside a mix to select it and listen from there. Scroll to zoom the recording, swipe sideways to move along it.</p>
         <div class="region-bar">
-          <span class="region-title">Mix region</span>
+          <label>Name <input id="mix-name" type="text" spellcheck="false"></label>
           <label>Start <input id="region-start" type="text" spellcheck="false"></label>
           <label>End <input id="region-end" type="text" spellcheck="false"></label>
           <span>Length <output id="region-length"></output></span>
           <span class="spacer"></span>
-          <button id="select-all">Whole recording</button>
+          <button id="select-all" title="Stretch this mix over all the free space around it">Expand to fill</button>
+          <button id="delete-mix">Delete mix</button>
         </div>
-        <canvas id="overview"></canvas>
-        <p class="hint">Drag on the recording above to mark the mix. Drag an edge to adjust it, or the middle to move it. Click inside the mix to listen from there.</p>
         <div class="transport">
           <button id="play" title="Space">Play</button>
           <output id="play-time">0:00:00</output>
@@ -44,6 +65,12 @@
             <button id="hear-original" title="A switches between the two">Original</button>
             <button id="hear-levelled" class="on" title="A switches between the two">Levelled</button>
           </div>
+          <div class="toggle" role="group" aria-label="Zoom">
+            <button id="zoom-out" title="Zoom out">−</button>
+            <button id="zoom-in" title="Zoom in">+</button>
+            <button id="zoom-fit" title="Show the whole mix">Fit</button>
+          </div>
+          <span class="zoom-hint">Scroll over the curves to zoom, swipe sideways to move</span>
           <span class="spacer"></span>
           <span id="meter"></span>
         </div>
@@ -53,6 +80,7 @@
     </section>
 
     <aside>
+      <p id="settings-for"></p>
       <h2>Levelling</h2>
       <div class="control">
         <div class="control-head">
@@ -60,7 +88,7 @@
           <output id="target-value"></output>
         </div>
         <input id="target" type="range" min="-20" max="-5" step="0.5" value="-10" disabled>
-        <label class="check"><input id="target-auto" type="checkbox" checked> Keep the mix's own level</label>
+        <label class="check"><input id="target-auto" type="checkbox" checked> As loud as fits without limiting</label>
       </div>
       <div class="control">
         <div class="control-head">

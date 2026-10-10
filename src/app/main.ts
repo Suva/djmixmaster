@@ -113,6 +113,22 @@ ipcMain.handle('pick-output', async (_event, suggested: string) => {
   return result.canceled || !result.filePath ? null : result.filePath;
 });
 
+ipcMain.handle('pick-folder', async () => {
+  // Automated checks cannot answer a dialog.
+  if (SCREENSHOT && process.env.DJMASTER_SHOT_FOLDER) return process.env.DJMASTER_SHOT_FOLDER;
+  const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory', 'createDirectory'] });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+ipcMain.handle('existing', (_event, paths: string[]) => paths.filter((path) => existsSync(path)));
+
+ipcMain.handle('confirm', async (_event, message: string, detail: string, action: string) => {
+  const result = await dialog.showMessageBox(window!, {
+    type: 'warning', message, detail, buttons: [action, 'Cancel'], defaultId: 1, cancelId: 1,
+  });
+  return result.response === 0;
+});
+
 ipcMain.handle('media-url', (_event, path: string) => {
   media = { id: media.id + 1, path };
   return `${ORIGIN}/media/${media.id}`;

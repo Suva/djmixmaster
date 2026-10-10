@@ -8,6 +8,7 @@ const COLOR = {
   label: '#c9ced8',
   before: '#6b7280',
   after: '#3ddc97',
+  otherMix: '#2c8f66',
   gain: '#f2a83b',
   bass: '#6aa9ff',
   warn: '#ff5d5d',
@@ -19,6 +20,8 @@ const FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 export const GUTTER = 48;
 const AXIS = 18;
 const LOUDNESS_SPAN_DB = 24;
+/** Draws the body of the sound larger than life: average levels are small next to peaks. */
+const BODY_SCALE = 2;
 
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -77,31 +80,81 @@ export interface Region {
   end: number;
 }
 
-/** `playhead` is a block position in the recording, or null to hide it. */
-export function drawOverview(canvas: HTMLCanvasElement, peaks: Float32Array, region: Region, playhead: number | null) {
+/** What the overview needs to know about the recording. */
+export interface OverviewData {
+  /** Highest sample value per block. */
+  peaks: Float32Array;
+  /** Average level per block, which keeps showing structure when the peaks are all at full scale. */
+  body: Float32Array;
+}
+
+/**
+ * Draws blocks `shown.start` to `shown.end` of the recording with every marked
+ * mix on it. `view` is the part of the selected mix the detail view is showing
+ * and `playhead` a block position in the recording, or null to hide it.
+ */
+export function drawOverview(
+  canvas: HTMLCanvasElement, data: OverviewData, shown: Region,
+  mixes: Region[], selected: number, view: Region, playhead: number | null,
+) {
   const { ctx, width, height } = fit(canvas);
   const waveHeight = height - AXIS;
   const mid = waveHeight / 2;
-  const cols = columns(peaks, width, 'max');
-  const x0 = (region.start / peaks.length) * width;
-  const x1 = (region.end / peaks.length) * width;
+  const span = shown.end - shown.start;
+  if (span <= 0) return;
+  const peaks = columns(data.peaks.subarray(shown.start, shown.end), width, 'max');
+  const body = columns(data.body.subarray(shown.start, shown.end), width, 'mean');
+  const toX = (block: number) => ((block - shown.start) / span) * width;
 
-  ctx.fillStyle = 'rgba(61, 220, 151, 0.10)';
-  ctx.fillRect(x0, 0, x1 - x0, waveHeight);
+  // Which mix, if any, each pixel column belongs to.
+  const owner = new Int16Array(width).fill(-1);
+  mixes.forEach((mix, index) => {
+    const x0 = Math.max(0, toX(mix.start));
+    const x1 = Math.min(width, toX(mix.end));
+    if (x1 <= x0) return;
+    for (let x = Math.ceil(x0); x < x1; x++) owner[x] = index;
+    ctx.fillStyle = index === selected ? 'rgba(61, 220, 151, 0.12)' : 'rgba(61, 220, 151, 0.05)';
+    ctx.fillRect(x0, 0, x1 - x0, waveHeight);
+  });
   for (let x = 0; x < width; x++) {
-    const half = Math.max(0.5, cols[x] * (mid - 2));
-    ctx.fillStyle = x >= x0 && x < x1 ? COLOR.after : COLOR.before;
-    ctx.fillRect(x, mid - half, 1, half * 2);
+    const color = owner[x] < 0 ? COLOR.before : owner[x] === selected ? COLOR.after : COLOR.otherMix;
+    // Peaks faintly, the body of the sound solid on top.
+    const outer = Math.max(0.5, Math.min(1, peaks[x]) * (mid - 2));
+    const inner = Math.max(0.5, Math.min(1, body[x] * BODY_SCALE) * (mid - 2));
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(x, mid - outer, 1, outer * 2);
+    ctx.globalAlpha = 1;
+    ctx.fillRect(x, mid - inner, 1, inner * 2);
   }
-  ctx.fillStyle = COLOR.after;
-  ctx.fillRect(Math.round(x0) - 1, 0, 2, waveHeight);
-  ctx.fillRect(Math.round(x1) - 1, 0, 2, waveHeight);
-  if (playhead !== null) {
+  mixes.forEach((mix, index) => {
+    const x0 = Math.round(toX(mix.start));
+    const x1 = Math.round(toX(mix.end));
+    ctx.fillStyle = index === selected ? COLOR.after : COLOR.otherMix;
+    ctx.fillRect(x0 - 1, 0, 2, waveHeight);
+    ctx.fillRect(x1 - 1, 0, 2, waveHeight);
+    const labelX = Math.max(0, x0);
+    if (mixes.length > 1 && x1 - labelX > 22) {
+      ctx.fillStyle = '#14161a';
+      ctx.fillRect(labelX + 1, 0, 16, 15);
+      ctx.fillStyle = index === selected ? COLOR.after : COLOR.label;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(index + 1), labelX + 9, 8);
+    }
+  });
+
+  const zoomedMix = mixes[selected];
+  if (zoomedMix && view.end - view.start < zoomedMix.end - zoomedMix.start) {
+    // Mark the part of the mix the detail view is zoomed in on.
     ctx.fillStyle = COLOR.hover;
-    ctx.fillRect(Math.round((playhead / peaks.length) * width), 0, 1, waveHeight);
+    ctx.fillRect(toX(view.start), waveHeight - 3, Math.max(2, toX(view.end) - toX(view.start)), 3);
+  }
+  if (playhead !== null && playhead >= shown.start && playhead <= shown.end) {
+    ctx.fillStyle = COLOR.hover;
+    ctx.fillRect(Math.round(toX(playhead)), 0, 1, waveHeight);
   }
 
-  timeAxis(ctx, 0, peaks.length * HOP_SECONDS, 0, width, height - AXIS / 2);
+  timeAxis(ctx, shown.start * HOP_SECONDS, shown.end * HOP_SECONDS, 0, width, height - AXIS / 2);
 }
 
 /** Everything the detail view shows, one value per block of the region. */
@@ -110,6 +163,8 @@ export interface Detail {
   startBlock: number;
   peaksIn: Float32Array;
   peaksOut: Float32Array;
+  /** Average level of the levelled result per block. */
+  bodyOut: Float32Array;
   loudnessIn: Float32Array;
   loudnessOut: Float32Array;
   gainDb: Float32Array;
@@ -122,6 +177,10 @@ export interface Detail {
 
 function laneLabel(ctx: CanvasRenderingContext2D, x: number, y: number, parts: [string, string][]) {
   ctx.textAlign = 'left';
+  // A backing keeps the legend readable over a full waveform.
+  const widthOfAll = parts.reduce((sum, [text]) => sum + ctx.measureText(text).width + 12, 0);
+  ctx.fillStyle = 'rgba(16, 18, 22, 0.8)';
+  ctx.fillRect(x - 6, y - 9, widthOfAll + 2, 18);
   for (const [text, color] of parts) {
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
@@ -129,12 +188,20 @@ function laneLabel(ctx: CanvasRenderingContext2D, x: number, y: number, parts: [
   }
 }
 
-/** `playhead` is a block position within the region, or null to hide it. */
-export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: number | null, playhead: number | null) {
+/**
+ * Draws the part of the mix between blocks `view.start` and `view.end`, counted
+ * from the start of the mix. `playhead` is a block position on the same scale,
+ * or null to hide it.
+ */
+export function drawDetail(
+  canvas: HTMLCanvasElement, detail: Detail, view: Region, hoverX: number | null, playhead: number | null,
+) {
   const { ctx, width, height } = fit(canvas);
   const plot = width - GUTTER;
-  const n = detail.gainDb.length;
-  if (plot < 10 || n === 0) return;
+  const total = detail.gainDb.length;
+  const n = view.end - view.start;
+  if (plot < 10 || total === 0 || n <= 0) return;
+  const shown = <T extends Float32Array>(values: T) => values.subarray(view.start, view.end);
 
   const usable = height - AXIS;
   const gap = 10;
@@ -154,11 +221,14 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
     ctx.fillRect(0, y, width, gap);
   };
   const line = (values: Float32Array, toY: (v: number) => number, color: string, lineWidth: number) => {
+    // One point per pixel when zoomed out, one per block when zoomed in.
+    const points = values.length > plot ? columns(values, plot, 'mean') : values;
+    const step = plot / points.length;
     ctx.beginPath();
-    for (let x = 0; x < values.length; x++) {
-      const y = toY(values[x]);
-      if (x === 0) ctx.moveTo(GUTTER + x + 0.5, y);
-      else ctx.lineTo(GUTTER + x + 0.5, y);
+    for (let i = 0; i < points.length; i++) {
+      const x = GUTTER + (i + 0.5) * step;
+      if (i === 0) ctx.moveTo(x, toY(points[i]));
+      else ctx.lineTo(x, toY(points[i]));
     }
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
@@ -170,17 +240,20 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
   {
     const mid = waveLane.top + waveLane.height / 2;
     const scale = waveLane.height / 2 - 4;
-    const before = columns(detail.peaksIn, plot, 'max');
-    const after = columns(detail.peaksOut, plot, 'max');
+    const before = columns(shown(detail.peaksIn), plot, 'max');
+    const after = columns(shown(detail.peaksOut), plot, 'max');
+    const body = columns(shown(detail.bodyOut), plot, 'mean');
     for (let x = 0; x < plot; x++) {
       const b = Math.min(1, before[x]) * scale;
       ctx.fillStyle = COLOR.before;
       ctx.fillRect(GUTTER + x, mid - b, 1, b * 2);
       const a = Math.min(1, Math.min(after[x], detail.ceiling)) * scale;
+      const inner = Math.min(a, Math.min(1, body[x] * BODY_SCALE) * scale);
       ctx.fillStyle = COLOR.after;
-      ctx.globalAlpha = 0.8;
+      ctx.globalAlpha = 0.4;
       ctx.fillRect(GUTTER + x, mid - a, 1, a * 2);
       ctx.globalAlpha = 1;
+      ctx.fillRect(GUTTER + x, mid - inner, 1, inner * 2);
       if (after[x] > detail.ceiling) {
         // Peaks the limiter will have to hold down.
         ctx.fillStyle = COLOR.warn;
@@ -199,7 +272,8 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
   separator(waveLane.height);
   {
     let top = detail.targetLufs;
-    for (let i = 0; i < n; i++) top = Math.max(top, detail.loudnessIn[i], detail.loudnessOut[i]);
+    // Scales come from the whole mix, so they hold still while zooming and scrolling.
+    for (let i = 0; i < total; i++) top = Math.max(top, detail.loudnessIn[i], detail.loudnessOut[i]);
     top = Math.ceil(top + 1);
     const bottom = top - LOUDNESS_SPAN_DB;
     const toY = (lufs: number) =>
@@ -219,8 +293,8 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
     ctx.beginPath();
     ctx.rect(GUTTER, loudLane.top, plot, loudLane.height);
     ctx.clip();
-    line(columns(detail.loudnessIn, plot, 'mean'), toY, COLOR.before, 1.25);
-    line(columns(detail.loudnessOut, plot, 'mean'), toY, COLOR.after, 1.5);
+    line(shown(detail.loudnessIn), toY, COLOR.before, 1.25);
+    line(shown(detail.loudnessOut), toY, COLOR.after, 1.5);
     ctx.restore();
     laneLabel(ctx, GUTTER + 8, loudLane.top + 10, [
       ['Loudness (LUFS)', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['- - target', COLOR.label],
@@ -232,7 +306,7 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
   {
     let lo = -3;
     let hi = 3;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < total; i++) {
       lo = Math.min(lo, detail.gainDb[i] - 1, (detail.bassDb?.[i] ?? 0) - 1);
       hi = Math.max(hi, detail.gainDb[i] + 1, (detail.bassDb?.[i] ?? 0) + 1);
     }
@@ -241,26 +315,26 @@ export function drawDetail(canvas: HTMLCanvasElement, detail: Detail, hoverX: nu
     for (let db = Math.ceil(lo / step) * step; db <= hi; db += step) {
       gridLine(toY(db), `${db > 0 ? '+' : ''}${db}`);
     }
-    const cols = columns(detail.gainDb, plot, 'mean');
+    const cols = columns(shown(detail.gainDb), plot, 'mean');
     const zero = toY(0);
     ctx.fillStyle = 'rgba(242, 168, 59, 0.22)';
     for (let x = 0; x < plot; x++) {
       const y = toY(cols[x]);
       ctx.fillRect(GUTTER + x, Math.min(y, zero), 1, Math.abs(y - zero));
     }
-    line(cols, toY, COLOR.gain, 1.5);
-    if (detail.bassDb) line(columns(detail.bassDb, plot, 'mean'), toY, COLOR.bass, 1.5);
+    line(shown(detail.gainDb), toY, COLOR.gain, 1.5);
+    if (detail.bassDb) line(shown(detail.bassDb), toY, COLOR.bass, 1.5);
     laneLabel(ctx, GUTTER + 8, gainLane.top + 10, [
       ['Gain (dB)', COLOR.label], ['whole mix', COLOR.gain], ...(detail.bassDb ? [['bass only', COLOR.bass] as [string, string]] : []),
     ]);
   }
 
-  const startSeconds = detail.startBlock * HOP_SECONDS;
+  const startSeconds = (detail.startBlock + view.start) * HOP_SECONDS;
   timeAxis(ctx, startSeconds, startSeconds + n * HOP_SECONDS, GUTTER, width, height - AXIS / 2);
 
-  if (playhead !== null && playhead >= 0 && playhead <= n) {
+  if (playhead !== null && playhead >= view.start && playhead <= view.end) {
     ctx.fillStyle = COLOR.hover;
-    ctx.fillRect(Math.round(GUTTER + (playhead / n) * plot), 0, 1.5, usable);
+    ctx.fillRect(Math.round(GUTTER + ((playhead - view.start) / n) * plot), 0, 1.5, usable);
   }
   if (hoverX !== null && hoverX >= GUTTER) {
     ctx.fillStyle = COLOR.hover;
