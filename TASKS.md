@@ -108,8 +108,6 @@ https://suva.github.io/djmixmaster/, republished after every release.
   the newest release either way and says when it is a pre-release.
 - Update the screenshot in `site/` when the window changes noticeably. See
   the AGENTS.md section on the website for how it is taken.
-- A release publishing the page has not run yet; the first deployment came
-  from a push. Check the page after the next release.
 
 ### Intel and universal Mac builds — small
 
