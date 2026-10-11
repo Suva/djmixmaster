@@ -78,7 +78,12 @@
             <button id="zoom-in" title="Zoom in">+</button>
             <button id="zoom-fit" title="Show the whole mix">Fit</button>
           </div>
-          <span class="zoom-hint" title="Arrow keys move the playhead 5 seconds; with Shift 30 seconds, with Option 1 second. Return jumps to the start of the mix.">Scroll to zoom, swipe to move, ← → to step. Drag across the gain lane to adjust a stretch by hand.</span>
+          <span class="toggle-label">Adjust</span>
+          <div class="toggle" role="group" aria-label="What dragging across the gain lane adjusts">
+            <button id="adjust-level" class="on" title="Dragging across the gain lane raises or lowers that stretch as a whole">Level</button>
+            <button id="adjust-bass" title="Dragging across the gain lane raises or lowers the bass of that stretch only">Bass</button>
+          </div>
+          <span class="zoom-hint" title="Scroll over the curves to zoom, swipe sideways to move. Arrow keys move the playhead 5 seconds; with Shift 30 seconds, with Option 1 second. Return jumps to the start of the mix. Drag across the gain lane to adjust a stretch by hand.">Scroll to zoom, ← → to step, drag across the gain lane to adjust</span>
           <span class="spacer"></span>
           <span id="meter"></span>
         </div>

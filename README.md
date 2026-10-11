@@ -50,7 +50,8 @@ Running from the project needs Node 24 or newer and ffmpeg on the machine
   Shift, 1 with Option) and Return jumps to the start of the mix. Settings change what you hear immediately, and the
   preview uses the same limiter as the export.
 - **Adjusting by hand**: drag sideways across the gain lane to mark a stretch,
-  then drag it up or down. Drag an edge to resize it, double-click to remove.
+  then drag it up or down. The Adjust switch (Level or Bass) chooses whether a new
+  stretch changes the whole sound or the bass only. Drag an edge to resize it, double-click to remove.
 - **Undo and redo**: Cmd+Z and Shift+Cmd+Z cover every change to the mixes.
 - **Remembers your work**: mixes, settings and adjustments are saved per
   recording and restored when you open it again.

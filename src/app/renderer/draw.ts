@@ -349,15 +349,20 @@ export function drawDetail(
       const x1 = GUTTER + Math.min(plot, ((adjustment.end - view.start) / n) * plot);
       if (x1 <= x0) return;
       const active = index === activeAdjustment;
-      ctx.fillStyle = active ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.07)';
+      // Bass adjustments are tinted like the bass curve they move.
+      const tint = adjustment.bass ? '106, 169, 255' : '255, 255, 255';
+      ctx.fillStyle = `rgba(${tint}, ${active ? 0.16 : 0.08})`;
       ctx.fillRect(x0, gainLane.top, x1 - x0, gainLane.height);
-      ctx.fillStyle = active ? COLOR.hover : COLOR.text;
+      ctx.fillStyle = adjustment.bass ? COLOR.bass : active ? COLOR.hover : COLOR.text;
+      ctx.globalAlpha = active || !adjustment.bass ? 1 : 0.7;
       ctx.fillRect(Math.round(x0), gainLane.top, 1, gainLane.height);
       ctx.fillRect(Math.round(x1) - 1, gainLane.top, 1, gainLane.height);
-      if (x1 - x0 > 44) {
+      const label = `${adjustment.bass ? 'bass ' : ''}${adjustment.db >= 0 ? '+' : ''}${adjustment.db.toFixed(1)} dB`;
+      if (x1 - x0 > ctx.measureText(label).width + 8) {
         ctx.textAlign = 'center';
-        ctx.fillText(`${adjustment.db >= 0 ? '+' : ''}${adjustment.db.toFixed(1)} dB`, (x0 + x1) / 2, gainLane.top + gainLane.height - 9);
+        ctx.fillText(label, (x0 + x1) / 2, gainLane.top + gainLane.height - 9);
       }
+      ctx.globalAlpha = 1;
     });
     const cols = columns(shown(detail.gainDb), plot, 'mean');
     const zero = toY(0);

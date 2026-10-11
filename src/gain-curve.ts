@@ -163,6 +163,8 @@ export interface Adjustment {
   start: number;
   end: number;
   db: number;
+  /** True when it changes the bass only, through the bass shelf, instead of the overall gain. */
+  bass?: boolean;
 }
 
 /** Manual adjustments as a gain curve in dB. Their edges ramp like the automatic transitions do. */

@@ -93,6 +93,18 @@ test('gaps are the long silences, not the pauses inside the music', () => {
   assert.deepEqual(sets.map((set) => [Math.round(set.start / second), Math.round(set.end / second)]), [[8, 200], [220, 590]]);
 });
 
+test('a hand adjustment to the bass moves the bass curve and leaves the gain alone', () => {
+  const n = 12000;
+  const flat = new Float32Array(n).fill(-10);
+  const measured = { shortTerm: flat, lowShortTerm: flat, restShortTerm: flat } as Measurement;
+  const { gainDb, bassDb } = level(measured, DEFAULT_LEVEL_OPTIONS, undefined, [
+    { start: 4000, end: 8000, db: 3, bass: true },
+    { start: 9000, end: 11000, db: -1 },
+  ]);
+  assert.ok(Math.abs(bassDb[6000] - 3) < 0.01 && Math.abs(gainDb[6000]) < 0.01, 'bass stretch');
+  assert.ok(Math.abs(gainDb[10000] + 1) < 0.01 && Math.abs(bassDb[10000]) < 0.01, 'level stretch');
+});
+
 test('shelf moves the bass and leaves the highs', () => {
   const amplitude = (hz: number, gainDb: number) => {
     const shelf = new LowShelf(44100, 1);

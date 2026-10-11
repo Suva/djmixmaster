@@ -36,7 +36,7 @@ export interface Levelling {
  * every settings change. Without a target in `options`, the result keeps the
  * mix's own level, or, when `headroom` is given, is made as loud as fits under
  * the ceiling without leaning on the limiter. `adjustments` are manual changes
- * laid on top of the automatic gain.
+ * to the overall gain or to the bass alone, laid on top of the automatic curves.
  */
 export function level(
   curves: LoudnessCurves, options: LevelOptions, headroom?: Headroom, adjustments: Adjustment[] = [],
@@ -76,8 +76,12 @@ export function level(
   // whole mix by one fixed amount.
   const reference = median(envelope);
   const gainDb = gainCurve(envelope, reference, options);
-  const manual = adjustmentCurve(adjustments, gainDb.length, options);
-  for (let i = 0; i < gainDb.length; i++) gainDb[i] += manual[i];
+  const manual = adjustmentCurve(adjustments.filter((a) => !a.bass), gainDb.length, options);
+  const manualBass = adjustmentCurve(adjustments.filter((a) => a.bass), gainDb.length, options);
+  for (let i = 0; i < gainDb.length; i++) {
+    gainDb[i] += manual[i];
+    bassDb[i] += manualBass[i];
+  }
   let targetLufs = options.targetLufs ?? typicalLufs;
   if (options.targetLufs === undefined && headroom) {
     // Where the peaks of the music would land after levelling. A recording made

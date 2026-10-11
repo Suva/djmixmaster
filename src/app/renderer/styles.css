@@ -48,6 +48,7 @@ button {
   border-radius: 6px;
   padding: 6px 12px;
   cursor: pointer;
+  white-space: nowrap;
 }
 button:hover:not(:disabled) { background: #2f343f; }
 button:disabled { opacity: 0.45; cursor: default; }
@@ -125,7 +126,8 @@ canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane
 .zoom-hint { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #play-time { font-variant-numeric: tabular-nums; min-width: 60px; }
 #meter { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
-.toggle { display: flex; }
+.toggle { display: flex; flex: none; }
+.toggle-label { color: var(--muted); margin-right: -6px; white-space: nowrap; }
 .toggle button { border-radius: 0; margin-left: -1px; color: var(--muted); }
 .toggle button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
 .toggle button:last-child { border-radius: 0 6px 6px 0; }

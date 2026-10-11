@@ -151,11 +151,6 @@ interface to the library; the stock builds work on files held in memory,
 which an 8-hour recording does not fit. Revisit if per-platform binaries
 become a burden or a web version is wanted.
 
-### Edit the bass curve by hand
-
-Hand adjustments change the overall gain only. The same gesture could apply
-to the bass correction.
-
 ### A window test suite
 
 The window is checked with one-off scripts (see AGENTS.md). Keeping a few of

@@ -130,7 +130,7 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
   const peaksIn = measured.peaks.subarray(start, end);
   const blocksIn = measured.blocks.subarray(start, end);
   const n = end - start;
-  const adjustments = m.adjustments.map((a) => ({ start: a.start - start, end: a.end - start, db: a.db }));
+  const adjustments = m.adjustments.map((a) => ({ ...a, start: a.start - start, end: a.end - start }));
 
   const levelling = level(
     { shortTerm, lowShortTerm: measured.lowShortTerm.subarray(start, end), restShortTerm },
@@ -139,7 +139,8 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
     adjustments,
   );
   const { gainDb, targetLufs } = levelling;
-  const bassDb = m.options.bassCorrection > 0 ? levelling.bassDb : null;
+  // The bass curve is shown and applied when anything moves the bass: the correction or a hand adjustment.
+  const bassDb = m.options.bassCorrection > 0 || m.adjustments.some((a) => a.bass) ? levelling.bassDb : null;
   const ceiling = Math.pow(10, m.ceilingDb / 20);
   const peaksOut = new Float32Array(n);
   const bodyOut = new Float32Array(n);
@@ -615,7 +616,9 @@ detailCanvas.addEventListener('mousemove', (event) => {
       `${clock((detail.startBlock + i) * HOP_SECONDS)}    original ${lufs(detail.loudnessIn[i])}` +
       `    gain ${db(detail.gainDb[i])}${detail.bassDb ? `    bass ${db(detail.bassDb[i])}` : ''}` +
       `    levelled ${lufs(detail.loudnessOut[i])}` +
-      (shownAdjustment ? `    adjusted by hand ${db(shownAdjustment.db)}: drag up or down, drag an edge to resize, double-click to remove` : '');
+      (shownAdjustment
+        ? `    ${shownAdjustment.bass ? 'bass ' : ''}adjusted by hand ${db(shownAdjustment.db)}: drag up or down, drag an edge to resize, double-click to remove`
+        : '');
   }
   scheduleDraw();
 });
@@ -641,6 +644,10 @@ detailCanvas.addEventListener('click', (event) => {
 
 const MIN_ADJUSTMENT_BLOCKS = Math.round(5 / HOP_SECONDS);
 const MAX_ADJUSTMENT_DB = 12;
+/** The bass shelf is a tone control; it gets a narrower range than the overall gain. */
+const MAX_BASS_ADJUSTMENT_DB = 6;
+/** Whether a new adjustment drawn in the gain lane changes the bass only. */
+let adjustBass = false;
 /** How far the pointer travels for one decibel when dragging an adjustment up or down. */
 const PIXELS_PER_DB = 20;
 const GRAB_PX = 5;
@@ -696,14 +703,15 @@ window.addEventListener('mousemove', (event) => {
   if (grab.kind === 'create') {
     // Dragging sideways across the lane marks a new stretch.
     if (!grab.made) {
-      grab.made = { start: block, end: block, db: 0 };
+      grab.made = adjustBass ? { start: block, end: block, db: 0, bass: true } : { start: block, end: block, db: 0 };
       mix.adjustments.push(grab.made);
     }
     grab.made.start = Math.round(Math.min(block, grab.anchor));
     grab.made.end = Math.round(Math.max(block, grab.anchor));
   } else if (grab.kind === 'level') {
     const moved = grab.db - (event.clientY - grab.y) / PIXELS_PER_DB;
-    grab.adjustment.db = clamp(Math.round(moved * 10) / 10, -MAX_ADJUSTMENT_DB, MAX_ADJUSTMENT_DB);
+    const limit = grab.adjustment.bass ? MAX_BASS_ADJUSTMENT_DB : MAX_ADJUSTMENT_DB;
+    grab.adjustment.db = clamp(Math.round(moved * 10) / 10, -limit, limit);
   } else if (grab.kind === 'start') {
     grab.adjustment.start = Math.min(block, grab.adjustment.end - MIN_ADJUSTMENT_BLOCKS);
   } else {
@@ -726,6 +734,15 @@ detailCanvas.addEventListener('dblclick', (event) => {
   const found = adjustmentAt(event);
   if (found) removeAdjustment(found.adjustment);
 });
+
+function setAdjustBass(bass: boolean) {
+  adjustBass = bass;
+  $('adjust-bass').classList.toggle('on', bass);
+  $('adjust-level').classList.toggle('on', !bass);
+}
+
+$('adjust-level').addEventListener('click', () => setAdjustBass(false));
+$('adjust-bass').addEventListener('click', () => setAdjustBass(true));
 
 function removeAdjustment(adjustment: Adjustment) {
   mix.adjustments = mix.adjustments.filter((a) => a !== adjustment);
@@ -1131,7 +1148,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
       ceilingDb: isNumber(m.ceilingDb) ? m.ceilingDb : DEFAULT_CEILING_DB,
       adjustments: (Array.isArray(m.adjustments) ? m.adjustments : []).filter(
         (a) => isNumber(a?.start) && isNumber(a?.end) && isNumber(a?.db) && a.end > a.start,
-      ),
+      ).map((a) => (a.bass === true ? { start: a.start, end: a.end, db: a.db, bass: true } : { start: a.start, end: a.end, db: a.db })),
     }));
     mixesCreated = Math.max(mixes.length, isNumber(session!.mixesCreated) ? session!.mixesCreated : 0);
     const selected = isNumber(session!.selected) ? clamp(session!.selected, 0, mixes.length - 1) : 0;
