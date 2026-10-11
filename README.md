@@ -74,8 +74,7 @@ npm run package
 This builds an installer for the system it runs on into `release/`: a `.dmg`
 on macOS, a setup `.exe` on Windows. Pushing a version tag such as `v0.2.0`
 makes GitHub build both and publish them as a release (see
-`.github/workflows/release.yml`). The Windows build has not been tried on a
-real machine yet.
+`.github/workflows/release.yml`).
 
 The Mac app is built for Apple Silicon and signed locally only: it runs on
 the Mac that built it, but is not signed for distribution, so another Mac will
@@ -141,8 +140,8 @@ Set `DJMASTER_FFMPEG` to use a specific binary.
 - **Long quiet passages.** A passage quieter than the rest for longer than the
   breakdown length counts as a quieter track and is raised, up to the boost
   limit.
-- **macOS only** so far. The code avoids platform-specific pieces where it
-  can, but it has not been run on Windows or Linux.
+- **macOS and Windows.** It is developed on macOS; the Windows build has been
+  used on a real machine but gets less testing. It has not been run on Linux.
 
 ## Development
 

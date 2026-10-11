@@ -87,18 +87,23 @@ Other Macs block the app until the user approves it in System Settings.
   is configuration and credentials, plus turning the hardened runtime back on
   with the entitlements Electron needs.
 
-### Try the Windows build on a real machine — small, needs a tester
+### Finish checking the Windows build — small, needs a tester
 
-GitHub builds a Windows installer on every version tag, and the unit tests
-pass there, but nobody has opened the app on Windows.
+The v0.2.0 installer has been opened on a real Windows machine and seemed to
+work well in general use. These specific things were written for Windows
+without being tried there, and are worth a deliberate check:
 
-- Install it, open a recording, play, export, cancel an export.
-- Watch for: the bundled ffmpeg being found, cancelling an export removing
-  the half-written file, file dialogs and paths with backslashes.
-- The installer is unsigned, so Windows shows "Windows protected your PC".
-  Signing options (Store, certificate, or staying unsigned) were researched;
-  for wide distribution the Microsoft Store with an MSIX package avoids
-  buying a certificate.
+- Cancelling an export part-way removes the half-written file.
+- Playing a variable-bitrate MP3 or an AIFF, which goes through the streamed
+  preview.
+- "Export all" into a folder, and file names with unusual characters.
+
+### Sign the Windows installer — a decision
+
+The installer is unsigned, so Windows shows "Windows protected your PC".
+Signing options (Store, certificate, or staying unsigned) were researched;
+for wide distribution the Microsoft Store with an MSIX package avoids buying
+a certificate.
 
 ### Linux build — small, needs a tester
 

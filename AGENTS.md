@@ -148,8 +148,8 @@ Do not write test data there.
 - **Releases are built by GitHub.** Pushing a tag such as `v0.2.0` runs
   `.github/workflows/release.yml`, which tests and packages on macOS and
   Windows and publishes both installers. The version comes from the tag.
-  Neither installer is signed for distribution, and the Windows app has not
-  been tried on a real machine.
+  Neither installer is signed for distribution. The Windows app has been used
+  on a real machine, but changes are developed and checked on macOS.
 
 ## Working agreements
 
