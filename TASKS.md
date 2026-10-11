@@ -25,6 +25,75 @@ Things to judge by ear:
 
 ## Next
 
+### Fades at the start and end of a mix — medium
+
+A mix begins and ends with a hard cut. A night split at a blended handover,
+or a set trimmed to start mid-track, needs a fade in and a fade out. This
+affects nearly every export from an all-night recording.
+
+- Work like clips in Ableton Live: a small handle at each top corner of the
+  mix in the detail view's waveform lane. Drag it inwards to set how long the
+  fade is; the fade is drawn as a line over the waveform. Dragging it back to
+  the corner removes the fade.
+- Store a fade-in and a fade-out length per mix. They are part of the mix,
+  so they belong in the saved session and in undo.
+- Apply them in both the preview and the export, after the limiter, so a
+  fade is never fought by the gain or the ceiling.
+- Offer a sensible curve without making it a setting at first: an equal-power
+  or S-shaped curve sounds more even than a straight line.
+- Decide what a split at the playhead does: nothing, or a matching fade-out
+  and fade-in on the two halves.
+- The fades should not move the levelling. Measure and level the mix as if
+  they were not there.
+
+Done when a mix cut out of the middle of a night starts and ends smoothly,
+and the preview matches the exported file.
+
+### A check-up report when a recording is opened — medium
+
+Recordings from booth recorders and PA mixers have recurring faults. The
+analysis pass already reads every sample, so it can look for them and say
+what it found in plain words. The report alone is useful; fixes can follow
+one at a time (see "Fixes for common recording faults" below).
+
+- **Clipping**: how much of the recording peaks at or above full scale. The
+  automatic target already works around it without saying why.
+- **Channel imbalance or a dead channel**: one side consistently quieter, or
+  silent.
+- **One channel out of phase**: left and right cancel when summed, which
+  takes the bass away on mono systems.
+- **Dropouts**: short stretches of digital silence in the middle of music.
+  Mark them on the timeline.
+- **Mains hum**: steady energy at 50 or 60 Hz and its harmonics.
+- **Rumble or DC offset**: energy below anything musical.
+
+These need extra measurements per block, kept small, and so a bump of
+`ANALYSIS_VERSION`. Per-channel levels and the left/right correlation cover
+the two channel faults; the rest need a few narrow bands.
+
+Done when opening a recording with one of these faults says so, and a clean
+recording says nothing is wrong.
+
+### Copy settings between mixes, and presets — small
+
+After tuning one mix, the others from the same night usually want the same
+settings, and a favourite setup is worth keeping for next time.
+
+- "Apply these settings to all mixes" for the current recording.
+- Named presets that can be saved, applied and deleted, stored with the
+  app's other data.
+- Hand adjustments are not settings: they belong to their place in one mix
+  and are not copied.
+
+### Loudness presets — small
+
+Choosing a target in LUFS asks people for a number they may not know.
+
+- Offer a few named targets next to the slider, such as club playback and
+  upload to Mixcloud or SoundCloud.
+- Check what each platform currently does to loudness before naming a preset
+  after it.
+
 ### Cue sheets on export — medium
 
 Exports carry title, artist, album and track number, but nothing about the
@@ -60,22 +129,20 @@ Done when a kick drum is visible as a shape at the closest zoom.
 
 ## Sharing the app
 
-These wait on a decision to distribute it. See the README for the current
-state: installers for Apple Silicon Macs and for Windows, neither signed for
-distribution.
+The repository is public, under GPL-3.0-or-later, with installers for Apple
+Silicon Macs and for Windows. Neither is signed for distribution.
 
-### Make the repository public and switch the website on — a decision
+### Keep the website current — small, ongoing
 
-The licence (GPL-3.0-or-later), a user-facing README and a website are in
-place, but the repository is private, so nobody else can download anything.
+The repository is public and the website is live at
+https://suva.github.io/djmixmaster/, republished after every release.
 
-- Make the repository public under Settings → General.
-- Switch on GitHub Pages under Settings → Pages, with "GitHub Actions" as the
-  source. The Website workflow then publishes `site/` after every release.
 - Decide whether releases are still marked as pre-releases. The page shows
   the newest release either way and says when it is a pre-release.
 - Update the screenshot in `site/` when the window changes noticeably. See
   the AGENTS.md section on the website for how it is taken.
+- A release publishing the page has not run yet; the first deployment came
+  from a push. Check the page after the next release.
 
 ### Intel and universal Mac builds — small
 
@@ -127,6 +194,53 @@ bundle an LGPL build with only the codecs needed: MP3, AAC, FLAC and WAV.
 
 ## Ideas, not yet decided
 
+### Corrective EQ, with a suggested correction
+
+A recording taken from a PA mixer can carry the system's EQ: boosted bass,
+dulled highs. A small set of broad controls could undo it: a low and a high
+shelf, one or two mid bands, and a high-pass filter, set once per recording
+and inherited by its mixes.
+
+- An EQ changes loudness and peaks, which the levelling and the automatic
+  target depend on. Measuring energy in about ten frequency bands during
+  analysis would let any EQ's effect be predicted without decoding again.
+- The same bands give an average spectrum. Over an hour of varied tracks
+  that settles into a predictable shape, so a recording that sits well off
+  it probably shows the system's EQ. A "Suggest" button could propose a
+  gentle, capped correction to judge by ear.
+- Preview and export have to use the same filter formulas, as with the bass
+  shelf.
+- It cannot undo a limiter in the PA chain, clipping, or bass that was split
+  off before the recorder.
+
+Waiting on a real recording known to have come off a PA mixer, to see
+whether the spectrum shows what is expected.
+
+### Fixes for common recording faults
+
+One-click fixes for what the check-up report finds, added as real recordings
+show which faults actually turn up:
+
+- Rebalance the channels, or build both from the good one.
+- Flip one channel that is out of phase.
+- Narrow filters for mains hum and its harmonics.
+- A high-pass filter for rumble and DC offset (shared with the EQ idea).
+- Patch very short dropouts.
+
+### Cut a section out of a mix
+
+Remove a microphone announcement, a train wreck or a technical stop, and
+join the two sides with a crossfade. More work than it sounds: every
+position after the cut shifts, which touches the analysis, the saved
+session, hand adjustments and the preview.
+
+### Track lists from rekordbox
+
+Import a rekordbox history, show its tracks as markers on the timeline to
+drag into place, and export a text list or a cue sheet. A history export
+gives the order and the names but most likely not when each track started.
+Waiting on a look at a real export. Related to "Cue sheets on export".
+
 ### Suggest handovers without a gap
 
 Gap detection finds the hard cuts. On the 8-hour test recording that was 3
@@ -157,6 +271,13 @@ become a burden or a web version is wanted.
 The window is checked with one-off scripts (see AGENTS.md). Keeping a few of
 them as a repeatable suite would catch regressions in interaction, which is
 where most bugs have been.
+
+### Not planned
+
+Compression, stereo wideners, exciters and other processing meant to make
+music sound "better". They are matters of taste, they stack on top of music
+that is already mastered, and they would pull the tool away from repairing
+recordings.
 
 ## Known limitations
 
