@@ -1,4 +1,5 @@
 import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
+import { isLossy, LOSSY_HEADROOM_DB, type EncodeOptions } from '../../encode-options.ts';
 import { findGaps, soundBetween } from '../../gaps.ts';
 import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
@@ -43,6 +44,8 @@ interface Mix {
   ceilingDb: number;
   /** Manual gain changes, in blocks of the recording. */
   adjustments: Adjustment[];
+  /** Who played it, for the exported file's tags. */
+  artist?: string;
 }
 
 let recording: Recording | null = null;
@@ -57,6 +60,8 @@ let mix: Mix = {
   adjustments: [],
 };
 let mixesCreated = 0;
+/** Album name written into every export of this recording, typically the event. */
+let album = '';
 /** Part of the selected mix the detail view shows, in blocks of the recording. */
 let view: Region = { start: 0, end: 0 };
 /** Part of the recording the overview shows, in blocks. */
@@ -1087,6 +1092,7 @@ interface Session {
   selected: number;
   mixesCreated: number;
   mixes: Mix[];
+  album?: string;
 }
 
 interface Defaults {
@@ -1106,6 +1112,7 @@ function saveNow() {
     selected: Math.max(0, mixes.indexOf(mix)),
     mixesCreated,
     mixes,
+    album,
   };
   const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb };
   api.remember(recording.path, { session, defaults: { ...defaults, export: exportSettings } });
@@ -1139,6 +1146,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
     mp3Kbps: BITRATES.mp3.find((kbps) => kbps === saved.mp3Kbps) ?? DEFAULT_EXPORT_SETTINGS.mp3Kbps,
     aacKbps: BITRATES.m4a.find((kbps) => kbps === saved.aacKbps) ?? DEFAULT_EXPORT_SETTINGS.aacKbps,
     sampleRate: SAMPLE_RATES.find((rate) => rate === saved.sampleRate) ?? null,
+    lossyHeadroom: saved.lossyHeadroom !== false,
   };
   const defaults: Defaults = {
     options: { ...DEFAULT_LEVEL_OPTIONS, ...(savedDefaults?.options ?? {}) },
@@ -1159,13 +1167,16 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
       adjustments: (Array.isArray(m.adjustments) ? m.adjustments : []).filter(
         (a) => isNumber(a?.start) && isNumber(a?.end) && isNumber(a?.db) && a.end > a.start,
       ).map((a) => (a.bass === true ? { start: a.start, end: a.end, db: a.db, bass: true } : { start: a.start, end: a.end, db: a.db })),
+      ...(typeof m.artist === 'string' && m.artist ? { artist: m.artist } : {}),
     }));
+    album = typeof session!.album === 'string' ? session!.album : '';
     mixesCreated = Math.max(mixes.length, isNumber(session!.mixesCreated) ? session!.mixesCreated : 0);
     const selected = isNumber(session!.selected) ? clamp(session!.selected, 0, mixes.length - 1) : 0;
     return { selected, fromLastTime: true };
   }
 
   mixes = [{ name: 'Mix 1', region: { start: 0, end: total }, ...defaults, adjustments: [] }];
+  album = '';
   mixesCreated = 1;
   return { selected: 0, fromLastTime: false };
 }
@@ -1283,9 +1294,13 @@ interface ExportSettings {
   aacKbps: number;
   /** Sample rate of the exported file, or null to keep the recording's. */
   sampleRate: number | null;
+  /** Whether MP3 and AAC exports are made a little quieter to leave room for the encoding. */
+  lossyHeadroom: boolean;
 }
 
-const DEFAULT_EXPORT_SETTINGS: ExportSettings = { format: 'wav', bitDepth: 16, mp3Kbps: 320, aacKbps: 256, sampleRate: null };
+const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
+  format: 'wav', bitDepth: 16, mp3Kbps: 320, aacKbps: 256, sampleRate: null, lossyHeadroom: true,
+};
 const BITRATES: Record<'mp3' | 'm4a', number[]> = { mp3: [320, 256, 192, 128], m4a: [320, 256, 192, 128] };
 const SAMPLE_RATES = [44100, 48000];
 /** Above this a WAV has to be written in an extended form that not every player reads. */
@@ -1326,6 +1341,8 @@ function showExportSettings() {
   }
   $('export-depth-field').hidden = !lossless;
   $('export-bitrate-field').hidden = lossless;
+  $('export-headroom-field').hidden = lossless;
+  $<HTMLInputElement>('export-headroom').checked = settings.lossyHeadroom;
   if (!lossless) {
     const format = settings.format as 'mp3' | 'm4a';
     const chosen = format === 'mp3' ? settings.mp3Kbps : settings.aacKbps;
@@ -1375,7 +1392,55 @@ $<HTMLSelectElement>('export-rate').addEventListener('change', (event) => {
   exportSettings.sampleRate = value ? Number(value) : null;
   showExportSettings();
 });
+$<HTMLInputElement>('export-headroom').addEventListener('change', (event) => {
+  exportSettings.lossyHeadroom = (event.target as HTMLInputElement).checked;
+});
 $('export-cancel').addEventListener('click', () => exportDialog.close('cancel'));
+
+/** One row of the dialog's tag list per mix being exported: its title and who played it. */
+function showExportTags(forMixes: Mix[]) {
+  const head = (text: string) => {
+    const cell = document.createElement('span');
+    cell.className = 'head';
+    cell.textContent = text;
+    return cell;
+  };
+  const field = (value: string, placeholder: string) => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.spellcheck = false;
+    input.value = value;
+    input.placeholder = placeholder;
+    return input;
+  };
+  const rows = forMixes.flatMap((m) => {
+    const number = document.createElement('span');
+    number.className = 'number';
+    number.textContent = String(mixes.indexOf(m) + 1);
+    // An unnamed mix shows what it would be called, as a hint, not as text to keep.
+    const title = field(hasDefaultName(m) ? '' : m.name, exportName(m));
+    title.dataset.tag = 'title';
+    const artist = field(m.artist ?? '', 'Artist');
+    artist.dataset.tag = 'artist';
+    return [number, title, artist];
+  });
+  $('export-tags').replaceChildren(head(''), head('Title'), head('Artist'), ...rows);
+  $<HTMLInputElement>('export-album').value = album;
+}
+
+/** Takes the titles, artists and album typed into the dialog over into the mixes. */
+function applyExportTags(forMixes: Mix[]) {
+  const inputs = [...$('export-tags').querySelectorAll('input')];
+  forMixes.forEach((m, index) => {
+    const title = inputs[index * 2].value.trim();
+    const artist = inputs[index * 2 + 1].value.trim();
+    if (title) m.name = title;
+    if (artist) m.artist = artist;
+    else delete m.artist;
+  });
+  album = $<HTMLInputElement>('export-album').value.trim();
+  showMix();
+}
 
 /** Asks how to export the given mixes. Resolves to false if the dialog is cancelled. */
 function askExportSettings(title: string, forMixes: Mix[]): Promise<boolean> {
@@ -1385,6 +1450,7 @@ function askExportSettings(title: string, forMixes: Mix[]): Promise<boolean> {
   // If the recording's own rate was chosen explicitly before, that is the same as keeping it.
   if (exportSettings.sampleRate === recording!.measured.sampleRate) exportSettings.sampleRate = null;
   showExportSettings();
+  showExportTags(forMixes);
   const before = { ...exportSettings };
   exportDialog.returnValue = '';
   exportDialog.showModal();
@@ -1395,8 +1461,12 @@ function askExportSettings(title: string, forMixes: Mix[]): Promise<boolean> {
         // Only the dialog's own button goes ahead; Esc and Cancel do not, and
         // they leave the settings as they were.
         const go = exportDialog.returnValue === 'go';
-        if (go) scheduleSave();
-        else exportSettings = before;
+        if (go) {
+          applyExportTags(forMixes);
+          scheduleSave();
+        } else {
+          exportSettings = before;
+        }
         resolve(go);
       },
       { once: true },
@@ -1404,18 +1474,21 @@ function askExportSettings(title: string, forMixes: Mix[]): Promise<boolean> {
   });
 }
 
-/** The encoder's view of the export settings. */
-function encodeOptions(title: string) {
+/** The encoder's view of the export settings and of a mix's tags. `track` is its place among several. */
+function encodeOptions(m: Mix, track?: string): EncodeOptions {
   const { format, bitDepth, mp3Kbps, aacKbps, sampleRate } = exportSettings;
   return {
-    title,
+    title: exportName(m),
+    artist: m.artist,
+    album: album || undefined,
+    track,
     sampleRate: sampleRate ?? undefined,
     bitDepth: format === 'wav' || format === 'flac' ? bitDepth : undefined,
     bitrateKbps: format === 'mp3' ? mp3Kbps : format === 'm4a' ? aacKbps : undefined,
   };
 }
 
-function renderMix(m: Mix, output: string) {
+function renderMix(m: Mix, output: string, track?: string) {
   const { gainDb, bassDb } = compute(m).detail;
   return api.render({
     input: recording!.path,
@@ -1425,7 +1498,8 @@ function renderMix(m: Mix, output: string) {
     gainDb,
     bassDb: bassDb ?? new Float32Array(gainDb.length),
     ceilingDb: m.ceilingDb,
-    encode: encodeOptions(exportName(m)),
+    encode: encodeOptions(m, track),
+    headroomDb: isLossy(output) && exportSettings.lossyHeadroom ? LOSSY_HEADROOM_DB : 0,
   });
 }
 
@@ -1495,7 +1569,7 @@ async function exportAll() {
       if (cancelRequested) throw new Error('Cancelled');
       progressLabel = `Exporting ${index + 1} of ${mixes.length}: ${m.name}`;
       $('progress-bar').style.width = '0';
-      await renderMix(m, outputs[index]);
+      await renderMix(m, outputs[index], `${index + 1}/${mixes.length}`);
       done++;
     }
     showExported(`Exported ${done} mixes.`, outputs[0]);

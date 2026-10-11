@@ -29,6 +29,11 @@ export interface RenderOptions {
   bassDb?: Float32Array;
   /** Format details of the exported file. */
   encode?: EncodeOptions;
+  /**
+   * Makes the result this many dB quieter, ceiling included. Used to leave
+   * room for what a lossy encoder adds to the peaks.
+   */
+  headroomDb?: number;
 }
 
 export interface RenderResult extends Measurement {
@@ -82,7 +87,8 @@ export async function render(
 ): Promise<RenderResult> {
   const { sampleRate, totalFrames } = await regionFrames(input, region);
   const hopFrames = Math.round(sampleRate * HOP_SECONDS);
-  const gain = Float32Array.from(gainDb, (db) => Math.pow(10, db / 20));
+  const headroomDb = options.headroomDb ?? 0;
+  const gain = Float32Array.from(gainDb, (db) => Math.pow(10, (db - headroomDb) / 20));
   const lastBlock = gain.length - 1;
 
   // The shelf is left out entirely when there is nothing for it to do.
@@ -91,7 +97,7 @@ export async function render(
   // Block positions, with each curve value sitting at the centre of its block.
   const blockAt = (atFrame: number) => Math.min(lastBlock, Math.max(0, (atFrame + 0.5) / hopFrames - 0.5));
 
-  const limiter = options.ceilingDb === null ? null : new Limiter(sampleRate, CHANNELS, options.ceilingDb);
+  const limiter = options.ceilingDb === null ? null : new Limiter(sampleRate, CHANNELS, options.ceilingDb - headroomDb);
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
   const encoder = encode(output, sampleRate, options.encode);
 

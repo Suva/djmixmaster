@@ -2,6 +2,11 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { delimiter, extname, join } from 'node:path';
+import {
+  DEFAULT_AAC_KBPS, DEFAULT_BIT_DEPTH, DEFAULT_MP3_KBPS, type EncodeOptions,
+} from './encode-options.ts';
+
+export * from './encode-options.ts';
 
 /** Everything downstream works on interleaved stereo float32. */
 export const CHANNELS = 2;
@@ -91,22 +96,6 @@ export async function* decode(file: string, region: Region = {}): AsyncGenerator
   if (code !== 0) throw new Error(`ffmpeg decode failed: ${err.trim() || `exit code ${code}`}`);
 }
 
-/** How an exported file is written. Anything left out takes the default for its format. */
-export interface EncodeOptions {
-  /** Bits per sample for WAV and FLAC. 16-bit output is dithered. */
-  bitDepth?: 16 | 24;
-  /** Bitrate for MP3 and AAC, in kbps. */
-  bitrateKbps?: number;
-  /** Sample rate of the file, if it should differ from the audio's own. */
-  sampleRate?: number;
-  /** Written into the file's tags. */
-  title?: string;
-}
-
-export const DEFAULT_BIT_DEPTH = 16;
-export const DEFAULT_MP3_KBPS = 320;
-export const DEFAULT_AAC_KBPS = 256;
-
 function codecArgs(output: string, sampleRate: number, options: EncodeOptions): string[] {
   const extension = extname(output).toLowerCase();
   const lossless = extension === '.wav' || extension === '.flac';
@@ -139,13 +128,21 @@ export interface Encoder {
   close(): Promise<void>;
 }
 
+function tagArgs(output: string, options: EncodeOptions): string[] {
+  const tags = { title: options.title, artist: options.artist, album: options.album, track: options.track };
+  const args = Object.entries(tags).flatMap(([name, value]) => (value ? ['-metadata', `${name}=${value}`] : []));
+  // Version 2.3 of ID3 is the one every player and DJ deck reads.
+  if (args.length && extname(output).toLowerCase() === '.mp3') args.push('-id3v2_version', '3');
+  return args;
+}
+
 /** Encodes interleaved stereo float32 at `sampleRate` to a file, picking the codec from the extension. */
 export function encode(output: string, sampleRate: number, options: EncodeOptions = {}): Encoder {
   const args = [
     '-v', 'error', '-y',
     '-f', 'f32le', '-ar', String(sampleRate), '-ac', String(CHANNELS), '-i', '-',
     ...codecArgs(output, sampleRate, options),
-    ...(options.title ? ['-metadata', `title=${options.title}`] : []),
+    ...tagArgs(output, options),
     output,
   ];
   const child = spawn(ffmpeg(), args, { stdio: ['pipe', 'ignore', 'pipe'] });

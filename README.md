@@ -61,7 +61,9 @@ Running from the project needs Node 24 or newer and ffmpeg on the machine
 - **Export**: a dialog asks for the format (WAV, FLAC, MP3 or AAC), the bit
   depth for WAV and FLAC (16-bit, dithered, or 24-bit), the bitrate for MP3
   and AAC, and the sample rate. It shows roughly how large the files will be
-  and remembers what you chose.
+  and remembers what you chose. Title, artist and album go into the files'
+  tags. MP3 and AAC exports are made 1 dB quieter by default, because encoding
+  to them raises the peaks.
 
 ### Building the app
 
@@ -97,6 +99,8 @@ The output format follows the file extension: `.wav`, `.flac`, `.mp3` or
 | `--bit-depth <16\|24>` | Bits per sample for `.wav` and `.flac`; 16-bit is dithered | 16 |
 | `--bitrate <kbps>` | Bitrate for `.mp3` and `.m4a` | 320 and 256 |
 | `--sample-rate <Hz>` | Sample rate of the output | the input's |
+| `--headroom <dB>` | Extra room under the ceiling for `.mp3` and `.m4a` | 1 |
+| `--title`, `--artist`, `--album` | Tags to write into the output | none |
 | `--force` | Overwrite the output if it exists | off |
 | `--analyze-only` | Print the planned gain without writing audio | off |
 | `--dump <file.csv>` | Write the loudness and gain curves for inspection | off |
@@ -134,9 +138,6 @@ Set `DJMASTER_FFMPEG` to use a specific binary.
 
 - **Clipping cannot be undone.** A recording made too hot is turned down to
   match the rest, but tracks that were clipped still sound clipped.
-- **Lossy formats overshoot.** MP3 and AAC encoding reshape the waveform after
-  the limiter, so their peaks can land a little above the ceiling (around
-  0.7 dB in one test). Lower the ceiling for those exports if it matters.
 - **Long quiet passages.** A passage quieter than the rest for longer than the
   breakdown length counts as a quieter track and is raised, up to the boost
   limit.

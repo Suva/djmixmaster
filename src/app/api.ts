@@ -9,8 +9,10 @@ export interface RenderRequest {
   end: number;
   gainDb: Float32Array;
   bassDb: Float32Array;
-  /** Format details of the exported file, including the title for its tags. */
+  /** Format details of the exported file, including its tags. */
   encode: EncodeOptions;
+  /** How much quieter to make the result, ceiling included, for a lossy format. */
+  headroomDb: number;
   ceilingDb: number | null;
 }
 

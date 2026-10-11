@@ -189,7 +189,19 @@
         <label class="field-name" for="export-rate">Sample rate</label>
         <select id="export-rate"></select>
       </div>
+      <div class="field" id="export-headroom-field">
+        <span class="field-name"></span>
+        <label class="check" title="Encoding to MP3 or AAC raises the peaks a little. This makes the file 1 dB quieter so they stay under your ceiling.">
+          <input id="export-headroom" type="checkbox"> Leave 1 dB of room for the encoding
+        </label>
+      </div>
       <p class="note" id="export-note"></p>
+      <h4>Tags</h4>
+      <div id="export-tags"></div>
+      <div class="field">
+        <label class="field-name" for="export-album">Album</label>
+        <input id="export-album" type="text" spellcheck="false" placeholder="For example the event and date">
+      </div>
       <div class="dialog-buttons">
         <button type="button" id="export-cancel">Cancel</button>
         <button type="submit" id="export-go" class="primary" value="go">Choose where to save…</button>

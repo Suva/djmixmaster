@@ -61,7 +61,8 @@ and curves in the code are block indexes unless a name says seconds.
   dependency, and the app is bundled by esbuild. Adding a runtime dependency
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
-  `level.ts`, `gaps.ts`, `shelf.ts`, `limiter.ts` and `true-peak.ts` are
+  `level.ts`, `gaps.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts` and
+  `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
 - **Preview and export must sound the same.** They share the limiter code.
