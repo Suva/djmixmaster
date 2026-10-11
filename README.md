@@ -48,7 +48,11 @@ There is no build for Intel Macs or Linux yet. On those, the tool can be run
 5. **Export.** "Export mix…" writes the selected mix, "Export all" every mix
    into one folder.
 
-Your recording is never changed, and nothing leaves your computer.
+Your recording is never changed and never leaves your computer. The only
+thing the app contacts is GitHub, at most once a day, to see whether a newer
+version exists. If there is one, a line in the header says so; nothing is
+installed for you. Turn the check off under Help → Check for Updates
+Automatically.
 
 ## What it does
 

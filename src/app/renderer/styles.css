@@ -38,6 +38,9 @@ header {
 #file-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-name.loaded { color: var(--text); font-weight: 600; }
 #export-status { color: var(--muted); }
+#update-note { color: var(--muted); white-space: nowrap; }
+#update-note[hidden] { display: none; }
+#update-note a { color: var(--accent); cursor: pointer; text-decoration: underline; }
 #export-status a { color: var(--accent); cursor: pointer; text-decoration: underline; }
 
 button {

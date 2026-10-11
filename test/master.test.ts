@@ -7,6 +7,7 @@ import { DEFAULT_LEVEL_OPTIONS } from '../src/gain-curve.ts';
 import { findGaps, soundBetween } from '../src/gaps.ts';
 import { Limiter } from '../src/limiter.ts';
 import { LowShelf } from '../src/shelf.ts';
+import { isNewer } from '../src/version.ts';
 import { BlockEnergyMeter, HOP_SECONDS, integratedLoudness } from '../src/loudness.ts';
 import { level, measure, render, type Measurement } from '../src/master.ts';
 import { BREAKDOWN, SAMPLE_RATE, TRACK_LEVELS_DB, TRACK_SECONDS, writeSyntheticMix } from './synthetic-mix.ts';
@@ -103,6 +104,16 @@ test('a hand adjustment to the bass moves the bass curve and leaves the gain alo
   ]);
   assert.ok(Math.abs(bassDb[6000] - 3) < 0.01 && Math.abs(gainDb[6000]) < 0.01, 'bass stretch');
   assert.ok(Math.abs(gainDb[10000] + 1) < 0.01 && Math.abs(bassDb[10000]) < 0.01, 'level stretch');
+});
+
+test('version numbers compare as numbers, and anything odd is never newer', () => {
+  assert.ok(isNewer('0.4.0', '0.3.0'));
+  assert.ok(isNewer('v0.10.0', '0.9.9'), 'ten is more than nine');
+  assert.ok(isNewer('1.0.0', '0.99.99'));
+  assert.ok(!isNewer('0.3.0', '0.3.0'));
+  assert.ok(!isNewer('0.2.9', '0.3.0'));
+  assert.ok(!isNewer('0.4.0-beta', '0.3.0'));
+  assert.ok(!isNewer('<script>', '0.3.0'));
 });
 
 test('shelf moves the bass and leaves the highs', () => {

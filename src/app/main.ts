@@ -13,6 +13,7 @@ import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import type { Job, JobMessage, MediaSource, MenuCommand, Remembered, RenderRequest } from './api.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
+import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
 
 // The same name, and so the same data folder, whether run from the project or as the packaged app.
 app.setName('DJ Mix Master');
@@ -316,6 +317,40 @@ function createWindow() {
  * roles, which only know about text fields; the window decides whether a text
  * field or the mixes should take them.
  */
+/** Whether the automatic check is on, for the tick in the Help menu. */
+let checksAutomatically = true;
+/** How long after the window appears the quiet check starts, so it never competes with start-up. */
+const QUIET_CHECK_DELAY_MS = 4000;
+
+/** "Check for Updates…" in the Help menu: asks now and always answers. */
+async function checkForUpdatesNow() {
+  if (!window) return;
+  const result = await checkNow();
+  if (!window) return;
+  if (result.state === 'newer') {
+    const choice = await dialog.showMessageBox(window, {
+      type: 'info',
+      message: `Version ${result.version} is available.`,
+      detail: `You have version ${app.getVersion()}. The new one can be downloaded from the website.`,
+      buttons: ['Open the Download Page', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice.response === 0) shell.openExternal(DOWNLOAD_PAGE);
+  } else if (result.state === 'current') {
+    dialog.showMessageBox(window, { type: 'info', message: 'You have the newest version.', detail: `Version ${app.getVersion()}.` });
+  } else {
+    dialog.showMessageBox(window, {
+      type: 'info',
+      message: 'Could not check for updates.',
+      detail: 'There may be no internet connection. Nothing else is affected.',
+    });
+  }
+}
+
+ipcMain.on('open-download-page', () => shell.openExternal(DOWNLOAD_PAGE));
+ipcMain.on('skip-version', (_event, version: string) => skipVersion(String(version)));
+
 function buildMenu() {
   const command = (label: string, accelerator: string, name: MenuCommand): MenuItemConstructorOptions => ({
     label,
@@ -339,13 +374,35 @@ function buildMenu() {
     },
     { label: 'View', submenu: [{ role: 'togglefullscreen' }, { type: 'separator' }, { role: 'toggleDevTools' }] },
     { role: 'windowMenu' },
+    {
+      role: 'help',
+      submenu: [
+        { label: 'Check for Updates…', click: checkForUpdatesNow },
+        {
+          label: 'Check for Updates Automatically',
+          type: 'checkbox',
+          checked: checksAutomatically,
+          click: (item) => setAutomatic(item.checked),
+        },
+        { type: 'separator' },
+        { label: 'DJ Mix Master Website', click: () => shell.openExternal(DOWNLOAD_PAGE) },
+      ],
+    },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   protocol.handle(SCHEME, serve);
+  // Reading a small local file; the network is not touched before the window is up.
+  checksAutomatically = (await loadUpdateSettings()).automatic;
   buildMenu();
   createWindow();
+  window?.webContents.once('did-finish-load', () => {
+    setTimeout(async () => {
+      const version = await checkQuietly();
+      if (version) window?.webContents.send('update-available', version);
+    }, QUIET_CHECK_DELAY_MS);
+  });
 });
 app.on('window-all-closed', () => app.quit());

@@ -61,6 +61,12 @@ export interface Api {
   cancel(): void;
   reveal(path: string): void;
   onProgress(listener: (fraction: number) => void): void;
+  /** A newer version than the one running has been found. */
+  onUpdateAvailable(listener: (version: string) => void): void;
+  /** Opens the download page in the browser. */
+  openDownloadPage(): void;
+  /** Stops the notice about this version from coming back. */
+  skipVersion(version: string): void;
   /** A command chosen from the menu bar or by its keyboard shortcut. */
   onMenu(listener: (command: MenuCommand) => void): void;
   /** A recording handed to the app from outside while it is running. */

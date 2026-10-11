@@ -47,6 +47,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/main.ts` | Electron main process: windows, dialogs, storage, media serving |
 | `src/app/worker.ts` | Runs one measure or render job off the main thread |
 | `src/app/playback.ts` | Decides whether a recording must be streamed for playback |
+| `src/app/updates.ts` | The background check for a newer version |
 | `src/app/api.ts` | The interface between the window and the main process |
 | `src/app/renderer/renderer.ts` | The window: state, mixes, interaction, undo, export |
 | `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
@@ -128,10 +129,19 @@ macOS, the same for `npm start` and the packaged app.
 | `analyses/` | One measurement per recording, keyed on path, size, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
 | `sessions/` | The mixes, settings and hand adjustments per recording, keyed on its path |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
+| `updates.json` | Whether to check for updates, when it was last done, and what was found |
 
 Do not write test data there.
 
 ## Things worth knowing
+
+- **The update check must stay out of the way.** It runs a few seconds after
+  the window is up, gives up after five seconds, and fails silently. Only the
+  installed app does it. To try it from the project, point
+  `DJMASTER_UPDATE_FEED` at a file or address that returns
+  `{"tag_name": "v9.9.9"}`; a `file://` address works. The app's promise that
+  recordings never leave the computer is stated in the README and on the
+  website; anything new that touches the network has to be reflected there.
 
 - **ffmpeg is found** through `DJMASTER_FFMPEG`, then `PATH`, then the usual
   Homebrew folders. The packaged app sets the variable to its bundled copy.

@@ -1435,6 +1435,28 @@ const redo = () => stepHistory('redo');
 $('undo').addEventListener('click', undo);
 $('redo').addEventListener('click', redo);
 
+// A newer version is mentioned in the header and nowhere else: no dialog, nothing to dismiss.
+api.onUpdateAvailable((version) => {
+  const note = $('update-note');
+  const link = (text: string, title: string, action: () => void) => {
+    const a = document.createElement('a');
+    a.textContent = text;
+    a.title = title;
+    a.addEventListener('click', action);
+    return a;
+  };
+  note.replaceChildren(
+    `Version ${version} is available. `,
+    link('Download', 'Opens the download page in your browser', () => api.openDownloadPage()),
+    ' · ',
+    link('Skip', 'Do not mention this version again', () => {
+      api.skipVersion(version);
+      note.hidden = true;
+    }),
+  );
+  note.hidden = false;
+});
+
 api.onMenu(async (command) => {
   if (command === 'open') {
     const path = busy ? null : await api.pickFile();
