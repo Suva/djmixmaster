@@ -100,7 +100,7 @@ Your recording is never changed, and nothing leaves your computer.
 
 | Setting | What it does |
 |---|---|
-| Target loudness | How loud the full-energy parts end up. Left on "As loud as fits without limiting", the tool picks the highest level that keeps the limiter out of the way. |
+| Loudness | How loud the result is. "As loud as fits" picks the highest level that keeps the limiter out of the way. The presets aim the whole mix at a level: Loud (-9 LUFS) for places that play the file as it is, Streaming (-14), Podcast or radio show (-16) and Broadcast (-23). Moving the slider sets the level of the full-energy parts by hand. |
 | Breakdown length | Quieter passages shorter than this keep the gain of the track around them. Longer ones are treated as a quieter track and raised. |
 | Transition time | How long a change of gain takes between two tracks. |
 | Bass correction | How much of the difference in bass between tracks is evened out. Off by default. |

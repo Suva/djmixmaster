@@ -91,11 +91,12 @@
       <h2>Levelling</h2>
       <div class="control">
         <div class="control-head">
-          <label for="target">Target loudness</label>
+          <label for="loudness">Loudness</label>
           <output id="target-value"></output>
         </div>
-        <input id="target" type="range" min="-20" max="-5" step="0.5" value="-10" disabled>
-        <label class="check"><input id="target-auto" type="checkbox" checked> As loud as fits without limiting</label>
+        <select id="loudness"></select>
+        <input id="target" type="range" min="-26" max="-5" step="0.5" value="-10" title="How loud the full-energy parts are. Moving this switches to Custom.">
+        <p class="note" id="loudness-note"></p>
       </div>
       <div class="control">
         <div class="control-head">

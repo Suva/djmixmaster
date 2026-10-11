@@ -193,6 +193,7 @@ h2 {
 .control-head { display: flex; justify-content: space-between; align-items: baseline; }
 .control output { color: var(--text); font-variant-numeric: tabular-nums; }
 .control input[type="range"] { width: 100%; margin: 6px 0 2px; accent-color: var(--accent); }
+.control select { width: 100%; margin: 6px 0 4px; }
 .note { margin: 2px 0 0; color: var(--muted); font-size: 11.5px; }
 .check { display: flex; align-items: center; gap: 6px; color: var(--muted); margin-top: 2px; }
 .check input { accent-color: var(--accent); }

@@ -61,15 +61,6 @@ settings, and a favourite setup is worth keeping for next time.
 - Hand adjustments are not settings: they belong to their place in one mix
   and are not copied.
 
-### Loudness presets — small
-
-Choosing a target in LUFS asks people for a number they may not know.
-
-- Offer a few named targets next to the slider, such as club playback and
-  upload to Mixcloud or SoundCloud.
-- Check what each platform currently does to loudness before naming a preset
-  after it.
-
 ### Cue sheets on export — medium
 
 Exports carry title, artist, album and track number, but nothing about the
@@ -169,6 +160,16 @@ GPL licence for the app. If the app is ever to ship under different terms,
 bundle an LGPL build with only the codecs needed: MP3, AAC, FLAC and WAV.
 
 ## Ideas, not yet decided
+
+### Check what platforms really do to loudness
+
+The loudness presets name SoundCloud and Mixcloud under "Loud" and YouTube
+and Spotify under "Streaming". SoundCloud's help pages say it normalizes to
+about -14 LUFS, but -14 uploads have been heard to play quieter than their
+neighbours there, so it is treated as playing files as they are. Nothing
+from Mixcloud was found either way. A test would settle it: upload the same
+minute at -9 and at -14 as private tracks and compare. Adjust the preset
+descriptions in `renderer.ts` to match what is found.
 
 ### Corrective EQ, with a suggested correction
 

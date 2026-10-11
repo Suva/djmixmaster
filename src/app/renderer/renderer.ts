@@ -50,6 +50,8 @@ interface Mix {
   /** Length in blocks of the fade at the start and at the end; absent means none. */
   fadeIn?: number;
   fadeOut?: number;
+  /** A loudness preset in use, by id. It decides the target in place of the one in `options`. */
+  loudness?: string;
 }
 
 let recording: Recording | null = null;
@@ -139,8 +141,49 @@ function fades(m: Mix): { in: number; out: number } {
   return { in: clamp(m.fadeIn ?? 0, 0, half), out: clamp(m.fadeOut ?? 0, 0, half) };
 }
 
-/** Derives the gain curves of a mix from its region and settings, and everything shown from them. */
+/**
+ * Named loudness levels for where a mix is going. Each is a loudness for the
+ * whole mix, breakdowns included, which is how platforms and broadcasters
+ * measure it; that is a decibel or two below the full-energy target the
+ * slider sets. Platform names are examples and should be easy to change.
+ */
+const LOUDNESS_PRESETS = [
+  {
+    id: 'loud',
+    name: 'Loud',
+    lufs: -9,
+    note: 'For places that play the file as it is, next to mastered tracks: SoundCloud, Mixcloud, a club system. Leans on the limiter.',
+  },
+  {
+    id: 'streaming',
+    name: 'Streaming',
+    lufs: -14,
+    note: 'The level services such as YouTube and Spotify turn louder uploads down to. Going louder gains nothing there.',
+  },
+  { id: 'podcast', name: 'Podcast or radio show', lufs: -16, note: 'What podcast platforms and most stations that take pre-recorded shows ask for.' },
+  { id: 'broadcast', name: 'Broadcast, EBU R128', lufs: -23, note: 'For broadcasters that require the European broadcast standard.' },
+];
+const AUTO_NOTE = 'As loud as the mix gets while staying clear of the limiter.';
+const CUSTOM_NOTE = 'You set how loud the full-energy parts are. A higher level leans on the limiter.';
+
+const presetOf = (m: Mix) => LOUDNESS_PRESETS.find((preset) => preset.id === m.loudness);
+
+/**
+ * Derives the gain curves of a mix from its region and settings, and everything
+ * shown from them. With a loudness preset, the target is whatever puts the
+ * whole mix on the preset's level.
+ */
 function compute(m: Mix): { detail: Detail; stats: Stats } {
+  const preset = presetOf(m);
+  if (!preset) return computeWith(m, m.options);
+  // The loudness of the whole mix moves decibel for decibel with the target,
+  // so one trial run shows how far off it is and a second lands on it.
+  const trial = computeWith(m, { ...m.options, targetLufs: preset.lufs });
+  const off = preset.lufs - trial.stats.loudnessOut;
+  return Math.abs(off) < 0.05 ? trial : computeWith(m, { ...m.options, targetLufs: preset.lufs + off });
+}
+
+function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: Stats } {
   const { measured } = recording!;
   const { start, end } = m.region;
   const shortTerm = measured.shortTerm.subarray(start, end);
@@ -152,13 +195,13 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
 
   const levelling = level(
     { shortTerm, lowShortTerm: measured.lowShortTerm.subarray(start, end), restShortTerm },
-    m.options,
+    options,
     { peaks: peaksIn, ceilingDb: m.ceilingDb },
     adjustments,
   );
   const { gainDb, targetLufs } = levelling;
   // The bass curve is shown and applied when anything moves the bass: the correction or a hand adjustment.
-  const bassDb = m.options.bassCorrection > 0 || m.adjustments.some((a) => a.bass) ? levelling.bassDb : null;
+  const bassDb = options.bassCorrection > 0 || m.adjustments.some((a) => a.bass) ? levelling.bassDb : null;
   const ceiling = Math.pow(10, m.ceilingDb / 20);
   const peaksOut = new Float32Array(n);
   const bodyOut = new Float32Array(n);
@@ -224,8 +267,9 @@ function recompute() {
     const computed = compute(mix);
     detail = computed.detail;
     setStats(computed.stats);
-    if (mix.options.targetLufs === undefined) {
-      $('target-value').textContent = `${lufs(detail.targetLufs)} (auto)`;
+    // Unless it was set by hand, the slider shows where the target ended up.
+    if (mix.loudness || mix.options.targetLufs === undefined) {
+      $('target-value').textContent = lufs(detail.targetLufs);
       $<HTMLInputElement>('target').value = String(Math.round(detail.targetLufs * 2) / 2);
     }
   } catch (error) {
@@ -349,6 +393,7 @@ function addMix(region: Region) {
     options: { ...mix.options },
     ceilingDb: mix.ceilingDb,
     adjustments: [],
+    ...(mix.loudness ? { loudness: mix.loudness } : {}),
   };
   mixes.push(added);
   select(added);
@@ -551,6 +596,7 @@ function splitInto(regions: Region[]) {
       options: { ...original.options },
       ceilingDb: original.ceilingDb,
       adjustments: original.adjustments.map((a) => ({ ...a })),
+      ...(original.loudness ? { loudness: original.loudness } : {}),
     });
   }
   // The fade out belongs to the end of the music, which is now the last piece.
@@ -1079,14 +1125,21 @@ function syncControls() {
     $<HTMLInputElement>(slider.id).value = String(slider.get());
     $(`${slider.id}-value`).textContent = slider.format(slider.get());
   }
-  const auto = mix.options.targetLufs === undefined;
-  $<HTMLInputElement>('target-auto').checked = auto;
-  $<HTMLInputElement>('target').disabled = auto;
-  if (!auto) {
+  const preset = presetOf(mix);
+  const choice = preset ? preset.id : mix.options.targetLufs === undefined ? 'auto' : 'custom';
+  $<HTMLSelectElement>('loudness').value = choice;
+  $('loudness-note').textContent = preset ? preset.note : choice === 'auto' ? AUTO_NOTE : CUSTOM_NOTE;
+  if (choice === 'custom') {
     $<HTMLInputElement>('target').value = String(mix.options.targetLufs);
     $('target-value').textContent = lufs(mix.options.targetLufs!);
   }
 }
+
+$<HTMLSelectElement>('loudness').replaceChildren(
+  new Option('As loud as fits', 'auto'),
+  ...LOUDNESS_PRESETS.map((preset) => new Option(`${preset.name} (${preset.lufs} LUFS)`, preset.id)),
+  new Option('Custom', 'custom'),
+);
 
 for (const slider of sliders) {
   $<HTMLInputElement>(slider.id).addEventListener('input', (event) => {
@@ -1097,16 +1150,20 @@ for (const slider of sliders) {
   });
 }
 
+// Moving the slider is choosing a level by hand.
 $<HTMLInputElement>('target').addEventListener('input', (event) => {
+  delete mix.loudness;
   mix.options.targetLufs = Number((event.target as HTMLInputElement).value);
-  $('target-value').textContent = lufs(mix.options.targetLufs);
+  syncControls();
   scheduleRecompute();
 });
 
-$<HTMLInputElement>('target-auto').addEventListener('change', (event) => {
-  const auto = (event.target as HTMLInputElement).checked;
-  // Leaving auto starts from the level it had chosen.
-  mix.options.targetLufs = auto ? undefined : Number($<HTMLInputElement>('target').value);
+$<HTMLSelectElement>('loudness').addEventListener('change', (event) => {
+  const choice = (event.target as HTMLSelectElement).value;
+  if (choice === 'auto' || choice === 'custom') delete mix.loudness;
+  else mix.loudness = choice;
+  // Custom starts from the level in use; everything else works its own out.
+  mix.options.targetLufs = choice === 'custom' ? Number($<HTMLInputElement>('target').value) : undefined;
   syncControls();
   scheduleRecompute();
 });
@@ -1114,6 +1171,7 @@ $<HTMLInputElement>('target-auto').addEventListener('change', (event) => {
 $('reset').addEventListener('click', () => {
   mix.options = { ...DEFAULT_LEVEL_OPTIONS };
   mix.ceilingDb = DEFAULT_CEILING_DB;
+  delete mix.loudness;
   syncControls();
   scheduleRecompute();
 });
@@ -1215,6 +1273,7 @@ interface Session {
 interface Defaults {
   options: LevelOptions;
   ceilingDb: number;
+  loudness?: string;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1231,7 +1290,7 @@ function saveNow() {
     mixes,
     album,
   };
-  const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb };
+  const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb, ...(mix.loudness ? { loudness: mix.loudness } : {}) };
   api.remember(recording.path, { session, defaults: { ...defaults, export: exportSettings } });
   settleHistory();
 }
@@ -1248,6 +1307,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const isPreset = (value: unknown): value is string => LOUDNESS_PRESETS.some((preset) => preset.id === value);
 
 /**
  * Sets up the mixes for a newly opened recording: the ones marked in it last
@@ -1268,6 +1328,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
   const defaults: Defaults = {
     options: { ...DEFAULT_LEVEL_OPTIONS, ...(savedDefaults?.options ?? {}) },
     ceilingDb: isNumber(savedDefaults?.ceilingDb) ? savedDefaults.ceilingDb : DEFAULT_CEILING_DB,
+    ...(isPreset(savedDefaults?.loudness) ? { loudness: savedDefaults.loudness } : {}),
   };
 
   const session = remembered.session as Partial<Session> | null;
@@ -1285,6 +1346,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
         (a) => isNumber(a?.start) && isNumber(a?.end) && isNumber(a?.db) && a.end > a.start,
       ).map((a) => (a.bass === true ? { start: a.start, end: a.end, db: a.db, bass: true } : { start: a.start, end: a.end, db: a.db })),
       ...(typeof m.artist === 'string' && m.artist ? { artist: m.artist } : {}),
+      ...(isPreset(m.loudness) ? { loudness: m.loudness } : {}),
       ...(isNumber(m.fadeIn) && m.fadeIn > 0 ? { fadeIn: Math.round(m.fadeIn) } : {}),
       ...(isNumber(m.fadeOut) && m.fadeOut > 0 ? { fadeOut: Math.round(m.fadeOut) } : {}),
     }));
