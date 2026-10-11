@@ -1,0 +1,68 @@
+# Publishes the website (site/) to GitHub Pages: after every release, so the
+# download buttons point at the new installers, and whenever the page itself
+# changes. It can also be started by hand from the Actions tab.
+#
+# GitHub Pages has to be switched on once, with "GitHub Actions" as its
+# source, under Settings → Pages. Until then this workflow does nothing.
+name: Website
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  push:
+    branches: [main]
+    paths: ['site/**', 'scripts/build-site.mjs', '.github/workflows/site.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # Decided in a job of its own, so that nothing touches Pages while it is off.
+  check:
+    name: See whether Pages is switched on
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - id: pages
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/pages" > /dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Pages is not switched on for this repository, so the website was not published."
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  deploy:
+    name: Publish the website
+    needs: check
+    if: needs.check.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Fill in the newest release and build the page
+        run: node scripts/build-site.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v5

@@ -90,6 +90,7 @@ the app into a mode for that:
 | `DJMASTER_SHOT_SCRIPT=<js>` | Run this JavaScript in the window first; its result is printed as `[script] ...` |
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
+| `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
 
 ```bash
 DJMASTER_SHOT=/tmp/shot.png DJMASTER_SHOT_DATA=/tmp/djm-data \
@@ -166,6 +167,25 @@ git push --follow-tags
 - Use `minor` for new features and `patch` for fixes only.
 - A tag made any other way still builds, with a warning that `package.json`
   disagrees. Fix it by setting the version there to match.
+
+## The website
+
+`site/` holds a one-page website. `scripts/build-site.mjs` fills in the
+newest release's version and download links and writes the result to `_site/`;
+`.github/workflows/site.yml` publishes that to GitHub Pages after every
+release and whenever `site/` changes. Run the script locally to look at the
+page (it needs the GitHub CLI signed in).
+
+`site/screenshot.png` is also the picture in the README. It is taken with the
+app's check mode at twice the size:
+
+```bash
+DJMASTER_SHOT=site/screenshot.png DJMASTER_SHOT_SCALE=2 DJMASTER_SHOT_DATA=/tmp/djm-shot \
+DJMASTER_SHOT_SCRIPT="<script that sets up a good-looking state>" \
+npx electron . "Saturday night.wav"
+```
+
+The file name of the recording shows in the picture, so use a neutral one.
 
 ## Working agreements
 

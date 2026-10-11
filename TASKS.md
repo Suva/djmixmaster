@@ -64,11 +64,18 @@ These wait on a decision to distribute it. See the README for the current
 state: installers for Apple Silicon Macs and for Windows, neither signed for
 distribution.
 
-### Choose a licence — small, a decision
+### Make the repository public and switch the website on — a decision
 
-The repository has no licence. GPL-3.0-or-later was discussed as a good fit:
-it matches the bundled ffmpeg build and comparable audio tools. The choice
-has to be made before the repository goes public.
+The licence (GPL-3.0-or-later), a user-facing README and a website are in
+place, but the repository is private, so nobody else can download anything.
+
+- Make the repository public under Settings → General.
+- Switch on GitHub Pages under Settings → Pages, with "GitHub Actions" as the
+  source. The Website workflow then publishes `site/` after every release.
+- Decide whether releases are still marked as pre-releases. The page shows
+  the newest release either way and says when it is a pre-release.
+- Update the screenshot in `site/` when the window changes noticeably. See
+  the AGENTS.md section on the website for how it is taken.
 
 ### Intel and universal Mac builds — small
 

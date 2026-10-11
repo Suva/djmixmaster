@@ -294,7 +294,11 @@ function createWindow() {
     title: 'DJ Mix Master',
     // Automated checks draw off screen, so they also run while the display is asleep.
     show: !SCREENSHOT,
-    webPreferences: { preload: join(__dirname, 'preload.cjs'), offscreen: Boolean(SCREENSHOT) },
+    webPreferences: {
+      preload: join(__dirname, 'preload.cjs'),
+      // Pictures for the website are drawn at twice the size, so they stay sharp.
+      offscreen: SCREENSHOT ? { deviceScaleFactor: Number(process.env.DJMASTER_SHOT_SCALE) || 1 } : false,
+    },
   });
   if (SCREENSHOT) {
     window.webContents.on('console-message', (event) => console.log(`[window] ${event.message}`));

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DJ Mix Master</title>
+  <meta name="description" content="Masters recorded DJ mixes: evens out the loudness from track to track without pumping the breakdowns. Free and open source, for macOS and Windows.">
+  <link rel="icon" href="icon.png">
+  <style>
+    :root {
+      --bg: #101216;
+      --panel: #1b1e24;
+      --border: #2a2e37;
+      --text: #e6e8ec;
+      --muted: #9aa2b1;
+      --accent: #3ddc97;
+      --accent-ink: #06281a;
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+    header { display: flex; align-items: center; gap: 12px; padding: 22px 0; }
+    header img { width: 40px; height: 40px; }
+    header .name { font-weight: 650; font-size: 18px; }
+    header .spacer { flex: 1; }
+    header a { color: var(--muted); text-decoration: none; }
+    header a:hover { color: var(--text); }
+
+    .hero { padding: 36px 0 28px; }
+    h1 { margin: 0 0 16px; font-size: clamp(32px, 6vw, 52px); line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; }
+    .lead { max-width: 640px; margin: 0 0 28px; font-size: 19px; color: var(--muted); }
+    .downloads { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+    .button {
+      display: inline-flex;
+      flex-direction: column;
+      padding: 12px 22px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .button:hover { background: #5be6ab; }
+    .button small { font-weight: 500; font-size: 13px; opacity: 0.8; }
+    .version { margin: 0; font-size: 14px; color: var(--muted); }
+
+    .screenshot { display: block; width: 100%; height: auto; margin: 20px 0 8px; border: 1px solid var(--border); border-radius: 12px; }
+
+    h2 { margin: 64px 0 20px; font-size: 26px; letter-spacing: -0.01em; }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .features div, .steps div { padding: 20px 22px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+    h3 { margin: 0 0 8px; font-size: 17px; }
+    .features p, .steps p, .steps ol { margin: 0; font-size: 15.5px; color: var(--muted); }
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+    .steps ol { padding-left: 20px; }
+    .steps li { margin-bottom: 4px; }
+    .note { max-width: 720px; font-size: 15.5px; color: var(--muted); }
+
+    footer { margin-top: 72px; padding: 28px 0 44px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); }
+    footer p { margin: 0 0 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="icon.png" alt="">
+      <span class="name">DJ Mix Master</span>
+      <span class="spacer"></span>
+      <a href="{{REPOSITORY_URL}}">Source on GitHub</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h1>Even out a recorded DJ mix, track by track.</h1>
+        <p class="lead">Open a recording of a set or a whole night, mark the mix inside it, and get it back with every track at the same loudness. Louder tracks come down, quieter ones come up, and the breakdowns keep their dip.</p>
+        <div class="downloads">
+          <a class="button" href="{{MAC_URL}}">Download for Mac<small>{{MAC_DETAIL}}</small></a>
+          <a class="button" href="{{WINDOWS_URL}}">Download for Windows<small>{{WINDOWS_DETAIL}}</small></a>
+        </div>
+        <p class="version">{{VERSION_LINE}} Free and open source. <a href="{{RELEASES_URL}}">Release notes</a></p>
+      </section>
+
+      <img class="screenshot" src="screenshot.png" width="2720" height="1720" alt="The DJ Mix Master window: a recording with two mixes marked, the waveform, the loudness before and after, and the gain being applied.">
+
+      <h2>What it does</h2>
+      <div class="features">
+        <div>
+          <h3>Levels tracks, not moments</h3>
+          <p>A slow gain curve follows how loud each track is at full energy. It is not a compressor: the dynamics inside a track are left alone.</p>
+        </div>
+        <div>
+          <h3>Breakdowns stay breakdowns</h3>
+          <p>A quiet passage shorter than about a minute and a half keeps the gain of the track around it, so nothing gets pumped up before the drop.</p>
+        </div>
+        <div>
+          <h3>Made for whole nights</h3>
+          <p>Recordings are hours long, so nothing is loaded whole. Silences between sets are found for you, and each mix gets its own settings.</p>
+        </div>
+        <div>
+          <h3>Hear it before you export</h3>
+          <p>Play any part and switch between the original and the levelled sound. Every setting changes what you hear straight away.</p>
+        </div>
+        <div>
+          <h3>Bass on its own terms</h3>
+          <p>Optionally level the kick and bass separately from everything above them, or raise and lower any stretch by hand.</p>
+        </div>
+        <div>
+          <h3>Ready to share</h3>
+          <p>A true-peak limiter keeps the result under your ceiling. Export as WAV, FLAC, MP3 or AAC with title, artist and album filled in.</p>
+        </div>
+      </div>
+
+      <h2>Opening it the first time</h2>
+      <p class="note">The installers are not signed with Apple or Microsoft, so both systems ask you to confirm. This is needed once.</p>
+      <div class="steps">
+        <div>
+          <h3>Mac</h3>
+          <ol>
+            <li>Open the downloaded disk image and drag the app to Applications.</li>
+            <li>Open the app. macOS blocks it.</li>
+            <li>In System Settings, go to Privacy &amp; Security, scroll down and click “Open Anyway”.</li>
+          </ol>
+          <p>Needs a Mac with Apple Silicon and macOS 13 or later.</p>
+        </div>
+        <div>
+          <h3>Windows</h3>
+          <ol>
+            <li>Run the downloaded setup file.</li>
+            <li>When “Windows protected your PC” appears, click “More info”.</li>
+            <li>Click “Run anyway”.</li>
+          </ol>
+          <p>Needs 64-bit Windows 10 or later.</p>
+        </div>
+      </div>
+
+      <h2>Good to know</h2>
+      <p class="note">Your recording is never changed, and nothing leaves your computer. A recording that was made too hot is turned down to match the rest, but clipping cannot be undone. How the levelling works, every setting and a command-line version are described in the <a href="{{REPOSITORY_URL}}#readme">documentation</a>.</p>
+    </main>
+
+    <footer>
+      <p>DJ Mix Master is free software under the <a href="{{REPOSITORY_URL}}/blob/main/LICENSE">GNU General Public License</a>, version 3 or later. It comes without any warranty.</p>
+      <p>The installers include <a href="https://ffmpeg.org">FFmpeg</a>, which is licensed separately under the GPL.</p>
+    </footer>
+  </div>
+</body>
+</html>

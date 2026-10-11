@@ -14,3 +14,4 @@ release/
 *.ogg
 *.opus
 *.csv
+_site/
