@@ -1,4 +1,5 @@
 import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
+import { findGaps, soundBetween } from '../../gaps.ts';
 import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import type { Measurement } from '../../master.ts';
@@ -30,6 +31,8 @@ interface Recording {
   measured: Measurement;
   /** Average level per block for the waveform displays, linear. */
   body: Float32Array;
+  /** Silences between sets, in blocks. */
+  gaps: Region[];
 }
 
 /** One stretch of the recording that is levelled and exported on its own. */
@@ -96,7 +99,7 @@ function scheduleDraw() {
     drawQueued = false;
     if (!recording) return;
     const playhead = player.time / HOP_SECONDS;
-    drawOverview(overview, { peaks: recording.measured.peaks, body: recording.body }, overviewShown, mixes.map((m) => ({ ...m.region, name: m.name })), mixes.indexOf(mix), view, playhead);
+    drawOverview(overview, { peaks: recording.measured.peaks, body: recording.body, gaps: recording.gaps }, overviewShown, mixes.map((m) => ({ ...m.region, name: m.name })), mixes.indexOf(mix), view, playhead);
     if (!detail) return;
     // The curves can be one frame behind the region while it is being dragged.
     const length = detail.gainDb.length;
@@ -243,6 +246,10 @@ function freeSpace(block: number, except: Mix | null): Region {
 /** Shows the selected mix's name, times and place among the others. */
 function showMix() {
   mixes.sort((a, b) => a.region.start - b.region.start);
+  // Mixes that were never named are numbered by where they are in the recording.
+  mixes.forEach((m, index) => {
+    if (hasDefaultName(m)) m.name = `Mix ${index + 1}`;
+  });
   const { start, end } = mix.region;
   $<HTMLInputElement>('region-start').value = clock(start * HOP_SECONDS);
   $<HTMLInputElement>('region-end').value = clock(end * HOP_SECONDS);
@@ -273,6 +280,7 @@ function showMix() {
   $('export-all-group').hidden = !several;
   $('export-all').textContent = `Export all ${mixes.length}…`;
   $<HTMLButtonElement>('delete-mix').disabled = !several;
+  $<HTMLButtonElement>('split-gaps').disabled = !recording || piecesBetweenGaps(mix) === null;
   scheduleSave();
   scheduleDraw();
 }
@@ -317,7 +325,12 @@ type Drag = { kind: 'start' | 'end' } | { kind: 'move'; offset: number } | { kin
 let drag: Drag | null = null;
 /** Whether the pointer has moved since the press, which tells a drag from a click. */
 let dragged = false;
+/** Where the press landed, and how far the pointer must travel before it counts as a drag. */
+let pressX = 0;
+const DRAG_START_PX = 4;
 const HANDLE_PX = 6;
+/** Clicking the end of a mix puts the playhead this far before it, to hear how it ends. */
+const END_PREVIEW_BLOCKS = Math.round(10 / HOP_SECONDS);
 
 function overviewBlock(event: MouseEvent): number {
   const rect = overview.getBoundingClientRect();
@@ -392,6 +405,7 @@ overview.addEventListener('mousedown', (event) => {
   else if (grabbed.kind === 'new') drag = { kind: 'new', anchor: block, added: false };
   else drag = { kind: grabbed.kind };
   dragged = false;
+  pressX = event.clientX;
   event.preventDefault();
 });
 
@@ -404,6 +418,8 @@ window.addEventListener('mousemove', (event) => {
     }
     return;
   }
+  // A hand is never perfectly still during a click; ignore the wobble.
+  if (!dragged && Math.abs(event.clientX - pressX) < DRAG_START_PX) return;
   dragged = true;
   const block = overviewBlock(event);
   const { start, end } = mix.region;
@@ -432,8 +448,13 @@ window.addEventListener('mousemove', (event) => {
 });
 
 window.addEventListener('mouseup', (event) => {
-  // A plain click inside a mix moves the playhead there.
-  if (drag?.kind === 'move' && !dragged) seek(overviewBlock(event) * HOP_SECONDS);
+  // A plain click moves the playhead: to that spot inside a mix, to the very
+  // start of the mix on its left edge, and to just before the end on its right.
+  if (drag && !dragged) {
+    if (drag.kind === 'move') seek(overviewBlock(event) * HOP_SECONDS);
+    else if (drag.kind === 'start') seek(mix.region.start * HOP_SECONDS);
+    else if (drag.kind === 'end') seek(Math.max(mix.region.start, mix.region.end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
+  }
   drag = null;
 });
 
@@ -463,6 +484,59 @@ $('select-all').addEventListener('click', () => {
   if (!recording) return;
   const space = freeSpace((mix.region.start + mix.region.end) / 2, mix);
   setRegion(space.start, space.end);
+});
+
+// Leave a little air around the music when cutting at a silence.
+const LEAD_IN_BLOCKS = Math.round(0.5 / HOP_SECONDS);
+const TAIL_BLOCKS = Math.round(1.5 / HOP_SECONDS);
+
+/**
+ * The stretches of a mix with music in them, if cutting at the silences would
+ * change anything: more than one stretch, or silence to trim from the ends.
+ */
+function piecesBetweenGaps(m: Mix): Region[] | null {
+  const pieces = soundBetween(recording!.gaps, m.region)
+    .filter((piece) => piece.end - piece.start >= MIN_REGION_BLOCKS)
+    .map((piece) => ({
+      start: Math.max(m.region.start, piece.start - LEAD_IN_BLOCKS),
+      end: Math.min(m.region.end, piece.end + TAIL_BLOCKS),
+    }));
+  if (pieces.length === 0) return null;
+  const unchanged = pieces.length === 1 && pieces[0].start === m.region.start && pieces[0].end === m.region.end;
+  return unchanged ? null : pieces;
+}
+
+/** Replaces the selected mix by one mix per region, all with its settings. The first keeps its name. */
+function splitInto(regions: Region[]) {
+  const original = mix;
+  original.region = regions[0];
+  for (const region of regions.slice(1)) {
+    mixesCreated++;
+    mixes.push({
+      name: `Mix ${mixesCreated}`,
+      region,
+      options: { ...original.options },
+      ceilingDb: original.ceilingDb,
+      adjustments: original.adjustments.map((a) => ({ ...a })),
+    });
+  }
+  select(original);
+}
+
+$('split-gaps').addEventListener('click', () => {
+  const pieces = recording && !busy ? piecesBetweenGaps(mix) : null;
+  if (pieces) splitInto(pieces);
+});
+
+$('split-here').addEventListener('click', () => {
+  if (!recording || busy) return;
+  const at = Math.round(player.time / HOP_SECONDS);
+  const { start, end } = mix.region;
+  if (at - start < MIN_REGION_BLOCKS || end - at < MIN_REGION_BLOCKS) {
+    $('readout').textContent = 'Put the playhead inside this mix, at least 10 seconds from either end, to split there.';
+    return;
+  }
+  splitInto([{ start, end: at }, { start: at, end }]);
 });
 
 $('delete-mix').addEventListener('click', () => {
@@ -558,6 +632,8 @@ detailCanvas.addEventListener('click', (event) => {
   if (grabMoved) return;
   const block = detailBlock(event);
   if (block !== null) seek(block * HOP_SECONDS);
+  // The margin left of the curves stands for the very start of what is shown.
+  else if (event.clientX - detailCanvas.getBoundingClientRect().left < GUTTER) seek(view.start * HOP_SECONDS);
 });
 
 // ---------------------------------------------------------------------------
@@ -575,6 +651,8 @@ type Grab =
   | { kind: 'start' | 'end'; adjustment: Adjustment; made?: undefined };
 let grab: Grab | null = null;
 let grabMoved = false;
+let grabX = 0;
+let grabY = 0;
 let hoveredAdjustment: Adjustment | null = null;
 
 function inGainLane(event: MouseEvent): boolean {
@@ -599,6 +677,8 @@ function adjustmentAt(event: MouseEvent): { adjustment: Adjustment; part: 'start
 
 detailCanvas.addEventListener('mousedown', (event) => {
   grabMoved = false;
+  grabX = event.clientX;
+  grabY = event.clientY;
   if (!recording || busy || !detail || !inGainLane(event)) return;
   const found = adjustmentAt(event);
   if (!found) grab = { kind: 'create', anchor: detailBlock(event)!, x: event.clientX, made: null };
@@ -609,13 +689,13 @@ detailCanvas.addEventListener('mousedown', (event) => {
 
 window.addEventListener('mousemove', (event) => {
   if (!grab) return;
+  if (!grabMoved && Math.hypot(event.clientX - grabX, event.clientY - grabY) < DRAG_START_PX) return;
   const rect = detailCanvas.getBoundingClientRect();
   const fraction = clamp((event.clientX - rect.left - GUTTER) / (rect.width - GUTTER), 0, 1);
   const block = Math.round(view.start + fraction * (view.end - view.start));
   if (grab.kind === 'create') {
     // Dragging sideways across the lane marks a new stretch.
     if (!grab.made) {
-      if (Math.abs(event.clientX - grab.x) < GRAB_PX) return;
       grab.made = { start: block, end: block, db: 0 };
       mix.adjustments.push(grab.made);
     }
@@ -692,6 +772,10 @@ function bassAt(seconds: number): number {
 function seek(seconds: number) {
   if (!recording) return;
   player.seek(seconds);
+  // Keep the playhead in sight when the detail view is zoomed in.
+  const at = seconds / HOP_SECONDS;
+  const span = view.end - view.start;
+  if (at < view.start || at >= view.end) setView(at - span * 0.2, at + span * 0.8);
   showPlayback();
 }
 
@@ -789,8 +873,39 @@ window.addEventListener('keydown', (event) => {
     togglePlay();
   } else if (event.code === 'KeyA' && !event.metaKey && !event.ctrlKey) {
     setHearLevelled(!hearLevelled);
+  } else if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+    // Arrow keys on a slider or a list belong to it.
+  } else if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
+    event.preventDefault();
+    const step = event.altKey ? STEP_FINE_SECONDS : event.shiftKey ? STEP_COARSE_SECONDS : STEP_SECONDS;
+    stepPlayhead(event.code === 'ArrowLeft' ? -step : step);
+  } else if (event.code === 'Home' || event.code === 'Enter') {
+    event.preventDefault();
+    toStart();
+  } else if (event.code === 'End') {
+    event.preventDefault();
+    seek(Math.max(mix.region.start, mix.region.end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
   }
 });
+
+const STEP_SECONDS = 5;
+const STEP_COARSE_SECONDS = 30;
+const STEP_FINE_SECONDS = 1;
+
+/** Moves the playhead by a number of seconds, staying inside the selected mix. */
+function stepPlayhead(seconds: number) {
+  if (!recording) return;
+  const { start, end } = mix.region;
+  // From outside the mix, the first step lands on its nearest edge.
+  const from = clamp(player.time, start * HOP_SECONDS, end * HOP_SECONDS);
+  seek(clamp(from + seconds, start * HOP_SECONDS, end * HOP_SECONDS - 0.5));
+}
+
+function toStart() {
+  if (recording) seek(mix.region.start * HOP_SECONDS);
+}
+
+$('to-start').addEventListener('click', toStart);
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -875,6 +990,7 @@ function setBusy(label: string | null) {
   $<HTMLButtonElement>('export').disabled = busy || !recording;
   $<HTMLButtonElement>('export-all').disabled = busy || !recording;
   $<HTMLButtonElement>('play').disabled = busy || !recording;
+  $<HTMLButtonElement>('to-start').disabled = busy || !recording;
   showHistory();
 }
 
@@ -909,7 +1025,13 @@ async function open(path: string) {
   try {
     const measured = await api.measure(path);
     if (measured.peaks.length === 0) throw new Error('The recording is too short to analyse');
-    recording = { path, name, measured, body: Float32Array.from(measured.blocks, (energy) => Math.sqrt(energy / 2)) };
+    recording = {
+      path,
+      name,
+      measured,
+      body: Float32Array.from(measured.blocks, (energy) => Math.sqrt(energy / 2)),
+      gaps: findGaps(measured.blocks),
+    };
     overviewShown = { start: 0, end: measured.peaks.length };
     player.load(await api.mediaUrl(path));
     $('file-name').textContent = name;

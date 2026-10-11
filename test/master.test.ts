@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { DEFAULT_LEVEL_OPTIONS } from '../src/gain-curve.ts';
+import { findGaps, soundBetween } from '../src/gaps.ts';
 import { Limiter } from '../src/limiter.ts';
 import { LowShelf } from '../src/shelf.ts';
 import { BlockEnergyMeter, HOP_SECONDS, integratedLoudness } from '../src/loudness.ts';
@@ -75,6 +76,21 @@ test('a hand adjustment raises its stretch and ramps at the edges', () => {
   assert.ok(Math.abs(gainDb[6000] - 2) < 0.01, 'full change inside');
   assert.ok(Math.abs(gainDb[1000]) < 0.01 && Math.abs(gainDb[11000]) < 0.01, 'nothing outside');
   assert.ok(Math.abs(gainDb[4000] - 1) < 0.1, 'half way at the edge');
+});
+
+test('gaps are the long silences, not the pauses inside the music', () => {
+  const second = 10;
+  const blocks = new Float64Array(600 * second).fill(0.1);
+  const silence = (from: number, to: number) => blocks.fill(1e-10, from * second, to * second);
+  silence(0, 8); // before the music starts
+  silence(100, 101.5); // the pause before a drop
+  silence(200, 212); // between two sets
+  silence(215, 220); // more silence after a few seconds of noise
+  silence(590, 600); // after the music ends
+  const gaps = findGaps(blocks).map((gap) => [Math.round(gap.start / second), Math.round(gap.end / second)]);
+  assert.deepEqual(gaps, [[0, 8], [200, 220], [590, 600]]);
+  const sets = soundBetween(findGaps(blocks), { start: 0, end: blocks.length });
+  assert.deepEqual(sets.map((set) => [Math.round(set.start / second), Math.round(set.end / second)]), [[8, 200], [220, 590]]);
 });
 
 test('shelf moves the bass and leaves the highs', () => {

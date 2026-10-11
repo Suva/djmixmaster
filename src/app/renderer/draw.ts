@@ -87,6 +87,8 @@ export interface OverviewData {
   peaks: Float32Array;
   /** Average level per block, which keeps showing structure when the peaks are all at full scale. */
   body: Float32Array;
+  /** Silences between sets, in blocks. */
+  gaps: Region[];
 }
 
 /**
@@ -147,6 +149,14 @@ export function drawOverview(
       ctx.fillText(label, labelX + 6, 8);
     }
   });
+
+  // Silences between sets, drawn wide enough to see even when they are seconds in hours.
+  ctx.fillStyle = COLOR.gain;
+  for (const gap of data.gaps) {
+    if (gap.end < shown.start || gap.start > shown.end) continue;
+    const x0 = toX(gap.start);
+    ctx.fillRect(Math.round(x0), waveHeight - 6, Math.max(2, toX(gap.end) - x0), 6);
+  }
 
   const zoomedMix = mixes[selected];
   if (zoomedMix && view.end - view.start < zoomedMix.end - zoomedMix.start) {

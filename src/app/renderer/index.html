@@ -53,17 +53,20 @@
           </div>
         </div>
         <canvas id="overview"></canvas>
-        <p class="hint">Drag across a free part of the recording to mark another mix. Drag a mix's edge to adjust it or its middle to move it. Click inside a mix to select it and listen from there. Scroll to zoom the recording, swipe sideways to move along it.</p>
+        <p class="hint">Drag across a free part of the recording to mark another mix. Drag a mix's edge to adjust it or its middle to move it. Click inside a mix to select it and listen from there. Scroll to zoom the recording, swipe sideways to move along it. Orange marks are silences.</p>
         <div class="region-bar">
           <label>Name <input id="mix-name" type="text" spellcheck="false"></label>
           <label>Start <input id="region-start" type="text" spellcheck="false"></label>
           <label>End <input id="region-end" type="text" spellcheck="false"></label>
           <span>Length <output id="region-length"></output></span>
           <span class="spacer"></span>
-          <button id="select-all" title="Stretch this mix over all the free space around it">Expand to fill</button>
-          <button id="delete-mix">Delete mix</button>
+          <button id="split-gaps" title="Cut this mix apart at the silences inside it, and trim silence from its ends">Split at gaps</button>
+          <button id="split-here" title="Cut this mix in two at the playhead">Split at playhead</button>
+          <button id="select-all" title="Stretch this mix over all the free space around it">Expand</button>
+          <button id="delete-mix" title="Remove this mix; the recording itself is not touched">Delete</button>
         </div>
         <div class="transport">
+          <button id="to-start" title="Move the playhead to the start of the mix (Return)">⏮</button>
           <button id="play" title="Space">Play</button>
           <output id="play-time">0:00:00</output>
           <div class="toggle" role="group" aria-label="What to listen to">
@@ -75,7 +78,7 @@
             <button id="zoom-in" title="Zoom in">+</button>
             <button id="zoom-fit" title="Show the whole mix">Fit</button>
           </div>
-          <span class="zoom-hint">Scroll to zoom, swipe sideways to move. Drag across the gain lane to adjust a stretch by hand.</span>
+          <span class="zoom-hint" title="Arrow keys move the playhead 5 seconds; with Shift 30 seconds, with Option 1 second. Return jumps to the start of the mix.">Scroll to zoom, swipe to move, ← → to step. Drag across the gain lane to adjust a stretch by hand.</span>
           <span class="spacer"></span>
           <span id="meter"></span>
         </div>

@@ -38,12 +38,16 @@ Running from the project needs Node 24 or newer and ffmpeg on the machine
 - **Overview**: the whole recording. Drag across a free part to mark a mix,
   drag an edge to adjust it, drag the middle to move it. Scroll to zoom, swipe
   sideways to move.
+- **Finding the sets**: silences in the recording are marked in orange. "Split
+  at gaps" cuts a mix apart at them; "Split at playhead" is for handovers that
+  were mixed without a gap.
 - **Several mixes per recording**: each has its own name, settings and
   adjustments. Export one, or all of them into a folder in one go.
 - **Detail view**: waveform, loudness before and after, and the gain being
   applied. Scroll to zoom in on a transition.
 - **Live preview**: Space plays and pauses, A switches between the original
-  and the levelled sound. Settings change what you hear immediately, and the
+  and the levelled sound. The arrow keys step the playhead by 5 seconds (30 with
+  Shift, 1 with Option) and Return jumps to the start of the mix. Settings change what you hear immediately, and the
   preview uses the same limiter as the export.
 - **Adjusting by hand**: drag sideways across the gain lane to mark a stretch,
   then drag it up or down. Drag an edge to resize it, double-click to remove.
