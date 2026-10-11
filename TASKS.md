@@ -72,7 +72,8 @@ Done when a kick drum is visible as a shape at the closest zoom.
 ## Sharing the app
 
 These wait on a decision to distribute it. See the README for the current
-state: Apple Silicon only, locally signed.
+state: installers for Apple Silicon Macs and for Windows, neither signed for
+distribution.
 
 ### Choose a licence — small, a decision
 
@@ -97,20 +98,25 @@ Other Macs block the app until the user approves it in System Settings.
   is configuration and credentials, plus turning the hardened runtime back on
   with the entitlements Electron needs.
 
-### Windows and Linux builds — medium, needs a tester
+### Try the Windows build on a real machine — small, needs a tester
 
-The code avoids platform-specific pieces where it can, but has never run on
-either.
+GitHub builds a Windows installer on every version tag, and the unit tests
+pass there, but nobody has opened the app on Windows.
 
-- Build on GitHub's Windows and Linux machines.
-- Bundle an ffmpeg for each platform.
-- Replace Mac-only wording such as "Show in Finder".
-- Unlinking a file that is still open fails on Windows; cancelling an export
-  relies on it.
-- Someone has to open the result on each system.
-- Windows signing options (Store, certificate, or unsigned) were researched;
+- Install it, open a recording, play, export, cancel an export.
+- Watch for: the bundled ffmpeg being found, cancelling an export removing
+  the half-written file, file dialogs and paths with backslashes.
+- The installer is unsigned, so Windows shows "Windows protected your PC".
+  Signing options (Store, certificate, or staying unsigned) were researched;
   for wide distribution the Microsoft Store with an MSIX package avoids
   buying a certificate.
+
+### Linux build — small, needs a tester
+
+- Add a Linux job to `.github/workflows/release.yml` and an AppImage target.
+- `ffmpeg-static` provides the binary on the build machine, as it does for
+  the other two.
+- Someone has to open the result.
 
 ### An LGPL build of ffmpeg — medium
 

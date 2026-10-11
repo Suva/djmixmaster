@@ -12,7 +12,7 @@ npm install          # once
 npm start            # build and run the app from the project
 npm test             # unit tests, plus an end-to-end run on a synthetic mix
 npm run typecheck    # tsc, no output
-npm run package      # build the macOS .dmg into release/
+npm run package      # build an installer for this system into release/
 node src/cli.ts --help
 ```
 
@@ -144,8 +144,11 @@ Do not write test data there.
   and must stay that way.
 - **Audio files are ignored by git**, as are `dist/` and `release/`. Test
   recordings in the project folder stay local.
-- **Packaging is macOS on Apple Silicon only**, signed locally. See the
-  README for what that means for other machines.
+- **Releases are built by GitHub.** Pushing a tag such as `v0.2.0` runs
+  `.github/workflows/release.yml`, which tests and packages on macOS and
+  Windows and publishes both installers. The version comes from the tag.
+  Neither installer is signed for distribution, and the Windows app has not
+  been tried on a real machine.
 
 ## Working agreements
 

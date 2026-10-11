@@ -59,15 +59,21 @@ Running from the project needs Node 24 or newer and ffmpeg on the machine
   ffmpeg from the playhead instead, at the cost of a moment's delay on each jump.
 - **Export formats**: WAV and FLAC (24-bit), MP3 (320 kbps), AAC (256 kbps).
 
-### Building the Mac app
+### Building the app
 
 ```bash
 npm run package
 ```
 
-This writes a `.dmg` to `release/`. The app is built for Apple Silicon and
-signed locally only: it runs on the Mac that built it, but is not signed for
-distribution, so another Mac will block it until the user approves it. The
+This builds an installer for the system it runs on into `release/`: a `.dmg`
+on macOS, a setup `.exe` on Windows. Pushing a version tag such as `v0.2.0`
+makes GitHub build both and publish them as a release (see
+`.github/workflows/release.yml`). The Windows build has not been tried on a
+real machine yet.
+
+The Mac app is built for Apple Silicon and signed locally only: it runs on
+the Mac that built it, but is not signed for distribution, so another Mac will
+block it until the user approves it. The
 bundled ffmpeg is a GPL build, which brings obligations if you share the app.
 
 ## The command line

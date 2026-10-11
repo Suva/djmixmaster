@@ -1262,7 +1262,7 @@ function showExported(text: string, reveal: string) {
   const status = $('export-status');
   status.textContent = `${text} `;
   const link = document.createElement('a');
-  link.textContent = 'Show in Finder';
+  link.textContent = navigator.userAgent.includes('Mac') ? 'Show in Finder' : 'Show in folder';
   link.addEventListener('click', () => api.reveal(reveal));
   status.append(link);
 }

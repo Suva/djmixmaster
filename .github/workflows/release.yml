@@ -1,0 +1,72 @@
+# Builds the installers and publishes them as a release when a version tag
+# such as v0.2.0 is pushed. It can also be started by hand from the Actions
+# tab, which builds the installers without publishing anything.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build for ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            ffmpeg: node_modules/ffmpeg-static/ffmpeg
+            installer: release/*.dmg
+          - name: Windows
+            os: windows-latest
+            ffmpeg: node_modules/ffmpeg-static/ffmpeg.exe
+            installer: release/*.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # The tag decides the version, so package.json does not have to be edited first.
+      - name: Take the version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
+
+      - run: npm run typecheck
+
+      # The tests need ffmpeg; use the copy that gets bundled into the app.
+      - run: npm test
+        env:
+          DJMASTER_FFMPEG: ${{ github.workspace }}/${{ matrix.ffmpeg }}
+
+      - run: npm run package -- --publish never
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installer-${{ matrix.name }}
+          path: ${{ matrix.installer }}
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: installers
+          merge-multiple: true
+      - name: Create the release with both installers
+        run: gh release create "$GITHUB_REF_NAME" installers/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

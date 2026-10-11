@@ -13,7 +13,7 @@
   "scripts": {
     "start": "node scripts/build.mjs && electron .",
     "build": "node scripts/build.mjs",
-    "package": "node scripts/build.mjs && electron-builder --mac",
+    "package": "node scripts/build.mjs && electron-builder",
     "master": "node src/cli.ts",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc"
@@ -40,20 +40,6 @@
       "package.json"
     ],
     "asar": false,
-    "extraResources": [
-      {
-        "from": "node_modules/ffmpeg-static/ffmpeg",
-        "to": "bin/ffmpeg"
-      },
-      {
-        "from": "node_modules/ffmpeg-static/ffmpeg.LICENSE",
-        "to": "bin/ffmpeg.LICENSE"
-      },
-      {
-        "from": "node_modules/ffmpeg-static/ffmpeg.README",
-        "to": "bin/ffmpeg.README"
-      }
-    ],
     "mac": {
       "target": [
         "dmg"
@@ -79,10 +65,44 @@
           "rank": "Alternate"
         }
       ],
-      "hardenedRuntime": false
+      "hardenedRuntime": false,
+      "extraResources": [
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg",
+          "to": "bin/ffmpeg"
+        },
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.LICENSE",
+          "to": "bin/ffmpeg.LICENSE"
+        },
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.README",
+          "to": "bin/ffmpeg.README"
+        }
+      ]
     },
     "dmg": {
       "title": "DJ Mix Master"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png",
+      "extraResources": [
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.exe",
+          "to": "bin/ffmpeg.exe"
+        },
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.LICENSE",
+          "to": "bin/ffmpeg.LICENSE"
+        },
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.README",
+          "to": "bin/ffmpeg.README"
+        }
+      ]
     }
   }
 }

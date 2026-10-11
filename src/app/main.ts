@@ -18,7 +18,7 @@ import { needsStreaming, streamingWavHeader } from './playback.ts';
 app.setName('DJ Mix Master');
 
 // The packaged app carries its own ffmpeg; workers inherit this when they start.
-const bundledFfmpeg = join(process.resourcesPath, 'bin', 'ffmpeg');
+const bundledFfmpeg = join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
 if (app.isPackaged && existsSync(bundledFfmpeg)) process.env.DJMASTER_FFMPEG = bundledFfmpeg;
 
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aif', 'aiff', 'ogg', 'opus'];
@@ -263,8 +263,11 @@ ipcMain.handle('render', async (_event, request: RenderRequest) => {
   try {
     return await runJob({ kind: 'render', ...request });
   } catch (error) {
-    // A cancelled export leaves half a file behind; nobody wants that.
-    if (error instanceof Error && error.message === CANCELLED) await rm(request.output, { force: true });
+    // A cancelled export leaves half a file behind; nobody wants that. On Windows
+    // the file cannot go until the encoder has let go of it, hence the retries.
+    if (error instanceof Error && error.message === CANCELLED) {
+      await rm(request.output, { force: true, maxRetries: 20, retryDelay: 250 }).catch(() => {});
+    }
     throw error;
   }
 });
