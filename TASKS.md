@@ -25,30 +25,6 @@ Things to judge by ear:
 
 ## Next
 
-### Fades at the start and end of a mix — medium
-
-A mix begins and ends with a hard cut. A night split at a blended handover,
-or a set trimmed to start mid-track, needs a fade in and a fade out. This
-affects nearly every export from an all-night recording.
-
-- Work like clips in Ableton Live: a small handle at each top corner of the
-  mix in the detail view's waveform lane. Drag it inwards to set how long the
-  fade is; the fade is drawn as a line over the waveform. Dragging it back to
-  the corner removes the fade.
-- Store a fade-in and a fade-out length per mix. They are part of the mix,
-  so they belong in the saved session and in undo.
-- Apply them in both the preview and the export, after the limiter, so a
-  fade is never fought by the gain or the ceiling.
-- Offer a sensible curve without making it a setting at first: an equal-power
-  or S-shaped curve sounds more even than a straight line.
-- Decide what a split at the playhead does: nothing, or a matching fade-out
-  and fade-in on the two halves.
-- The fades should not move the levelling. Measure and level the mix as if
-  they were not there.
-
-Done when a mix cut out of the middle of a night starts and ends smoothly,
-and the preview matches the exported file.
-
 ### A check-up report when a recording is opened — medium
 
 Recordings from booth recorders and PA mixers have recurring faults. The

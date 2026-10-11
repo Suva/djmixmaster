@@ -1,5 +1,5 @@
 // Plays the recording and applies the levelling live:
-// audio element -> bass shelf -> gain -> limiter -> speakers.
+// audio element -> bass shelf -> gain -> limiter -> fade -> speakers.
 //
 // Most recordings are played by the audio element straight from the file. The
 // ones it cannot seek in exactly are streamed instead: each time playback
@@ -27,6 +27,9 @@ export class Player {
   #gain: GainNode | null = null;
   #shelf: BiquadFilterNode | null = null;
   #limiter: AudioWorkletNode | null = null;
+  #fade: GainNode | null = null;
+  #meter: AnalyserNode | null = null;
+  readonly #heard = new Float32Array(2048);
   #settings: Required<LimiterSettings> = { ceilingDb: -1, bypass: false };
 
   /** `silent` runs the whole chain without an output device, for automated checks. */
@@ -103,9 +106,10 @@ export class Player {
    * Sets what is being heard right now. Called every frame during playback;
    * the gain curve moves slowly enough that following it this way is inaudible.
    */
-  apply(gain: number, bassDb: number, settings: Required<LimiterSettings>) {
-    if (!this.#context || !this.#gain || !this.#shelf || !this.#limiter) return;
+  apply(gain: number, bassDb: number, fade: number, settings: Required<LimiterSettings>) {
+    if (!this.#context || !this.#gain || !this.#shelf || !this.#limiter || !this.#fade) return;
     this.#gain.gain.setTargetAtTime(gain, this.#context.currentTime, 0.03);
+    this.#fade.gain.setTargetAtTime(fade, this.#context.currentTime, 0.015);
     this.#shelf.gain.setTargetAtTime(bassDb, this.#context.currentTime, 0.03);
     const changed: LimiterSettings = {};
     if (settings.ceilingDb !== this.#settings.ceilingDb) changed.ceilingDb = settings.ceilingDb;
@@ -114,6 +118,15 @@ export class Player {
       this.#limiter.port.postMessage(changed);
       this.#settings = { ...settings };
     }
+  }
+
+  /** The highest level in the last moment of what reached the speakers, linear. */
+  outputPeak(): number {
+    if (!this.#meter) return 0;
+    this.#meter.getFloatTimeDomainData(this.#heard);
+    let peak = 0;
+    for (const sample of this.#heard) peak = Math.max(peak, Math.abs(sample));
+    return peak;
   }
 
   #stopped() {
@@ -142,10 +155,16 @@ export class Player {
     });
     limiter.port.onmessage = (event: MessageEvent<LimiterReport>) => this.onReport(event.data);
     limiter.port.postMessage(this.#settings);
-    source.connect(shelf).connect(gain).connect(limiter).connect(context.destination);
+    const fade = context.createGain();
+    // Listens in on what goes to the speakers, after everything else.
+    const meter = new AnalyserNode(context, { fftSize: this.#heard.length });
+    source.connect(shelf).connect(gain).connect(limiter).connect(fade).connect(context.destination);
+    fade.connect(meter);
     this.#context = context;
     this.#gain = gain;
     this.#shelf = shelf;
     this.#limiter = limiter;
+    this.#fade = fade;
+    this.#meter = meter;
   }
 }

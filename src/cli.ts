@@ -22,6 +22,8 @@ Output
   --bit-depth <16|24>  Bits per sample for .wav and .flac; 16-bit is dithered (default: ${DEFAULT_BIT_DEPTH})
   --bitrate <kbps>     Bitrate for .mp3 and .m4a (default: ${DEFAULT_MP3_KBPS} and ${DEFAULT_AAC_KBPS})
   --sample-rate <Hz>   Sample rate of the output (default: the input's)
+  --fade-in <seconds>  Fade in at the start (default: none)
+  --fade-out <seconds> Fade out at the end (default: none)
   --headroom <dB>      Extra room under the ceiling for .mp3 and .m4a, whose encoding
                        raises the peaks (default: ${LOSSY_HEADROOM_DB})
   --title, --artist, --album <text>
@@ -57,6 +59,8 @@ interface Args {
   ceilingDb: number | null;
   encode: EncodeOptions;
   headroomDb?: number;
+  fadeInSeconds: number;
+  fadeOutSeconds: number;
   analyzeOnly: boolean;
   dump?: string;
   force: boolean;
@@ -77,6 +81,8 @@ function parseArgs(argv: string[]): Args {
     options: { ...DEFAULT_LEVEL_OPTIONS },
     ceilingDb: -1,
     encode: {},
+    fadeInSeconds: 0,
+    fadeOutSeconds: 0,
     analyzeOnly: false,
     force: false,
   };
@@ -113,6 +119,8 @@ function parseArgs(argv: string[]): Args {
       case '--bitrate': args.encode.bitrateKbps = number(); break;
       case '--sample-rate': args.encode.sampleRate = number(); break;
       case '--headroom': args.headroomDb = number(); break;
+      case '--fade-in': args.fadeInSeconds = number(); break;
+      case '--fade-out': args.fadeOutSeconds = number(); break;
       case '--title': args.encode.title = value(); break;
       case '--artist': args.encode.artist = value(); break;
       case '--album': args.encode.album = value(); break;
@@ -149,6 +157,7 @@ function parseArgs(argv: string[]): Args {
   if (!(smoothSeconds >= 0)) throw new Error('--smooth must not be negative');
   if (!(slewDbPerSecond > 0)) throw new Error('--slew must be positive');
   if (args.ceilingDb !== null && args.ceilingDb > 0) throw new Error('--ceiling must be 0 dBFS or lower');
+  if (!(args.fadeInSeconds >= 0) || !(args.fadeOutSeconds >= 0)) throw new Error('--fade-in and --fade-out must not be negative');
   if (args.headroomDb !== undefined && !(args.headroomDb >= 0)) throw new Error('--headroom must not be negative');
   if (args.encode.bitrateKbps !== undefined && !(args.encode.bitrateKbps > 0)) throw new Error('--bitrate must be positive');
   if (args.encode.sampleRate !== undefined && !(args.encode.sampleRate >= 8000)) throw new Error('--sample-rate must be 8000 Hz or more');
@@ -225,7 +234,11 @@ async function main() {
     const headroomDb = args.headroomDb ?? (isLossy(output) ? LOSSY_HEADROOM_DB : 0);
     if (headroomDb > 0) console.log(`Headroom     ${headroomDb.toFixed(1)} dB left for the encoding`);
     const result = await render(
-      args.input, args.region, gainDb, output, { ceilingDb: args.ceilingDb, bassDb, encode: args.encode, headroomDb }, progress('Rendering'),
+      args.input, args.region, gainDb, output, {
+        ceilingDb: args.ceilingDb, bassDb, encode: args.encode, headroomDb,
+        fadeInSeconds: args.fadeInSeconds, fadeOutSeconds: args.fadeOutSeconds,
+      },
+      progress('Rendering'),
     );
     after = result;
     console.log(`Output       ${lufs(result.integratedLufs)} integrated, peak ${dbfs(result.peak)}`);

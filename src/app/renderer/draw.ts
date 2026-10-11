@@ -1,6 +1,7 @@
 // Canvas drawing for the recording overview and the three-lane detail view.
 
 import type { Adjustment } from '../../gain-curve.ts';
+import { fadeGain } from '../../fade.ts';
 import { HOP_SECONDS } from '../../loudness.ts';
 
 const COLOR = {
@@ -29,6 +30,8 @@ export function clock(seconds: number): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
 }
+
+const clampTo = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 
 /** Sizes the backing store to the element and returns a context scaled to CSS pixels. */
 function fit(canvas: HTMLCanvasElement) {
@@ -187,12 +190,18 @@ export interface Detail {
   bassDb: Float32Array | null;
   /** Manual gain changes, in blocks counted from the start of the mix. */
   adjustments: Adjustment[];
+  /** Length in blocks of the fades at the two ends of the mix. */
+  fadeIn: number;
+  fadeOut: number;
   targetLufs: number;
   /** Limiter ceiling as a linear sample value. */
   ceiling: number;
 }
 
 const LANE_GAP = 10;
+/** How far below the top of the waveform lane the fade handles sit, clear of the legend. */
+export const FADE_HANDLE_Y = 28;
+const FADE_HANDLE_SIZE = 9;
 
 /** Where the three lanes of the detail view sit, top to bottom, for a canvas of this height. */
 export function detailLanes(height: number) {
@@ -225,6 +234,8 @@ export function drawDetail(
   canvas: HTMLCanvasElement, detail: Detail, view: Region, hoverX: number | null, playhead: number | null,
   /** Index of the adjustment under the pointer or being dragged, if any. */
   activeAdjustment: number | null,
+  /** Which fade handle is under the pointer or being dragged, if any. */
+  activeFade: 'in' | 'out' | null,
 ) {
   const { ctx, width, height } = fit(canvas);
   const plot = width - GUTTER;
@@ -291,6 +302,42 @@ export function drawDetail(
     }
     gridLine(mid, '');
     gridLine(mid - scale, '0 dB');
+
+    // The fades: the shape the sound is held under, and a handle to drag at
+    // the inner end of each. With no fade the handle sits in the mix's corner.
+    const toX = (block: number) => GUTTER + ((block - view.start) / n) * plot;
+    if (detail.fadeIn > 0 || detail.fadeOut > 0) {
+      ctx.beginPath();
+      for (let x = 0; x <= plot; x++) {
+        const fade = fadeGain(view.start + (x / plot) * n, total, detail.fadeIn, detail.fadeOut);
+        if (x === 0) ctx.moveTo(GUTTER + x, mid - fade * scale);
+        else ctx.lineTo(GUTTER + x, mid - fade * scale);
+      }
+      for (let x = plot; x >= 0; x--) {
+        ctx.lineTo(GUTTER + x, mid + fadeGain(view.start + (x / plot) * n, total, detail.fadeIn, detail.fadeOut) * scale);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = COLOR.hover;
+      ctx.globalAlpha = 0.55;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    const handles: ['in' | 'out', number][] = [['in', detail.fadeIn], ['out', total - detail.fadeOut]];
+    for (const [which, block] of handles) {
+      if (block < view.start || block > view.end) continue;
+      // Keep the whole handle inside the lane when it sits in a corner.
+      const x = clampTo(toX(block), GUTTER + FADE_HANDLE_SIZE / 2, width - FADE_HANDLE_SIZE / 2);
+      const y = waveLane.top + FADE_HANDLE_Y;
+      ctx.fillStyle = activeFade === which ? COLOR.hover : '#14161a';
+      ctx.strokeStyle = COLOR.hover;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.rect(x - FADE_HANDLE_SIZE / 2, y - FADE_HANDLE_SIZE / 2, FADE_HANDLE_SIZE, FADE_HANDLE_SIZE);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     laneLabel(ctx, GUTTER + 8, waveLane.top + 10, [
       ['Waveform', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['limited', COLOR.warn],
     ]);

@@ -213,6 +213,22 @@ test('levels tracks against each other and keeps the breakdowns down', async () 
   }
 });
 
+test('fades in and out at the ends without touching the middle', async () => {
+  const input = join(dir, 'mix.wav');
+  const output = join(dir, 'faded.wav');
+  const region = { start: 20, end: 50 };
+  const flat = new Float32Array(300);
+  await render(input, region, flat, output, { ceilingDb: null, fadeInSeconds: 5, fadeOutSeconds: 10 });
+  const plain = await measure(input, region);
+  const faded = await measure(output);
+  const change = (block: number) => 10 * Math.log10(faded.blocks[block] / plain.blocks[block]);
+  assert.ok(change(0) < -40, 'starts from silence');
+  assert.ok(Math.abs(change(25) + 6) < 0.6, 'half way up the fade in is 6 dB down');
+  assert.ok(Math.abs(change(60)) < 0.1 && Math.abs(change(190)) < 0.1, 'the middle is untouched');
+  assert.ok(Math.abs(change(250) + 6) < 0.6, 'half way down the fade out is 6 dB down');
+  assert.ok(change(299) < -40, 'ends in silence');
+});
+
 test('trims to the region', async () => {
   const input = join(dir, 'mix.wav');
   const measured = await measure(input, { start: 30, end: 90.5 });

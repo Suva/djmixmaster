@@ -13,6 +13,9 @@ export interface RenderRequest {
   encode: EncodeOptions;
   /** How much quieter to make the result, ceiling included, for a lossy format. */
   headroomDb: number;
+  /** Length in seconds of the fades at the two ends. */
+  fadeInSeconds: number;
+  fadeOutSeconds: number;
   ceilingDb: number | null;
 }
 

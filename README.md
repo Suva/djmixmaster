@@ -89,6 +89,9 @@ Your recording is never changed, and nothing leaves your computer.
   then drag it up or down. The Adjust switch (Level or Bass) chooses whether a
   new stretch changes the whole sound or the bass only. Drag an edge to resize
   it, double-click to remove it.
+- **Fades**: each end of a mix has a small square handle near the top of the
+  waveform. Drag it inwards to fade in or out over that length; drag it back to
+  the corner to remove the fade.
 - **Undo and redo** cover every change to the mixes.
 - **Your work is remembered**: mixes, settings and adjustments are saved per
   recording and restored when you open it again.
@@ -173,6 +176,7 @@ The output format follows the file extension: `.wav`, `.flac`, `.mp3` or
 | `--bit-depth <16\|24>` | Bits per sample for `.wav` and `.flac`; 16-bit is dithered | 16 |
 | `--bitrate <kbps>` | Bitrate for `.mp3` and `.m4a` | 320 and 256 |
 | `--sample-rate <Hz>` | Sample rate of the output | the input's |
+| `--fade-in`, `--fade-out <seconds>` | Fade at the start and at the end | none |
 | `--headroom <dB>` | Extra room under the ceiling for `.mp3` and `.m4a` | 1 |
 | `--title`, `--artist`, `--album` | Tags to write into the output | none |
 | `--force` | Overwrite the output if it exists | off |

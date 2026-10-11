@@ -1,6 +1,7 @@
 import { CHANNELS, decode, encode, probe, type EncodeOptions, type Region } from './audio-io.ts';
 import type { LoudnessCurves } from './level.ts';
 import { Limiter } from './limiter.ts';
+import { fadeGain } from './fade.ts';
 import { LowShelf } from './shelf.ts';
 import { BlockEnergyMeter, HOP_SECONDS, integratedLoudness, shortTermLoudness } from './loudness.ts';
 
@@ -34,6 +35,9 @@ export interface RenderOptions {
    * room for what a lossy encoder adds to the peaks.
    */
   headroomDb?: number;
+  /** Length in seconds of the fade at the start and at the end of the result. */
+  fadeInSeconds?: number;
+  fadeOutSeconds?: number;
 }
 
 export interface RenderResult extends Measurement {
@@ -101,8 +105,22 @@ export async function render(
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
   const encoder = encode(output, sampleRate, options.encode);
 
+  // The fades come last, after the limiter, so nothing downstream works against them.
+  const fadeIn = Math.round((options.fadeInSeconds ?? 0) * sampleRate);
+  const fadeOut = Math.round((options.fadeOutSeconds ?? 0) * sampleRate);
+  const expectedFrames = gain.length * hopFrames;
+  let emitted = 0;
+
   const emit = async (samples: Float32Array) => {
     if (samples.length === 0) return;
+    const count = samples.length / CHANNELS;
+    if (emitted < fadeIn || emitted + count > expectedFrames - fadeOut) {
+      for (let f = 0; f < count; f++) {
+        const fade = fadeGain(emitted + f, expectedFrames, fadeIn, fadeOut);
+        if (fade !== 1) for (let c = 0; c < CHANNELS; c++) samples[f * CHANNELS + c] *= fade;
+      }
+    }
+    emitted += count;
     meter.push(samples);
     await encoder.write(samples);
   };

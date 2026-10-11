@@ -1,11 +1,12 @@
 import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
 import { isLossy, LOSSY_HEADROOM_DB, type EncodeOptions } from '../../encode-options.ts';
+import { fadeGain } from '../../fade.ts';
 import { findGaps, soundBetween } from '../../gaps.ts';
 import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import type { Measurement } from '../../master.ts';
 import type { Api } from '../api.ts';
-import { clock, detailLanes, drawDetail, drawOverview, GUTTER, type Detail, type Region } from './draw.ts';
+import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
 import { Player } from './player.ts';
 
 declare global {
@@ -46,6 +47,9 @@ interface Mix {
   adjustments: Adjustment[];
   /** Who played it, for the exported file's tags. */
   artist?: string;
+  /** Length in blocks of the fade at the start and at the end; absent means none. */
+  fadeIn?: number;
+  fadeOut?: number;
 }
 
 let recording: Recording | null = null;
@@ -113,7 +117,10 @@ function scheduleDraw() {
       end: clamp(view.end - mix.region.start, 1, length),
     };
     const active = grab && 'adjustment' in grab ? grab.adjustment : grab?.made ?? hoveredAdjustment;
-    drawDetail(detailCanvas, detail, shown, hoverX, playhead - mix.region.start, active ? mix.adjustments.indexOf(active) : null);
+    drawDetail(
+      detailCanvas, detail, shown, hoverX, playhead - mix.region.start,
+      active ? mix.adjustments.indexOf(active) : null, fadeDrag ?? hoveredFade,
+    );
   });
 }
 
@@ -124,6 +131,12 @@ interface Stats {
   maxGain: number;
   limitedShare: number;
   deepestLimit: number;
+}
+
+/** A mix's fades in blocks. Together they can never be longer than the mix. */
+function fades(m: Mix): { in: number; out: number } {
+  const half = Math.floor((m.region.end - m.region.start) / 2);
+  return { in: clamp(m.fadeIn ?? 0, 0, half), out: clamp(m.fadeOut ?? 0, 0, half) };
 }
 
 /** Derives the gain curves of a mix from its region and settings, and everything shown from them. */
@@ -177,8 +190,22 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
     }
   }
 
+  // The fades shape what is shown, but not the numbers above: the levelling
+  // and the limiter estimate describe the music as if it were not faded.
+  const fade = fades(m);
+  for (let i = 0; i < n; i++) {
+    const held = fadeGain(i + 0.5, n, fade.in, fade.out);
+    if (held === 1) continue;
+    peaksOut[i] *= held;
+    bodyOut[i] *= held;
+    loudnessOut[i] += 20 * Math.log10(Math.max(held, 1e-6));
+  }
+
   return {
-    detail: { startBlock: start, peaksIn, peaksOut, bodyOut, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, adjustments, targetLufs, ceiling },
+    detail: {
+      startBlock: start, peaksIn, peaksOut, bodyOut, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, adjustments,
+      fadeIn: fade.in, fadeOut: fade.out, targetLufs, ceiling,
+    },
     stats: {
       loudnessIn: integratedLoudness(blocksIn),
       loudnessOut: integratedLoudness(blocksOut),
@@ -526,6 +553,11 @@ function splitInto(regions: Region[]) {
       adjustments: original.adjustments.map((a) => ({ ...a })),
     });
   }
+  // The fade out belongs to the end of the music, which is now the last piece.
+  if (regions.length > 1 && original.fadeOut) {
+    mixes[mixes.length - 1].fadeOut = original.fadeOut;
+    delete original.fadeOut;
+  }
   select(original);
 }
 
@@ -611,6 +643,13 @@ detailCanvas.addEventListener('mousemove', (event) => {
   const block = detailBlock(event);
   const found = grab ? null : adjustmentAt(event);
   hoveredAdjustment = found?.adjustment ?? null;
+  hoveredFade = grab || fadeDrag ? null : fadeHandleAt(event);
+  if (fadeDrag || hoveredFade) {
+    detailCanvas.style.cursor = 'ew-resize';
+    if (hoveredFade) $('readout').textContent = describeFade(hoveredFade);
+    scheduleDraw();
+    return;
+  }
   if (!grab) {
     detailCanvas.style.cursor = found ? (found.part === 'level' ? 'ns-resize' : 'ew-resize') : inGainLane(event) ? 'col-resize' : 'pointer';
   }
@@ -631,6 +670,7 @@ detailCanvas.addEventListener('mousemove', (event) => {
 detailCanvas.addEventListener('mouseleave', () => {
   hoverX = null;
   hoveredAdjustment = null;
+  hoveredFade = null;
   $('readout').textContent = ' ';
   scheduleDraw();
 });
@@ -691,12 +731,85 @@ detailCanvas.addEventListener('mousedown', (event) => {
   grabMoved = false;
   grabX = event.clientX;
   grabY = event.clientY;
-  if (!recording || busy || !detail || !inGainLane(event)) return;
+  if (!recording || busy || !detail) return;
+  fadeDrag = fadeHandleAt(event);
+  if (fadeDrag) {
+    event.preventDefault();
+    return;
+  }
+  if (!inGainLane(event)) return;
   const found = adjustmentAt(event);
   if (!found) grab = { kind: 'create', anchor: detailBlock(event)!, x: event.clientX, made: null };
   else if (found.part === 'level') grab = { kind: 'level', adjustment: found.adjustment, y: event.clientY, db: found.adjustment.db };
   else grab = { kind: found.part, adjustment: found.adjustment };
   event.preventDefault();
+});
+
+// ---------------------------------------------------------------------------
+// Fades: a handle near each top corner of the mix in the waveform lane,
+// dragged inwards to set how long the fade is
+
+let fadeDrag: 'in' | 'out' | null = null;
+let hoveredFade: 'in' | 'out' | null = null;
+const FADE_GRAB_PX = 9;
+
+/** Where the fade handles are drawn, in pixels from the left of the detail view. */
+function fadeHandleX(which: 'in' | 'out'): number | null {
+  const fade = fades(mix);
+  const block = which === 'in' ? mix.region.start + fade.in : mix.region.end - fade.out;
+  if (block < view.start || block > view.end) return null;
+  const plot = detailCanvas.clientWidth - GUTTER;
+  return clamp(GUTTER + ((block - view.start) / (view.end - view.start)) * plot, GUTTER + 5, detailCanvas.clientWidth - 5);
+}
+
+function fadeHandleAt(event: MouseEvent): 'in' | 'out' | null {
+  const rect = detailCanvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top - detailLanes(rect.height).wave.top;
+  if (Math.abs(y - FADE_HANDLE_Y) > FADE_GRAB_PX) return null;
+  // Where the two meet, in a very short mix, the nearer one wins.
+  const reach = (which: 'in' | 'out') => {
+    const at = fadeHandleX(which);
+    return at === null ? Infinity : Math.abs(x - at);
+  };
+  const nearest = reach('in') <= reach('out') ? 'in' : 'out';
+  return reach(nearest) <= FADE_GRAB_PX ? nearest : null;
+}
+
+function describeFade(which: 'in' | 'out'): string {
+  const length = fades(mix)[which] * HOP_SECONDS;
+  const name = which === 'in' ? 'Fade in' : 'Fade out';
+  return length > 0
+    ? `${name} ${length.toFixed(1)} s: drag to change, drag back to the corner to remove`
+    : `${name}: drag inwards to add one`;
+}
+
+window.addEventListener('mousemove', (event) => {
+  if (!fadeDrag) return;
+  if (!grabMoved && Math.abs(event.clientX - grabX) < DRAG_START_PX) return;
+  grabMoved = true;
+  const rect = detailCanvas.getBoundingClientRect();
+  const plot = rect.width - GUTTER;
+  const x = clamp(event.clientX - rect.left - GUTTER, 0, plot);
+  const block = view.start + (x / plot) * (view.end - view.start);
+  const { start, end } = mix.region;
+  const half = Math.floor((end - start) / 2);
+  // Within a few pixels of the corner counts as no fade at all.
+  const snap = (FADE_GRAB_PX / 2 / plot) * (view.end - view.start);
+  const length = fadeDrag === 'in' ? block - start : end - block;
+  const blocks = length <= snap ? 0 : clamp(Math.round(length), 0, half);
+  if (fadeDrag === 'in') mix.fadeIn = blocks;
+  else mix.fadeOut = blocks;
+  if (!mix.fadeIn) delete mix.fadeIn;
+  if (!mix.fadeOut) delete mix.fadeOut;
+  $('readout').textContent = describeFade(fadeDrag);
+  scheduleRecompute();
+});
+
+window.addEventListener('mouseup', () => {
+  if (!fadeDrag) return;
+  fadeDrag = null;
+  scheduleDraw();
 });
 
 window.addEventListener('mousemove', (event) => {
@@ -824,7 +937,9 @@ function follow() {
   if (span < end - start && (playhead < view.start || playhead >= view.end)) {
     setView(playhead - span * 0.05, playhead + span * 0.95);
   }
-  player.apply(hearLevelled ? gainAt(time) : 1, hearLevelled ? bassAt(time) : 0, {
+  const fade = fades(mix);
+  const held = hearLevelled ? fadeGain(time / HOP_SECONDS - start, end - start, fade.in, fade.out) : 1;
+  player.apply(hearLevelled ? gainAt(time) : 1, hearLevelled ? bassAt(time) : 0, held, {
     ceilingDb: mix.ceilingDb,
     bypass: !hearLevelled,
   });
@@ -868,8 +983,10 @@ player.onSeek = showPlayback;
 
 // Hold the readings briefly so the numbers can be read.
 let held = { peak: 0, gain: 1, since: 0 };
-player.onReport = ({ peak, gain }) => {
+player.onReport = ({ gain }) => {
   if (player.paused) return;
+  // The limiter says how hard it worked; the level shown is what was heard, fades included.
+  const peak = player.outputPeak();
   const now = performance.now();
   if (now - held.since > 600) held = { peak: 0, gain: 1, since: now };
   held.peak = Math.max(held.peak, peak);
@@ -1168,6 +1285,8 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
         (a) => isNumber(a?.start) && isNumber(a?.end) && isNumber(a?.db) && a.end > a.start,
       ).map((a) => (a.bass === true ? { start: a.start, end: a.end, db: a.db, bass: true } : { start: a.start, end: a.end, db: a.db })),
       ...(typeof m.artist === 'string' && m.artist ? { artist: m.artist } : {}),
+      ...(isNumber(m.fadeIn) && m.fadeIn > 0 ? { fadeIn: Math.round(m.fadeIn) } : {}),
+      ...(isNumber(m.fadeOut) && m.fadeOut > 0 ? { fadeOut: Math.round(m.fadeOut) } : {}),
     }));
     album = typeof session!.album === 'string' ? session!.album : '';
     mixesCreated = Math.max(mixes.length, isNumber(session!.mixesCreated) ? session!.mixesCreated : 0);
@@ -1500,6 +1619,8 @@ function renderMix(m: Mix, output: string, track?: string) {
     ceilingDb: m.ceilingDb,
     encode: encodeOptions(m, track),
     headroomDb: isLossy(output) && exportSettings.lossyHeadroom ? LOSSY_HEADROOM_DB : 0,
+    fadeInSeconds: fades(m).in * HOP_SECONDS,
+    fadeOutSeconds: fades(m).out * HOP_SECONDS,
   });
 }
 
