@@ -1,4 +1,7 @@
+import { extname } from 'node:path';
 import { CHANNELS, decode, encode, probe, type EncodeOptions, type Region } from './audio-io.ts';
+import type { SourceInfo } from './checkup.ts';
+import { RecordingExaminer, type Diagnostics } from './diagnostics.ts';
 import type { LoudnessCurves } from './level.ts';
 import { Limiter } from './limiter.ts';
 import { fadeGain } from './fade.ts';
@@ -21,6 +24,12 @@ export interface Measurement extends LoudnessCurves {
   integratedLufs: number;
   /** Highest absolute sample value, linear. */
   peak: number;
+}
+
+/** A measurement of a recording as it is, with what the check-up needs on top. */
+export interface Examination extends Measurement {
+  diagnostics: Diagnostics;
+  source: SourceInfo;
 }
 
 export interface RenderOptions {
@@ -64,20 +73,31 @@ async function regionFrames(input: string, region: Region) {
   const start = region.start ?? 0;
   const end = Math.min(region.end ?? info.duration, info.duration || Infinity);
   if (!(end > start)) throw new Error('The region is empty: its end must be after its start');
-  return { sampleRate: info.sampleRate, totalFrames: (end - start) * info.sampleRate };
+  return { info, sampleRate: info.sampleRate, totalFrames: (end - start) * info.sampleRate };
 }
 
 /** Pass 1: decode the region once and measure its loudness over time. */
-export async function measure(input: string, region: Region = {}, onProgress?: Progress): Promise<Measurement> {
-  const { sampleRate, totalFrames } = await regionFrames(input, region);
+export async function measure(input: string, region: Region = {}, onProgress?: Progress): Promise<Examination> {
+  const { info, sampleRate, totalFrames } = await regionFrames(input, region);
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
+  const examiner = new RecordingExaminer(sampleRate);
   let frames = 0;
   for await (const chunk of decode(input, region)) {
     meter.push(chunk);
+    examiner.push(chunk);
     frames += chunk.length / CHANNELS;
     onProgress?.(Math.min(1, frames / totalFrames));
   }
-  return measurement(sampleRate, meter);
+  return {
+    ...measurement(sampleRate, meter),
+    diagnostics: examiner.finish(),
+    source: {
+      codec: info.codec,
+      channels: info.channels,
+      bitrateKbps: info.bitrateKbps,
+      extension: extname(input).slice(1).toLowerCase(),
+    },
+  };
 }
 
 /** Pass 2: decode again, apply the gain curve and the limiter, and encode to `output`. */

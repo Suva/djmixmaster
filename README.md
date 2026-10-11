@@ -39,7 +39,9 @@ There is no build for Intel Macs or Linux yet. On those, the tool can be run
 ## Getting started
 
 1. **Open a recording.** Drop a file on the window or use "Open recording…".
-   It is analysed once, which takes about a minute for an eight-hour file.
+   It is analysed once, which takes about a minute for an eight-hour file. A
+   button next to the file name then says whether anything is wrong with the
+   recording itself.
 2. **Mark the mix.** The whole recording starts out as one mix. Drag its edges
    in, or press "Split at gaps" to cut a night apart at the silences. Drag
    across a free part to mark another mix.
@@ -85,6 +87,23 @@ Automatically.
 - **Several mixes per recording**: each has its own name, settings and
   adjustments. Double-click a mix's tab to rename it. "Apply to all mixes"
   copies the selected mix's settings to the others.
+
+### The check-up
+
+After analysis, a button next to the file name reads "Nothing unusual found"
+or "2 things to know". It opens a short report on the recording as it is:
+
+- how much of it is clipped, and where;
+- one channel quieter than the other, silent, or out of phase with it;
+- a mono recording;
+- very short gaps that may be dropouts from the recorder;
+- a recording made very quietly;
+- the sharp upper edge that MP3 or similar encoding leaves, also in a file
+  that is lossless now;
+- the format, sample rate, length, loudness and peak level.
+
+Clipping is marked in red along the top of the overview and possible
+dropouts in white. The report describes; it does not repair yet.
 
 ### Listening and adjusting
 

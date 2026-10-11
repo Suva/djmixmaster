@@ -21,6 +21,11 @@ export interface Region {
 export interface AudioInfo {
   sampleRate: number;
   duration: number;
+  /** ffmpeg's name for the codec, such as "mp3" or "pcm_s24le". */
+  codec: string;
+  /** Channel layout as ffmpeg names it, such as "stereo" or "mono". */
+  channels: string;
+  bitrateKbps: number | null;
 }
 
 /** Where Homebrew and friends put ffmpeg; shells started outside a login session often lack these. */
@@ -60,7 +65,16 @@ export function probe(file: string): Promise<AudioInfo> {
       }
       const length = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(described);
       const duration = length ? Number(length[1]) * 3600 + Number(length[2]) * 60 + Number(length[3]) : 0;
-      resolve({ sampleRate, duration });
+      // For example: "Stream #0:0: Audio: mp3 (mp3float), 48000 Hz, stereo, fltp, 320 kb/s"
+      const stream = /Stream #.*: Audio: ([^\s,]+)[^,]*, \d+ Hz, ([^,\n]+)(.*)/.exec(described);
+      const bitrate = /(\d+) kb\/s/.exec(stream?.[3] ?? '') ?? /bitrate: (\d+) kb\/s/.exec(described);
+      resolve({
+        sampleRate,
+        duration,
+        codec: stream?.[1] ?? 'unknown',
+        channels: stream?.[2].trim() ?? 'stereo',
+        bitrateKbps: bitrate ? Number(bitrate[1]) : null,
+      });
     });
   });
 }

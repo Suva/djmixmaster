@@ -40,6 +40,8 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/gain-curve.ts` | Full-energy envelope, gain curve, hand adjustments |
 | `src/level.ts` | Combines the above; automatic target with headroom; bass correction |
 | `src/gaps.ts` | Finds silences between sets |
+| `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
+| `src/checkup.ts` | Turns that data into the findings of the check-up report |
 | `src/fade.ts` | The fade curve shared by drawing, preview and export |
 | `src/shelf.ts`, `src/limiter.ts`, `src/true-peak.ts` | The DSP applied while rendering |
 | `src/audio-io.ts` | Decoding, encoding and probing through ffmpeg |
@@ -63,8 +65,8 @@ and curves in the code are block indexes unless a name says seconds.
   dependency, and the app is bundled by esbuild. Adding a runtime dependency
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
-  `level.ts`, `gaps.ts`, `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`
-  and `encode-options.ts` are
+  `level.ts`, `gaps.ts`, `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
+  `diagnostics.ts`, `checkup.ts` and `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
 - **Preview and export must sound the same.** They share the limiter code.

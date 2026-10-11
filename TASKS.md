@@ -25,30 +25,31 @@ Things to judge by ear:
 
 ## Next
 
-### A check-up report when a recording is opened — medium
+### Check-up, second round — medium
 
-Recordings from booth recorders and PA mixers have recurring faults. The
-analysis pass already reads every sample, so it can look for them and say
-what it found in plain words. The report alone is useful; fixes can follow
-one at a time (see "Fixes for common recording faults" below).
+Opening a recording reports clipping, a quieter or dead channel, a channel
+out of phase, mono, possible dropouts, a quiet recording and the edge a low
+bitrate leaves (`src/checkup.ts`, measured by `src/diagnostics.ts`). These
+remain, and need more care to avoid false alarms:
 
-- **Clipping**: how much of the recording peaks at or above full scale. The
-  automatic target already works around it without saying why.
-- **Channel imbalance or a dead channel**: one side consistently quieter, or
-  silent.
-- **One channel out of phase**: left and right cancel when summed, which
-  takes the bass away on mono systems.
-- **Dropouts**: short stretches of digital silence in the middle of music.
-  Mark them on the timeline.
-- **Mains hum**: steady energy at 50 or 60 Hz and its harmonics.
+- **Mains hum.** Mains is 50 Hz in some regions and 60 Hz in others, so look
+  for both and say which was found. Check the harmonics as well (100/150 Hz
+  or 120/180 Hz): a steady tone with its harmonics, present in the quiet
+  parts too, is hum; a bassline near the same note is not.
 - **Rumble or DC offset**: energy below anything musical.
+- **Clicks and glitches**: sudden jumps typical of a recorder losing samples.
+- **Already limited**: the level barely moves, so a limiter was probably in
+  the chain. Heavily compressed genres can look the same.
 
-These need extra measurements per block, kept small, and so a bump of
-`ANALYSIS_VERSION`. Per-channel levels and the left/right correlation cover
-the two channel faults; the rest need a few narrow bands.
+Lessons from the first round, on an 8-hour club recording:
 
-Done when opening a recording with one of these faults says so, and a clean
-recording says nothing is wrong.
+- Dance music is full of deliberate silences. Looking for any short silence
+  found 32 "dropouts" that were pauses before drops and gated stutters. Only
+  a gap under 50 ms with no other silence within two seconds is reported now,
+  and as a note, not a fault. Nobody has yet listened to the four it finds in
+  that recording to see whether they are real.
+- The average spectrum is already collected (one stretch every four
+  seconds), which is what hum, rumble and the EQ suggestion need.
 
 ### Named settings presets — small
 
@@ -187,7 +188,8 @@ show which faults actually turn up:
 
 - Rebalance the channels, or build both from the good one.
 - Flip one channel that is out of phase.
-- Narrow filters for mains hum and its harmonics.
+- Narrow filters for mains hum and its harmonics, at 50 or 60 Hz according
+  to which the check-up found.
 - A high-pass filter for rumble and DC offset (shared with the EQ idea).
 - Patch very short dropouts.
 

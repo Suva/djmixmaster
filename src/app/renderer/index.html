@@ -14,6 +14,7 @@
       <button id="redo" title="Redo the change just undone" disabled>Redo</button>
     </div>
     <span id="file-name">No recording open</span>
+    <button id="checkup" hidden></button>
     <span class="spacer"></span>
     <span id="update-note" hidden></span>
     <span id="export-status"></span>
@@ -167,6 +168,14 @@
       </div>
     </aside>
   </main>
+  <dialog id="checkup-dialog">
+    <h3 id="checkup-title">About this recording</h3>
+    <div id="checkup-findings"></div>
+    <dl id="checkup-facts"></dl>
+    <div class="dialog-buttons">
+      <button id="checkup-close" class="primary">Close</button>
+    </div>
+  </dialog>
   <dialog id="export-dialog">
     <form method="dialog">
       <h3 id="export-title">Export</h3>

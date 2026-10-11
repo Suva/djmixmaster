@@ -3,12 +3,16 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { encode, ffmpeg } from '../src/audio-io.ts';
+import { checkup, type Examined } from '../src/checkup.ts';
+import { RecordingExaminer } from '../src/diagnostics.ts';
 import { DEFAULT_LEVEL_OPTIONS } from '../src/gain-curve.ts';
 import { findGaps, soundBetween } from '../src/gaps.ts';
 import { Limiter } from '../src/limiter.ts';
 import { LowShelf } from '../src/shelf.ts';
 import { isNewer } from '../src/version.ts';
-import { BlockEnergyMeter, HOP_SECONDS, integratedLoudness } from '../src/loudness.ts';
+import { BlockEnergyMeter, HOP_SECONDS, integratedLoudness, shortTermLoudness } from '../src/loudness.ts';
 import { level, measure, render, type Measurement } from '../src/master.ts';
 import { BREAKDOWN, SAMPLE_RATE, TRACK_LEVELS_DB, TRACK_SECONDS, writeSyntheticMix } from './synthetic-mix.ts';
 
@@ -171,6 +175,86 @@ test('limiter holds peaks that fall between the samples', () => {
   assert.ok(truePeak >= ceiling * 0.97, 'and is not pulled down further than needed');
 });
 
+/** Twelve seconds of stereo noise, the two sides related but not the same, shaped by `change`. */
+function stereoNoise(change: (left: number, right: number, frame: number) => [number, number]): Float32Array {
+  const rate = 48000;
+  const samples = new Float32Array(rate * 12 * 2);
+  let seed = 7;
+  const noise = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 2147483648 - 1;
+  };
+  for (let f = 0; f < samples.length / 2; f++) {
+    const a = noise();
+    const b = noise();
+    [samples[f * 2], samples[f * 2 + 1]] = change(0.3 * a, 0.3 * (0.6 * a + 0.8 * b), f);
+  }
+  return samples;
+}
+
+/** Runs samples through the same measuring the analysis pass does, without a file. */
+function examine(samples: Float32Array, codec = 'pcm_s16le'): Examined {
+  const meter = new BlockEnergyMeter(48000, 2);
+  const examiner = new RecordingExaminer(48000);
+  for (let at = 0; at < samples.length; at += 20000) {
+    meter.push(samples.subarray(at, at + 20000));
+    examiner.push(samples.subarray(at, at + 20000));
+  }
+  const blocks = meter.blocks();
+  return {
+    sampleRate: 48000,
+    blocks,
+    peaks: meter.peaks(),
+    shortTerm: shortTermLoudness(blocks),
+    integratedLufs: integratedLoudness(blocks),
+    peak: meter.peak,
+    diagnostics: examiner.finish(),
+    source: { codec, channels: 'stereo', bitrateKbps: null, extension: 'wav' },
+  };
+}
+
+const found = (samples: Float32Array) => checkup(examine(samples)).findings.map((finding) => finding.id);
+
+test('check-up says nothing about a healthy recording', () => {
+  const report = checkup(examine(stereoNoise((l, r) => [l, r])));
+  assert.deepEqual(report.findings, []);
+  assert.deepEqual(report.facts[0], ['Format', 'WAV, 16-bit']);
+});
+
+test('check-up finds clipping', () => {
+  const clipped = stereoNoise((l, r) => [Math.max(-1, Math.min(1, l * 8)), Math.max(-1, Math.min(1, r * 8))]);
+  const report = checkup(examine(clipped));
+  assert.equal(report.findings[0].id, 'clipping');
+  assert.equal(report.findings[0].kind, 'fault');
+  // Loud but under full scale is not clipping.
+  assert.deepEqual(found(stereoNoise((l, r) => [l * 2.2, r * 2.2])), []);
+});
+
+test('check-up finds the channel faults', () => {
+  const quieter = checkup(examine(stereoNoise((l, r) => [l, r * 0.5]))).findings;
+  assert.deepEqual(quieter.map((f) => f.id), ['quieter-channel']);
+  assert.match(quieter[0].title, /right channel is 6\.0 dB quieter/);
+  assert.deepEqual(found(stereoNoise((l) => [l, 0])), ['dead-channel']);
+  assert.deepEqual(found(stereoNoise((l) => [l, l])), ['mono']);
+  assert.deepEqual(found(stereoNoise((l) => [l, -l * 0.9 + 0.001])), ['out-of-phase']);
+});
+
+test('check-up tells a dropout from a pause in the music', () => {
+  const gap = (fromSeconds: number, seconds: number) => (l: number, r: number, f: number): [number, number] =>
+    f >= fromSeconds * 48000 && f < (fromSeconds + seconds) * 48000 ? [0, 0] : [l, r];
+  assert.deepEqual(found(stereoNoise(gap(6, 0.02))), ['dropouts'], 'a 20 ms gap on its own');
+  assert.deepEqual(found(stereoNoise(gap(6, 0.3))), [], 'a 300 ms pause');
+  const stutter = stereoNoise((l, r, f) => {
+    const t = f / 48000;
+    return (t >= 6 && t < 6.02) || (t >= 6.3 && t < 6.32) ? [0, 0] : [l, r];
+  });
+  assert.deepEqual(found(stutter), [], 'two short gaps close together');
+});
+
+test('check-up notes a quiet recording', () => {
+  assert.deepEqual(found(stereoNoise((l, r) => [l * 0.2, r * 0.2])), ['quiet']);
+});
+
 /** Median short-term loudness between two times, skipping a margin at both ends. */
 function medianLoudness(measured: Measurement, fromSeconds: number, toSeconds: number, margin = 8): number {
   const values = Array.from(
@@ -238,6 +322,21 @@ test('fades in and out at the ends without touching the middle', async () => {
   assert.ok(Math.abs(change(60)) < 0.1 && Math.abs(change(190)) < 0.1, 'the middle is untouched');
   assert.ok(Math.abs(change(250) + 6) < 0.6, 'half way down the fade out is 6 dB down');
   assert.ok(change(299) < -40, 'ends in silence');
+});
+
+test('check-up sees the edge a low bitrate leaves, also after conversion to a lossless file', async () => {
+  const mp3 = join(dir, 'low.mp3');
+  const wav = join(dir, 'from-mp3.wav');
+  const encoder = encode(mp3, 48000, { bitrateKbps: 96 });
+  await encoder.write(stereoNoise((l, r) => [l, r]));
+  await encoder.close();
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', mp3, wav]);
+
+  const asMp3 = checkup(await measure(mp3)).findings.find((f) => f.id === 'lossy');
+  const asWav = checkup(await measure(wav)).findings.find((f) => f.id === 'lossy');
+  assert.ok(asMp3, 'in the MP3 itself');
+  assert.ok(asWav, 'in the WAV made from it');
+  assert.match(asWav.detail, /This file is lossless, but the audio in it was not/);
 });
 
 test('trims to the region', async () => {

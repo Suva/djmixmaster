@@ -4,7 +4,8 @@ import { fadeGain } from '../../fade.ts';
 import { findGaps, soundBetween } from '../../gaps.ts';
 import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
-import type { Measurement } from '../../master.ts';
+import { checkup, type Checkup } from '../../checkup.ts';
+import type { Examination } from '../../master.ts';
 import type { Api } from '../api.ts';
 import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
 import { Player } from './player.ts';
@@ -30,7 +31,9 @@ const MIN_OVERVIEW_BLOCKS = Math.round(120 / HOP_SECONDS);
 interface Recording {
   path: string;
   name: string;
-  measured: Measurement;
+  measured: Examination;
+  /** What is worth knowing about the recording as it is. */
+  checkup: Checkup;
   /** Average level per block for the waveform displays, linear. */
   body: Float32Array;
   /** Silences between sets, in blocks. */
@@ -110,7 +113,7 @@ function scheduleDraw() {
     drawQueued = false;
     if (!recording) return;
     const playhead = player.time / HOP_SECONDS;
-    drawOverview(overview, { peaks: recording.measured.peaks, body: recording.body, gaps: recording.gaps }, overviewShown, mixes.map((m) => ({ ...m.region, name: m.name })), mixes.indexOf(mix), view, playhead);
+    drawOverview(overview, overviewData(recording), overviewShown, mixes.map((m) => ({ ...m.region, name: m.name })), mixes.indexOf(mix), view, playhead);
     if (!detail) return;
     // The curves can be one frame behind the region while it is being dragged.
     const length = detail.gainDb.length;
@@ -259,6 +262,61 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
     },
   };
 }
+
+function overviewData(r: Recording) {
+  const marks = (id: string) => r.checkup.findings.find((finding) => finding.id === id)?.marks ?? [];
+  return { peaks: r.measured.peaks, body: r.body, gaps: r.gaps, clipping: marks('clipping'), dropouts: marks('dropouts') };
+}
+
+// ---------------------------------------------------------------------------
+// The check-up: what the analysis noticed about the recording itself
+
+const checkupDialog = $<HTMLDialogElement>('checkup-dialog');
+
+/** Says in the header how much there is to know, and fills the panel behind it. */
+function showCheckup() {
+  const { findings, facts } = recording!.checkup;
+  const button = $('checkup');
+  button.hidden = false;
+  button.classList.toggle('faults', findings.some((finding) => finding.kind === 'fault'));
+  button.textContent =
+    findings.length === 0 ? 'Nothing unusual found' : findings.length === 1 ? '1 thing to know' : `${findings.length} things to know`;
+  button.title = 'What the analysis noticed about this recording';
+
+  $('checkup-title').textContent = `About ${recording!.name}`;
+  const list = $('checkup-findings');
+  if (findings.length === 0) {
+    const none = document.createElement('p');
+    none.className = 'note';
+    none.textContent = 'Nothing unusual found: no clipping, both channels present and in step, no gaps in the music.';
+    list.replaceChildren(none);
+  } else {
+    list.replaceChildren(
+      ...findings.map((finding) => {
+        const item = document.createElement('div');
+        item.className = `finding ${finding.kind}`;
+        const title = document.createElement('b');
+        title.textContent = finding.title;
+        const detail = document.createElement('p');
+        detail.textContent = finding.detail;
+        item.append(title, detail);
+        return item;
+      }),
+    );
+  }
+  $('checkup-facts').replaceChildren(
+    ...facts.flatMap(([label, value]) => {
+      const term = document.createElement('dt');
+      term.textContent = label;
+      const description = document.createElement('dd');
+      description.textContent = value;
+      return [term, description];
+    }),
+  );
+}
+
+$('checkup').addEventListener('click', () => checkupDialog.showModal());
+$('checkup-close').addEventListener('click', () => checkupDialog.close());
 
 /** Brings the detail view and the numbers up to date with the selected mix. */
 function recompute() {
@@ -1052,8 +1110,8 @@ $('hear-levelled').addEventListener('click', () => setHearLevelled(true));
 
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
-  // While the export dialog is up, the keys belong to it.
-  if (exportDialog.open) return;
+  // While a dialog is up, the keys belong to it.
+  if (exportDialog.open || checkupDialog.open) return;
   if (event.code === 'Space') {
     event.preventDefault();
     // Otherwise a focused button would also act on the same key press.
@@ -1247,7 +1305,9 @@ async function open(path: string) {
       measured,
       body: Float32Array.from(measured.blocks, (energy) => Math.sqrt(energy / 2)),
       gaps: findGaps(measured.blocks),
+      checkup: checkup(measured),
     };
+    showCheckup();
     overviewShown = { start: 0, end: measured.peaks.length };
     player.load(await api.mediaUrl(path));
     $('file-name').textContent = name;

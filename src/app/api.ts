@@ -1,5 +1,5 @@
 import type { EncodeOptions } from '../audio-io.ts';
-import type { Measurement, RenderResult } from '../master.ts';
+import type { Examination, RenderResult } from '../master.ts';
 
 export interface RenderRequest {
   input: string;
@@ -46,7 +46,7 @@ export interface Api {
   /** File passed on the command line, if any. */
   initialFile(): Promise<string | null>;
   pathForFile(file: File): string;
-  measure(path: string): Promise<Measurement>;
+  measure(path: string): Promise<Examination>;
   recall(path: string): Promise<Remembered>;
   remember(path: string, remembered: Remembered): void;
   /** How the window can play this recording. */

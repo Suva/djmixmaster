@@ -6,6 +6,7 @@ import {
   DEFAULT_AAC_KBPS, DEFAULT_BIT_DEPTH, DEFAULT_MP3_KBPS, isLossy, LOSSY_HEADROOM_DB, type EncodeOptions, type Region,
 } from './audio-io.ts';
 import { DEFAULT_LEVEL_OPTIONS, type LevelOptions } from './gain-curve.ts';
+import { checkup } from './checkup.ts';
 import { HOP_SECONDS } from './loudness.ts';
 import { level, measure, render, type Levelling, type Measurement, type Progress } from './master.ts';
 
@@ -219,6 +220,10 @@ async function main() {
   const minGain = gainDb.reduce((a, b) => Math.min(a, b), Infinity);
   const maxGain = gainDb.reduce((a, b) => Math.max(a, b), -Infinity);
 
+  // What is worth knowing about the recording itself, before anything is done to it.
+  for (const finding of checkup(before).findings) {
+    console.log(`${finding.kind === 'fault' ? 'Fault' : 'Note '}        ${finding.title}. ${finding.detail}`);
+  }
   console.log(`Length       ${clock(before.shortTerm.length * HOP_SECONDS)}`);
   console.log(`Input        ${lufs(before.integratedLufs)} integrated, peak ${dbfs(before.peak)}`);
   console.log(`Target       ${lufs(levelling.targetLufs)} for full-energy sections`);

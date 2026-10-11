@@ -3,7 +3,7 @@
 
 export const HOP_SECONDS = 0.1;
 /** Bump whenever a recording would measure differently, so that stored analyses are redone. */
-export const ANALYSIS_VERSION = 1;
+export const ANALYSIS_VERSION = 2;
 /** Loudness reported for digital silence. */
 export const SILENCE_LUFS = -120;
 

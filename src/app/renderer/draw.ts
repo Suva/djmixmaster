@@ -92,6 +92,9 @@ export interface OverviewData {
   body: Float32Array;
   /** Silences between sets, in blocks. */
   gaps: Region[];
+  /** Where the check-up found clipping, and possible dropouts. */
+  clipping: Region[];
+  dropouts: Region[];
 }
 
 /**
@@ -159,6 +162,17 @@ export function drawOverview(
     if (gap.end < shown.start || gap.start > shown.end) continue;
     const x0 = toX(gap.start);
     ctx.fillRect(Math.round(x0), waveHeight - 6, Math.max(2, toX(gap.end) - x0), 6);
+  }
+
+  // What the check-up found: clipping along the top edge, possible dropouts as ticks.
+  const marks: [Region[], string, number][] = [[data.clipping, COLOR.warn, 3], [data.dropouts, COLOR.hover, 7]];
+  for (const [regions, color, tall] of marks) {
+    ctx.fillStyle = color;
+    for (const mark of regions) {
+      if (mark.end < shown.start || mark.start > shown.end) continue;
+      const x0 = toX(mark.start);
+      ctx.fillRect(Math.round(x0), 0, Math.max(2, toX(mark.end) - x0), tall);
+    }
   }
 
   const zoomedMix = mixes[selected];
