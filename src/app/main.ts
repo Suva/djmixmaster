@@ -157,12 +157,8 @@ ipcMain.handle('pick-file', async () => {
 ipcMain.handle('pick-output', async (_event, suggested: string) => {
   const result = await dialog.showSaveDialog(window!, {
     defaultPath: suggested,
-    filters: [
-      { name: 'WAV (24-bit)', extensions: ['wav'] },
-      { name: 'FLAC (24-bit)', extensions: ['flac'] },
-      { name: 'MP3 (320 kbps)', extensions: ['mp3'] },
-      { name: 'AAC (256 kbps)', extensions: ['m4a'] },
-    ],
+    // The format was chosen in the export dialog; the suggested name carries it.
+    filters: [{ name: extname(suggested).slice(1).toUpperCase(), extensions: [extname(suggested).slice(1)] }],
   });
   return result.canceled || !result.filePath ? null : result.filePath;
 });

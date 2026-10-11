@@ -99,6 +99,23 @@ select {
   padding: 6px 8px;
 }
 #export-all-group { display: flex; gap: 6px; }
+
+dialog {
+  width: 420px;
+  padding: 20px 22px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
+dialog h3 { margin: 0 0 16px; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.field { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.field[hidden] { display: none; }
+.field-name { width: 92px; flex: none; color: var(--muted); }
+.field select { flex: 1; }
+dialog .note { min-height: 34px; margin: 4px 0 16px; }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; }
 #export-all-group[hidden] { display: none; }
 .toggle button:only-child { border-radius: 6px; }
 .region-title { color: var(--text); font-weight: 600; }

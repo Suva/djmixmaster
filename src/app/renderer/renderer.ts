@@ -883,6 +883,8 @@ $('hear-levelled').addEventListener('click', () => setHearLevelled(true));
 
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
+  // While the export dialog is up, the keys belong to it.
+  if (exportDialog.open) return;
   if (event.code === 'Space') {
     event.preventDefault();
     // Otherwise a focused button would also act on the same key press.
@@ -1106,7 +1108,7 @@ function saveNow() {
     mixes,
   };
   const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb };
-  api.remember(recording.path, { session, defaults });
+  api.remember(recording.path, { session, defaults: { ...defaults, export: exportSettings } });
   settleHistory();
 }
 
@@ -1129,7 +1131,15 @@ const isNumber = (value: unknown): value is number => typeof value === 'number' 
  * What comes back from disk is checked, since it may be old or damaged.
  */
 function restore(remembered: { session: unknown; defaults: unknown }, total: number) {
-  const savedDefaults = remembered.defaults as Partial<Defaults> | null;
+  const savedDefaults = remembered.defaults as (Partial<Defaults> & { export?: Partial<ExportSettings> }) | null;
+  const saved = savedDefaults?.export ?? {};
+  exportSettings = {
+    format: (['wav', 'flac', 'mp3', 'm4a'] as const).find((format) => format === saved.format) ?? DEFAULT_EXPORT_SETTINGS.format,
+    bitDepth: saved.bitDepth === 24 ? 24 : 16,
+    mp3Kbps: BITRATES.mp3.find((kbps) => kbps === saved.mp3Kbps) ?? DEFAULT_EXPORT_SETTINGS.mp3Kbps,
+    aacKbps: BITRATES.m4a.find((kbps) => kbps === saved.aacKbps) ?? DEFAULT_EXPORT_SETTINGS.aacKbps,
+    sampleRate: SAMPLE_RATES.find((rate) => rate === saved.sampleRate) ?? null,
+  };
   const defaults: Defaults = {
     options: { ...DEFAULT_LEVEL_OPTIONS, ...(savedDefaults?.options ?? {}) },
     ceilingDb: isNumber(savedDefaults?.ceilingDb) ? savedDefaults.ceilingDb : DEFAULT_CEILING_DB,
@@ -1261,6 +1271,150 @@ function exportName(m: Mix): string {
   return mixes.length > 1 ? `${recordingStem()} - ${m.name}` : `${recordingStem()} mastered`;
 }
 
+// ---------------------------------------------------------------------------
+// Export settings and the dialog that asks for them
+
+type ExportFormat = 'wav' | 'flac' | 'mp3' | 'm4a';
+
+interface ExportSettings {
+  format: ExportFormat;
+  bitDepth: 16 | 24;
+  mp3Kbps: number;
+  aacKbps: number;
+  /** Sample rate of the exported file, or null to keep the recording's. */
+  sampleRate: number | null;
+}
+
+const DEFAULT_EXPORT_SETTINGS: ExportSettings = { format: 'wav', bitDepth: 16, mp3Kbps: 320, aacKbps: 256, sampleRate: null };
+const BITRATES: Record<'mp3' | 'm4a', number[]> = { mp3: [320, 256, 192, 128], m4a: [320, 256, 192, 128] };
+const SAMPLE_RATES = [44100, 48000];
+/** Above this a WAV has to be written in an extended form that not every player reads. */
+const WAV_LIMIT_BYTES = 4 * 1024 ** 3;
+
+/** The settings last used, kept between sessions with the other defaults. */
+let exportSettings: ExportSettings = { ...DEFAULT_EXPORT_SETTINGS };
+const exportDialog = $<HTMLDialogElement>('export-dialog');
+/** The mixes the open dialog is about, for its size estimate. */
+let exportingMixes: Mix[] = [];
+
+const kHz = (rate: number) => `${rate / 1000} kHz`;
+
+/** Roughly how large one exported mix will be, in bytes. */
+function estimatedBytes(m: Mix, settings: ExportSettings): number {
+  const seconds = (m.region.end - m.region.start) * HOP_SECONDS;
+  if (settings.format === 'mp3') return (seconds * settings.mp3Kbps * 1000) / 8;
+  if (settings.format === 'm4a') return (seconds * settings.aacKbps * 1000) / 8;
+  const rate = settings.sampleRate ?? recording!.measured.sampleRate;
+  const pcm = seconds * rate * 2 * (settings.bitDepth / 8);
+  // FLAC typically packs dense dance music to around two thirds.
+  return settings.format === 'flac' ? pcm * 0.65 : pcm;
+}
+
+function size(bytes: number): string {
+  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
+}
+
+/** Shows the dialog's controls for the current settings. */
+function showExportSettings() {
+  const settings = exportSettings;
+  const lossless = settings.format === 'wav' || settings.format === 'flac';
+  for (const button of $('export-format').querySelectorAll('button')) {
+    button.classList.toggle('on', button.dataset.format === settings.format);
+  }
+  for (const button of $('export-depth').querySelectorAll('button')) {
+    button.classList.toggle('on', Number(button.dataset.depth) === settings.bitDepth);
+  }
+  $('export-depth-field').hidden = !lossless;
+  $('export-bitrate-field').hidden = lossless;
+  if (!lossless) {
+    const format = settings.format as 'mp3' | 'm4a';
+    const chosen = format === 'mp3' ? settings.mp3Kbps : settings.aacKbps;
+    $('export-bitrate').replaceChildren(
+      ...BITRATES[format].map((kbps) => new Option(`${kbps} kbps`, String(kbps), false, kbps === chosen)),
+    );
+  }
+  const own = recording!.measured.sampleRate;
+  $('export-rate').replaceChildren(
+    new Option(`Same as the recording (${kHz(own)})`, '', false, settings.sampleRate === null),
+    ...SAMPLE_RATES.filter((rate) => rate !== own).map(
+      (rate) => new Option(kHz(rate), String(rate), false, rate === settings.sampleRate),
+    ),
+  );
+
+  const sizes = exportingMixes.map((m) => estimatedBytes(m, settings));
+  const total = sizes.reduce((a, b) => a + b, 0);
+  let note = exportingMixes.length > 1 ? `About ${size(total)} in ${exportingMixes.length} files.` : `About ${size(total)}.`;
+  if (settings.format === 'wav' && sizes.some((bytes) => bytes > WAV_LIMIT_BYTES)) {
+    note += ' Over 4 GB, a WAV is written in an extended form that some players and DJ gear cannot read. FLAC avoids this.';
+  } else if (lossless && settings.bitDepth === 16) {
+    note += ' 16-bit is dithered, so quiet passages and fades stay clean.';
+  }
+  $('export-note').textContent = note;
+}
+
+for (const button of $('export-format').querySelectorAll('button')) {
+  button.addEventListener('click', () => {
+    exportSettings.format = button.dataset.format as ExportFormat;
+    showExportSettings();
+  });
+}
+for (const button of $('export-depth').querySelectorAll('button')) {
+  button.addEventListener('click', () => {
+    exportSettings.bitDepth = Number(button.dataset.depth) as 16 | 24;
+    showExportSettings();
+  });
+}
+$<HTMLSelectElement>('export-bitrate').addEventListener('change', (event) => {
+  const kbps = Number((event.target as HTMLSelectElement).value);
+  if (exportSettings.format === 'mp3') exportSettings.mp3Kbps = kbps;
+  else exportSettings.aacKbps = kbps;
+  showExportSettings();
+});
+$<HTMLSelectElement>('export-rate').addEventListener('change', (event) => {
+  const value = (event.target as HTMLSelectElement).value;
+  exportSettings.sampleRate = value ? Number(value) : null;
+  showExportSettings();
+});
+$('export-cancel').addEventListener('click', () => exportDialog.close('cancel'));
+
+/** Asks how to export the given mixes. Resolves to false if the dialog is cancelled. */
+function askExportSettings(title: string, forMixes: Mix[]): Promise<boolean> {
+  exportingMixes = forMixes;
+  $('export-title').textContent = title;
+  $('export-go').textContent = forMixes.length > 1 ? 'Choose a folder…' : 'Choose where to save…';
+  // If the recording's own rate was chosen explicitly before, that is the same as keeping it.
+  if (exportSettings.sampleRate === recording!.measured.sampleRate) exportSettings.sampleRate = null;
+  showExportSettings();
+  const before = { ...exportSettings };
+  exportDialog.returnValue = '';
+  exportDialog.showModal();
+  return new Promise((resolve) => {
+    exportDialog.addEventListener(
+      'close',
+      () => {
+        // Only the dialog's own button goes ahead; Esc and Cancel do not, and
+        // they leave the settings as they were.
+        const go = exportDialog.returnValue === 'go';
+        if (go) scheduleSave();
+        else exportSettings = before;
+        resolve(go);
+      },
+      { once: true },
+    );
+  });
+}
+
+/** The encoder's view of the export settings. */
+function encodeOptions(title: string) {
+  const { format, bitDepth, mp3Kbps, aacKbps, sampleRate } = exportSettings;
+  return {
+    title,
+    sampleRate: sampleRate ?? undefined,
+    bitDepth: format === 'wav' || format === 'flac' ? bitDepth : undefined,
+    bitrateKbps: format === 'mp3' ? mp3Kbps : format === 'm4a' ? aacKbps : undefined,
+  };
+}
+
 function renderMix(m: Mix, output: string) {
   const { gainDb, bassDb } = compute(m).detail;
   return api.render({
@@ -1271,7 +1425,7 @@ function renderMix(m: Mix, output: string) {
     gainDb,
     bassDb: bassDb ?? new Float32Array(gainDb.length),
     ceilingDb: m.ceilingDb,
-    title: exportName(m),
+    encode: encodeOptions(exportName(m)),
   });
 }
 
@@ -1287,8 +1441,9 @@ function showExported(text: string, reveal: string) {
 async function exportMix() {
   if (!recording || busy) return;
   player.pause();
+  if (!(await askExportSettings(`Export “${exportName(mix)}”`, [mix]))) return;
   const folder = recording.path.replace(/[^\\/]+$/, '');
-  const output = await api.pickOutput(`${folder}${fileName(exportName(mix))}.wav`);
+  const output = await api.pickOutput(`${folder}${fileName(exportName(mix))}.${exportSettings.format}`);
   if (!output) return;
   $('export-status').textContent = '';
   progressLabel = `Exporting ${mix.name}`;
@@ -1309,9 +1464,10 @@ async function exportMix() {
 async function exportAll() {
   if (!recording || busy) return;
   player.pause();
+  if (!(await askExportSettings(`Export all ${mixes.length} mixes`, mixes))) return;
   const folder = await api.pickFolder();
   if (!folder) return;
-  const extension = $<HTMLSelectElement>('format').value;
+  const extension = exportSettings.format;
   // Named mixes become files of that name; the rest are numbered in order.
   const taken = new Set<string>();
   const outputs = mixes.map((m, index) => {

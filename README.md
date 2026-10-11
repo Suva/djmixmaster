@@ -58,7 +58,10 @@ Running from the project needs Node 24 or newer and ffmpeg on the machine
 - **Exact preview in every format**: recordings the built-in player cannot
   seek in exactly (variable-bitrate MP3s) or cannot play (AIFF) are decoded by
   ffmpeg from the playhead instead, at the cost of a moment's delay on each jump.
-- **Export formats**: WAV and FLAC (24-bit), MP3 (320 kbps), AAC (256 kbps).
+- **Export**: a dialog asks for the format (WAV, FLAC, MP3 or AAC), the bit
+  depth for WAV and FLAC (16-bit, dithered, or 24-bit), the bitrate for MP3
+  and AAC, and the sample rate. It shows roughly how large the files will be
+  and remembers what you chose.
 
 ### Building the app
 
@@ -91,6 +94,9 @@ The output format follows the file extension: `.wav`, `.flac`, `.mp3` or
 |---|---|---|
 | `--start`, `--end` | The mix inside the recording, in seconds or `h:mm:ss` | whole file |
 | `-o`, `--output` | Output file | `<input>.mastered.wav` |
+| `--bit-depth <16\|24>` | Bits per sample for `.wav` and `.flac`; 16-bit is dithered | 16 |
+| `--bitrate <kbps>` | Bitrate for `.mp3` and `.m4a` | 320 and 256 |
+| `--sample-rate <Hz>` | Sample rate of the output | the input's |
 | `--force` | Overwrite the output if it exists | off |
 | `--analyze-only` | Print the planned gain without writing audio | off |
 | `--dump <file.csv>` | Write the loudness and gain curves for inspection | off |

@@ -17,12 +17,6 @@
     <span class="spacer"></span>
     <span id="export-status"></span>
     <span id="export-all-group" hidden>
-      <select id="format" title="Format for Export all">
-        <option value="wav">WAV</option>
-        <option value="flac">FLAC</option>
-        <option value="mp3">MP3</option>
-        <option value="m4a">AAC</option>
-      </select>
       <button id="export-all" disabled>Export all…</button>
     </span>
     <button id="export" class="primary" disabled>Export mix…</button>
@@ -168,6 +162,40 @@
       <button id="reset">Reset settings</button>
     </aside>
   </main>
+  <dialog id="export-dialog">
+    <form method="dialog">
+      <h3 id="export-title">Export</h3>
+      <div class="field">
+        <span class="field-name">Format</span>
+        <div class="toggle" role="group" aria-label="Format" id="export-format">
+          <button type="button" data-format="wav">WAV</button>
+          <button type="button" data-format="flac">FLAC</button>
+          <button type="button" data-format="mp3">MP3</button>
+          <button type="button" data-format="m4a">AAC</button>
+        </div>
+      </div>
+      <div class="field" id="export-depth-field">
+        <span class="field-name">Bit depth</span>
+        <div class="toggle" role="group" aria-label="Bit depth" id="export-depth">
+          <button type="button" data-depth="16" title="The usual choice for sharing and playing. Dithered, so quiet passages stay clean.">16-bit</button>
+          <button type="button" data-depth="24" title="Larger files. Worth it if the file will be processed further.">24-bit</button>
+        </div>
+      </div>
+      <div class="field" id="export-bitrate-field">
+        <label class="field-name" for="export-bitrate">Bitrate</label>
+        <select id="export-bitrate"></select>
+      </div>
+      <div class="field">
+        <label class="field-name" for="export-rate">Sample rate</label>
+        <select id="export-rate"></select>
+      </div>
+      <p class="note" id="export-note"></p>
+      <div class="dialog-buttons">
+        <button type="button" id="export-cancel">Cancel</button>
+        <button type="submit" id="export-go" class="primary" value="go">Choose where to save…</button>
+      </div>
+    </form>
+  </dialog>
   <script src="renderer.js"></script>
 </body>
 </html>

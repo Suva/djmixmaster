@@ -91,16 +91,44 @@ export async function* decode(file: string, region: Region = {}): AsyncGenerator
   if (code !== 0) throw new Error(`ffmpeg decode failed: ${err.trim() || `exit code ${code}`}`);
 }
 
-function codecArgs(output: string): string[] {
-  switch (extname(output).toLowerCase()) {
+/** How an exported file is written. Anything left out takes the default for its format. */
+export interface EncodeOptions {
+  /** Bits per sample for WAV and FLAC. 16-bit output is dithered. */
+  bitDepth?: 16 | 24;
+  /** Bitrate for MP3 and AAC, in kbps. */
+  bitrateKbps?: number;
+  /** Sample rate of the file, if it should differ from the audio's own. */
+  sampleRate?: number;
+  /** Written into the file's tags. */
+  title?: string;
+}
+
+export const DEFAULT_BIT_DEPTH = 16;
+export const DEFAULT_MP3_KBPS = 320;
+export const DEFAULT_AAC_KBPS = 256;
+
+function codecArgs(output: string, sampleRate: number, options: EncodeOptions): string[] {
+  const extension = extname(output).toLowerCase();
+  const lossless = extension === '.wav' || extension === '.flac';
+  const sixteen = lossless && (options.bitDepth ?? DEFAULT_BIT_DEPTH) === 16;
+
+  // Converting the rate and reducing to 16 bits happen in one step, in that
+  // order, so the dither is the last thing done to the audio. Without dither,
+  // cutting to 16 bits leaves distortion on quiet passages and fades.
+  const convert: string[] = [];
+  if (options.sampleRate && options.sampleRate !== sampleRate) convert.push(String(options.sampleRate));
+  if (sixteen) convert.push('osf=s16', 'dither_method=triangular');
+  const filter = convert.length ? ['-af', `aresample=${convert.join(':')}`] : [];
+
+  switch (extension) {
     case '.wav':
-      return ['-c:a', 'pcm_s24le', '-rf64', 'auto'];
+      return [...filter, '-c:a', sixteen ? 'pcm_s16le' : 'pcm_s24le', '-rf64', 'auto'];
     case '.flac':
-      return ['-c:a', 'flac', '-sample_fmt', 's32', '-bits_per_raw_sample', '24'];
+      return [...filter, '-c:a', 'flac', ...(sixteen ? ['-sample_fmt', 's16'] : ['-sample_fmt', 's32', '-bits_per_raw_sample', '24'])];
     case '.mp3':
-      return ['-c:a', 'libmp3lame', '-b:a', '320k'];
+      return [...filter, '-c:a', 'libmp3lame', '-b:a', `${options.bitrateKbps ?? DEFAULT_MP3_KBPS}k`];
     case '.m4a':
-      return ['-c:a', 'aac', '-b:a', '256k'];
+      return [...filter, '-c:a', 'aac', '-b:a', `${options.bitrateKbps ?? DEFAULT_AAC_KBPS}k`];
     default:
       throw new Error(`Unsupported output format "${extname(output)}" (use .wav, .flac, .mp3 or .m4a)`);
   }
@@ -111,16 +139,13 @@ export interface Encoder {
   close(): Promise<void>;
 }
 
-/**
- * Encodes interleaved stereo float32 to a file, picking the codec from the
- * extension. `title`, if given, is written into the file's tags.
- */
-export function encode(output: string, sampleRate: number, title?: string): Encoder {
+/** Encodes interleaved stereo float32 at `sampleRate` to a file, picking the codec from the extension. */
+export function encode(output: string, sampleRate: number, options: EncodeOptions = {}): Encoder {
   const args = [
     '-v', 'error', '-y',
     '-f', 'f32le', '-ar', String(sampleRate), '-ac', String(CHANNELS), '-i', '-',
-    ...codecArgs(output),
-    ...(title ? ['-metadata', `title=${title}`] : []),
+    ...codecArgs(output, sampleRate, options),
+    ...(options.title ? ['-metadata', `title=${options.title}`] : []),
     output,
   ];
   const child = spawn(ffmpeg(), args, { stdio: ['pipe', 'ignore', 'pipe'] });

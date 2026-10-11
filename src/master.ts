@@ -1,4 +1,4 @@
-import { CHANNELS, decode, encode, probe, type Region } from './audio-io.ts';
+import { CHANNELS, decode, encode, probe, type EncodeOptions, type Region } from './audio-io.ts';
 import type { LoudnessCurves } from './level.ts';
 import { Limiter } from './limiter.ts';
 import { LowShelf } from './shelf.ts';
@@ -27,8 +27,8 @@ export interface RenderOptions {
   ceilingDb: number | null;
   /** Gain of the bass shelf in dB per 100 ms block; omit to leave the tone alone. */
   bassDb?: Float32Array;
-  /** Title to write into the exported file's tags. */
-  title?: string;
+  /** Format details of the exported file. */
+  encode?: EncodeOptions;
 }
 
 export interface RenderResult extends Measurement {
@@ -93,7 +93,7 @@ export async function render(
 
   const limiter = options.ceilingDb === null ? null : new Limiter(sampleRate, CHANNELS, options.ceilingDb);
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
-  const encoder = encode(output, sampleRate, options.title);
+  const encoder = encode(output, sampleRate, options.encode);
 
   const emit = async (samples: Float32Array) => {
     if (samples.length === 0) return;

@@ -2,7 +2,7 @@
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, resolve } from 'node:path';
-import type { Region } from './audio-io.ts';
+import { DEFAULT_AAC_KBPS, DEFAULT_BIT_DEPTH, DEFAULT_MP3_KBPS, type EncodeOptions, type Region } from './audio-io.ts';
 import { DEFAULT_LEVEL_OPTIONS, type LevelOptions } from './gain-curve.ts';
 import { HOP_SECONDS } from './loudness.ts';
 import { level, measure, render, type Levelling, type Measurement, type Progress } from './master.ts';
@@ -17,6 +17,9 @@ Region
 
 Output
   -o, --output <file>  Output file; .wav, .flac, .mp3 or .m4a (default: <input>.mastered.wav)
+  --bit-depth <16|24>  Bits per sample for .wav and .flac; 16-bit is dithered (default: ${DEFAULT_BIT_DEPTH})
+  --bitrate <kbps>     Bitrate for .mp3 and .m4a (default: ${DEFAULT_MP3_KBPS} and ${DEFAULT_AAC_KBPS})
+  --sample-rate <Hz>   Sample rate of the output (default: the input's)
   --force              Overwrite the output file if it exists
   --analyze-only       Measure and print the planned gain without writing audio
   --dump <file.csv>    Write the loudness and gain curves for inspection
@@ -46,6 +49,7 @@ interface Args {
   region: Region;
   options: LevelOptions;
   ceilingDb: number | null;
+  encode: EncodeOptions;
   analyzeOnly: boolean;
   dump?: string;
   force: boolean;
@@ -65,6 +69,7 @@ function parseArgs(argv: string[]): Args {
     region: {},
     options: { ...DEFAULT_LEVEL_OPTIONS },
     ceilingDb: -1,
+    encode: {},
     analyzeOnly: false,
     force: false,
   };
@@ -92,6 +97,14 @@ function parseArgs(argv: string[]): Args {
       case '--start': args.region.start = parseTime(value()); break;
       case '--end': args.region.end = parseTime(value()); break;
       case '--force': args.force = true; break;
+      case '--bit-depth': {
+        const bits = number();
+        if (bits !== 16 && bits !== 24) throw new Error('--bit-depth must be 16 or 24');
+        args.encode.bitDepth = bits;
+        break;
+      }
+      case '--bitrate': args.encode.bitrateKbps = number(); break;
+      case '--sample-rate': args.encode.sampleRate = number(); break;
       case '--analyze-only': args.analyzeOnly = true; break;
       case '--dump': args.dump = value(); break;
       case '--target': args.options.targetLufs = number(); break;
@@ -125,6 +138,8 @@ function parseArgs(argv: string[]): Args {
   if (!(smoothSeconds >= 0)) throw new Error('--smooth must not be negative');
   if (!(slewDbPerSecond > 0)) throw new Error('--slew must be positive');
   if (args.ceilingDb !== null && args.ceilingDb > 0) throw new Error('--ceiling must be 0 dBFS or lower');
+  if (args.encode.bitrateKbps !== undefined && !(args.encode.bitrateKbps > 0)) throw new Error('--bitrate must be positive');
+  if (args.encode.sampleRate !== undefined && !(args.encode.sampleRate >= 8000)) throw new Error('--sample-rate must be 8000 Hz or more');
   return args;
 }
 
@@ -196,7 +211,7 @@ async function main() {
   let after: Measurement | undefined;
   if (!args.analyzeOnly) {
     const result = await render(
-      args.input, args.region, gainDb, output, { ceilingDb: args.ceilingDb, bassDb }, progress('Rendering'),
+      args.input, args.region, gainDb, output, { ceilingDb: args.ceilingDb, bassDb, encode: args.encode }, progress('Rendering'),
     );
     after = result;
     console.log(`Output       ${lufs(result.integratedLufs)} integrated, peak ${dbfs(result.peak)}`);

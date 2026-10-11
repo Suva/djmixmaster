@@ -1,3 +1,4 @@
+import type { EncodeOptions } from '../audio-io.ts';
 import type { Measurement, RenderResult } from '../master.ts';
 
 export interface RenderRequest {
@@ -8,8 +9,8 @@ export interface RenderRequest {
   end: number;
   gainDb: Float32Array;
   bassDb: Float32Array;
-  /** Written into the exported file's tags. */
-  title: string;
+  /** Format details of the exported file, including the title for its tags. */
+  encode: EncodeOptions;
   ceilingDb: number | null;
 }
 

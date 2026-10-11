@@ -17,7 +17,7 @@ const progress = (fraction: number) => {
 async function run(job: Job): Promise<unknown> {
   if (job.kind === 'measure') return measure(job.input, {}, progress);
   const region = { start: job.start, end: job.end };
-  return render(job.input, region, job.gainDb, job.output, { ceilingDb: job.ceilingDb, bassDb: job.bassDb, title: job.title }, progress);
+  return render(job.input, region, job.gainDb, job.output, { ceilingDb: job.ceilingDb, bassDb: job.bassDb, encode: job.encode }, progress);
 }
 
 run(workerData as Job).then(

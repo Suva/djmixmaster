@@ -30,7 +30,9 @@ Things to judge by ear:
 Exports carry a title but nothing else.
 
 - Add artist, album and date fields per mix (or per recording, inherited by
-  its mixes) and write them into the exported file.
+  its mixes) and write them into the exported file. The export dialog is the
+  natural place to enter them; `EncodeOptions` in `audio-io.ts` already
+  carries the title.
 - Optionally write a `.cue` file next to each export.
 - A cue sheet needs track boundaries. The steps in the gain curve hint at
   them but are not reliable on their own; start with markers placed by hand
@@ -54,7 +56,8 @@ MP3 and AAC encoding reshape the waveform after the limiter, so peaks land
 above the ceiling (0.7 dB over in one measured case).
 
 - Offer, or apply by default, an extra margin for `.mp3` and `.m4a` exports.
-- Decide whether it is automatic or a visible setting.
+- The export dialog is the place for it: a setting shown when a lossy format
+  is chosen.
 
 Done when an MP3 export measures at or under the ceiling in true peak.
 
