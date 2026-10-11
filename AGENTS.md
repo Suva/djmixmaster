@@ -151,6 +151,22 @@ Do not write test data there.
   Neither installer is signed for distribution. The Windows app has been used
   on a real machine, but changes are developed and checked on macOS.
 
+## Releasing a version
+
+The version number lives in `package.json` (and `package-lock.json`, which
+npm keeps in step). `npm version` updates both, commits, and creates the
+matching tag; pushing the tag makes GitHub build and publish the installers.
+
+```bash
+npm version minor -m "Release %s"   # or: patch, major, or an exact number
+git push --follow-tags
+```
+
+- The working folder has to be clean first.
+- Use `minor` for new features and `patch` for fixes only.
+- A tag made any other way still builds, with a warning that `package.json`
+  disagrees. Fix it by setting the version there to match.
+
 ## Working agreements
 
 - Commit and push only when asked. Work goes to `main` unless a pull request

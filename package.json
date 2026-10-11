@@ -1,6 +1,6 @@
 {
   "name": "djmaster",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Levels the loudness of DJ mixes track by track without pumping the breakdowns",
   "type": "module",
   "private": true,

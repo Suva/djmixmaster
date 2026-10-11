@@ -72,8 +72,11 @@ npm run package
 ```
 
 This builds an installer for the system it runs on into `release/`: a `.dmg`
-on macOS, a setup `.exe` on Windows. Pushing a version tag such as `v0.2.0`
-makes GitHub build both and publish them as a release (see
+on macOS, a setup `.exe` on Windows.
+
+To publish a version, run `npm version minor` (or `patch`) and then
+`git push --follow-tags`. That updates the version number, tags it, and makes
+GitHub build both installers and publish them as a release (see
 `.github/workflows/release.yml`).
 
 The Mac app is built for Apple Silicon and signed locally only: it runs on
