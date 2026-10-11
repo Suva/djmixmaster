@@ -66,7 +66,14 @@ jobs:
         with:
           path: installers
           merge-multiple: true
-      - name: Create the release with both installers
-        run: gh release create "$GITHUB_REF_NAME" installers/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+      # A tag made on GitHub's "new release" page already has its release; one
+      # pushed from a terminal does not. Either way the installers end up on it.
+      - name: Put both installers on the release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" installers/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" installers/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
