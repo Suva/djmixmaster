@@ -1,0 +1,158 @@
+# Working on DJ Mix Master
+
+Notes for anyone, human or AI agent, changing this code. The [README](README.md)
+explains what the program does and how to use it; this file covers how the
+code is put together and how to change it safely. Open work is in
+[TASKS.md](TASKS.md).
+
+## Commands
+
+```bash
+npm install          # once
+npm start            # build and run the app from the project
+npm test             # unit tests, plus an end-to-end run on a synthetic mix
+npm run typecheck    # tsc, no output
+npm run package      # build the macOS .dmg into release/
+node src/cli.ts --help
+```
+
+Node 24 or newer is required. From the project, the app and the command line
+use the ffmpeg installed on the machine (`brew install ffmpeg`); only the
+packaged app carries its own.
+
+## How it fits together
+
+Everything works in **blocks of 100 ms** (`HOP_SECONDS`). Positions, regions
+and curves in the code are block indexes unless a name says seconds.
+
+1. **Measure** (`src/master.ts` `measure`, `src/loudness.ts`): one streaming
+   pass over the audio gives, per block, the K-weighted energy, the energy of
+   the low band, and the peak.
+2. **Level** (`src/level.ts`, `src/gain-curve.ts`): pure functions turn those
+   measurements and the settings into a gain curve and a bass-shelf curve.
+   This is cheap and re-runs on every settings change in the app.
+3. **Render** (`src/master.ts` `render`): a second streaming pass applies the
+   shelf and the gain, runs the limiter and encodes.
+
+| Path | What lives there |
+|---|---|
+| `src/loudness.ts` | Streaming meter (BS.1770), short-term and integrated loudness |
+| `src/gain-curve.ts` | Full-energy envelope, gain curve, hand adjustments |
+| `src/level.ts` | Combines the above; automatic target with headroom; bass correction |
+| `src/gaps.ts` | Finds silences between sets |
+| `src/shelf.ts`, `src/limiter.ts`, `src/true-peak.ts` | The DSP applied while rendering |
+| `src/audio-io.ts` | Decoding, encoding and probing through ffmpeg |
+| `src/cli.ts` | Command-line tool |
+| `src/app/main.ts` | Electron main process: windows, dialogs, storage, media serving |
+| `src/app/worker.ts` | Runs one measure or render job off the main thread |
+| `src/app/playback.ts` | Decides whether a recording must be streamed for playback |
+| `src/app/api.ts` | The interface between the window and the main process |
+| `src/app/renderer/renderer.ts` | The window: state, mixes, interaction, undo, export |
+| `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
+| `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
+| `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
+
+## Rules that are easy to break
+
+- **Erasable TypeScript only.** The command line and the tests run `.ts`
+  files directly under Node, which strips types and nothing else. No enums,
+  no parameter properties, no namespaces. Imports name the `.ts` extension.
+- **No runtime dependencies.** Everything in `package.json` is a dev
+  dependency, and the app is bundled by esbuild. Adding a runtime dependency
+  also means changing what gets packaged.
+- **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
+  `level.ts`, `gaps.ts`, `shelf.ts`, `limiter.ts` and `true-peak.ts` are
+  bundled into the window and the audio worklet. They must not import Node
+  modules.
+- **Preview and export must sound the same.** They share the limiter code.
+  The bass shelf in `shelf.ts` uses the same formulas as the Web Audio
+  `lowshelf` filter the preview uses; change one and the other must follow.
+- **Bump `ANALYSIS_VERSION`** in `loudness.ts` whenever a recording would
+  measure differently. Stored analyses are keyed on it and are redone.
+- **Saved sessions are read defensively.** `restore` in `renderer.ts` checks
+  everything that comes back from disk. A new field on a mix needs a default
+  there, or old sessions lose it. A breaking change needs a new `version`.
+- **Never load a recording whole.** Files are hours long. Decode and encode
+  as streams; keep per-block data, not per-sample data, in memory.
+- **Clicks are not drags.** Pointer handlers ignore movement under
+  `DRAG_START_PX`. New drag interactions should do the same.
+
+## Checking changes to the app
+
+The unit tests cover the core. The window has no test suite; it is checked by
+driving the real app with a script. Setting these environment variables puts
+the app into a mode for that:
+
+| Variable | Effect |
+|---|---|
+| `DJMASTER_SHOT=<file.png>` | After the first recording is drawn, save a picture of the window and quit |
+| `DJMASTER_SHOT_SCRIPT=<js>` | Run this JavaScript in the window first; its result is printed as `[script] ...` |
+| `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
+| `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
+
+```bash
+DJMASTER_SHOT=/tmp/shot.png DJMASTER_SHOT_DATA=/tmp/djm-data \
+DJMASTER_SHOT_SCRIPT="document.getElementById('stats').innerText" \
+npx electron . some-recording.wav
+```
+
+In this mode the window draws off screen (so it works with the display
+asleep), audio runs without an output device (nothing is heard), and the
+app's data folder is separate from the user's. The script can click buttons
+by id, dispatch mouse and keyboard events, and call `window.api` directly.
+
+- **Always set `DJMASTER_SHOT_DATA`.** Without it the check uses a shared
+  temporary folder and earlier runs leak into later ones.
+- **A recording must be given on the command line**, or the window never
+  reports that it has drawn and the app does not quit.
+- **Native dialogs cannot be scripted.** Call `window.api.render(...)` or use
+  `DJMASTER_SHOT_FOLDER` instead of clicking Export.
+- **Wait for changes to settle.** Edits are saved, and become undo steps,
+  400 ms after the last change.
+- **Run it with a time limit.** A script that throws or waits forever leaves
+  the app running.
+
+Say what was checked this way and what was not. Nobody has listened to the
+output of an agent's change until a person does.
+
+## Where things are stored
+
+The app's data folder is `~/Library/Application Support/DJ Mix Master` on
+macOS, the same for `npm start` and the packaged app.
+
+| Inside it | What |
+|---|---|
+| `analyses/` | One measurement per recording, keyed on path, size, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
+| `sessions/` | The mixes, settings and hand adjustments per recording, keyed on its path |
+| `last-settings.json` | Settings last in use, for recordings opened for the first time |
+
+Do not write test data there.
+
+## Things worth knowing
+
+- **ffmpeg is found** through `DJMASTER_FFMPEG`, then `PATH`, then the usual
+  Homebrew folders. The packaged app sets the variable to its bundled copy.
+- **Playback has two paths.** The audio element plays most formats straight
+  from the file. Variable-bitrate MP3s (where it lands tens of seconds off)
+  and formats it cannot play are decoded by ffmpeg from the playhead and
+  streamed. `needsStreaming` in `playback.ts` decides.
+- **The window is served from `djm://app/`**, not `file://`, so that audio can
+  pass through Web Audio. Only files listed in `APP_FILES` in `main.ts` are
+  served; a new file in `dist/` has to be added there.
+- **Decoded MP3s can exceed full scale.** A clipped recording decodes with
+  peaks several dB above 0 dBFS. The pipeline is floating point throughout
+  and must stay that way.
+- **Audio files are ignored by git**, as are `dist/` and `release/`. Test
+  recordings in the project folder stay local.
+- **Packaging is macOS on Apple Silicon only**, signed locally. See the
+  README for what that means for other machines.
+
+## Working agreements
+
+- Commit and push only when asked. Work goes to `main` unless a pull request
+  is asked for.
+- Write for a reader who was not there: comments say why the code is the way
+  it is, and user-facing text avoids jargon.
+- When a change makes something in the README or in this file untrue, fix
+  the text in the same change.
+- When a task in [TASKS.md](TASKS.md) is done, remove it from there.
