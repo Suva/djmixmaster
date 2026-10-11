@@ -96,7 +96,7 @@ export interface OverviewData {
  */
 export function drawOverview(
   canvas: HTMLCanvasElement, data: OverviewData, shown: Region,
-  mixes: Region[], selected: number, view: Region, playhead: number | null,
+  mixes: (Region & { name: string })[], selected: number, view: Region, playhead: number | null,
 ) {
   const { ctx, width, height } = fit(canvas);
   const waveHeight = height - AXIS;
@@ -134,13 +134,17 @@ export function drawOverview(
     ctx.fillStyle = index === selected ? COLOR.after : COLOR.otherMix;
     ctx.fillRect(x0 - 1, 0, 2, waveHeight);
     ctx.fillRect(x1 - 1, 0, 2, waveHeight);
+    // The mix's number and as much of its name as fits inside it.
     const labelX = Math.max(0, x0);
-    if (mixes.length > 1 && x1 - labelX > 22) {
-      ctx.fillStyle = '#14161a';
-      ctx.fillRect(labelX + 1, 0, 16, 15);
+    const room = Math.min(width, x1) - labelX - 14;
+    let label = `${index + 1}  ${mix.name}`;
+    while (label.length > 1 && ctx.measureText(label).width > room) label = `${label.slice(0, -2).trimEnd()}…`;
+    if (room > 8 && ctx.measureText(label).width <= room) {
+      ctx.fillStyle = 'rgba(16, 18, 22, 0.85)';
+      ctx.fillRect(labelX + 1, 0, ctx.measureText(label).width + 10, 15);
       ctx.fillStyle = index === selected ? COLOR.after : COLOR.label;
-      ctx.textAlign = 'center';
-      ctx.fillText(String(index + 1), labelX + 9, 8);
+      ctx.textAlign = 'left';
+      ctx.fillText(label, labelX + 6, 8);
     }
   });
 

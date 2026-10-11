@@ -107,6 +107,9 @@ function serve(request: Request): Promise<Response> | Response {
 let window: BrowserWindow | null = null;
 let running: Worker | null = null;
 
+/** What a job fails with when it is stopped before finishing. */
+const CANCELLED = 'Cancelled';
+
 /** Runs a job in a worker; starting another job abandons the one in flight. */
 function runJob(job: Job): Promise<unknown> {
   running?.terminate();
@@ -121,7 +124,7 @@ function runJob(job: Job): Promise<unknown> {
     worker.on('error', reject);
     worker.on('exit', () => {
       if (running === worker) running = null;
-      reject(new Error('Cancelled'));
+      reject(new Error(CANCELLED));
     });
   });
 }
@@ -253,12 +256,20 @@ ipcMain.on('remember', (_event, path: string, remembered: Remembered) => {
     .catch((error) => console.error('Could not save the session:', error));
 });
 
-ipcMain.handle('render', (_event, request: RenderRequest) => {
+ipcMain.handle('render', async (_event, request: RenderRequest) => {
   if (resolve(request.output) === resolve(request.input)) {
     throw new Error('Choose a different name: this would overwrite the recording itself');
   }
-  return runJob({ kind: 'render', ...request });
+  try {
+    return await runJob({ kind: 'render', ...request });
+  } catch (error) {
+    // A cancelled export leaves half a file behind; nobody wants that.
+    if (error instanceof Error && error.message === CANCELLED) await rm(request.output, { force: true });
+    throw error;
+  }
 });
+
+ipcMain.on('cancel', () => running?.terminate());
 
 ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 
@@ -282,7 +293,9 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#14161a',
     title: 'DJ Mix Master',
-    webPreferences: { preload: join(__dirname, 'preload.cjs') },
+    // Automated checks draw off screen, so they also run while the display is asleep.
+    show: !SCREENSHOT,
+    webPreferences: { preload: join(__dirname, 'preload.cjs'), offscreen: Boolean(SCREENSHOT) },
   });
   if (SCREENSHOT) {
     window.webContents.on('console-message', (event) => console.log(`[window] ${event.message}`));

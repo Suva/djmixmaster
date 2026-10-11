@@ -27,6 +27,8 @@ export interface RenderOptions {
   ceilingDb: number | null;
   /** Gain of the bass shelf in dB per 100 ms block; omit to leave the tone alone. */
   bassDb?: Float32Array;
+  /** Title to write into the exported file's tags. */
+  title?: string;
 }
 
 export interface RenderResult extends Measurement {
@@ -91,7 +93,7 @@ export async function render(
 
   const limiter = options.ceilingDb === null ? null : new Limiter(sampleRate, CHANNELS, options.ceilingDb);
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
-  const encoder = encode(output, sampleRate);
+  const encoder = encode(output, sampleRate, options.title);
 
   const emit = async (samples: Float32Array) => {
     if (samples.length === 0) return;

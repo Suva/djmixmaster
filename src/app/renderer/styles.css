@@ -54,9 +54,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 button.primary:hover:not(:disabled) { background: #5be6ab; }
 
-#progress { position: relative; height: 22px; background: var(--lane); border-bottom: 1px solid var(--border); }
+#progress { position: relative; display: flex; align-items: center; height: 30px; background: var(--lane); border-bottom: 1px solid var(--border); }
 #progress-bar { position: absolute; inset: 0 auto 0 0; width: 0; background: rgba(61, 220, 151, 0.28); }
-#progress-label { position: relative; display: block; padding: 2px 16px; color: var(--text); font-size: 12px; }
+#progress-label { position: relative; flex: 1; padding: 2px 16px; color: var(--text); font-size: 12px; }
+#cancel { position: relative; margin-right: 16px; padding: 2px 12px; font-size: 12px; }
 
 main { flex: 1; display: flex; min-height: 0; }
 

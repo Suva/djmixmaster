@@ -111,12 +111,16 @@ export interface Encoder {
   close(): Promise<void>;
 }
 
-/** Encodes interleaved stereo float32 to a file, picking the codec from the extension. */
-export function encode(output: string, sampleRate: number): Encoder {
+/**
+ * Encodes interleaved stereo float32 to a file, picking the codec from the
+ * extension. `title`, if given, is written into the file's tags.
+ */
+export function encode(output: string, sampleRate: number, title?: string): Encoder {
   const args = [
     '-v', 'error', '-y',
     '-f', 'f32le', '-ar', String(sampleRate), '-ac', String(CHANNELS), '-i', '-',
     ...codecArgs(output),
+    ...(title ? ['-metadata', `title=${title}`] : []),
     output,
   ];
   const child = spawn(ffmpeg(), args, { stdio: ['pipe', 'ignore', 'pipe'] });

@@ -14,6 +14,7 @@ const api: Api = {
   existing: (paths) => ipcRenderer.invoke('existing', paths),
   confirm: (message, detail, action) => ipcRenderer.invoke('confirm', message, detail, action),
   render: (request) => ipcRenderer.invoke('render', request),
+  cancel: () => ipcRenderer.send('cancel'),
   reveal: (path) => ipcRenderer.send('reveal', path),
   onProgress: (listener) => ipcRenderer.on('progress', (_event, fraction: number) => listener(fraction)),
   onMenu: (listener) => ipcRenderer.on('menu', (_event, command: MenuCommand) => listener(command)),

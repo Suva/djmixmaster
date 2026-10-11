@@ -70,6 +70,8 @@ const db = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)} dB`;
 const lufs = (value: number) => `${value.toFixed(1)} LUFS`;
 const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+/** Whether a failed analysis or export was stopped with Cancel. */
+const wasCancelled = (error: unknown) => message(error).includes('Cancelled');
 
 // ---------------------------------------------------------------------------
 // Levelling and drawing
@@ -94,7 +96,7 @@ function scheduleDraw() {
     drawQueued = false;
     if (!recording) return;
     const playhead = player.time / HOP_SECONDS;
-    drawOverview(overview, { peaks: recording.measured.peaks, body: recording.body }, overviewShown, mixes.map((m) => m.region), mixes.indexOf(mix), view, playhead);
+    drawOverview(overview, { peaks: recording.measured.peaks, body: recording.body }, overviewShown, mixes.map((m) => ({ ...m.region, name: m.name })), mixes.indexOf(mix), view, playhead);
     if (!detail) return;
     // The curves can be one frame behind the region while it is being dragged.
     const length = detail.gainDb.length;
@@ -256,7 +258,13 @@ function showMix() {
       const number = document.createElement('b');
       number.textContent = String(index + 1);
       tab.append(number, `${m.name}  ·  ${clock((m.region.end - m.region.start) * HOP_SECONDS)}`);
+      tab.title = 'Double-click to rename';
       tab.addEventListener('click', () => select(m));
+      tab.addEventListener('dblclick', () => {
+        const name = $<HTMLInputElement>('mix-name');
+        name.focus();
+        name.select();
+      });
       return tab;
     }),
   );
@@ -862,6 +870,7 @@ function setBusy(label: string | null) {
   $('progress').hidden = !busy;
   $('progress-label').textContent = label ?? '';
   $('progress-bar').style.width = '0';
+  $<HTMLButtonElement>('cancel').disabled = false;
   $<HTMLButtonElement>('open').disabled = busy;
   $<HTMLButtonElement>('export').disabled = busy || !recording;
   $<HTMLButtonElement>('export-all').disabled = busy || !recording;
@@ -870,6 +879,21 @@ function setBusy(label: string | null) {
 }
 
 let progressLabel = '';
+/** Set by Cancel, so that an export of several mixes stops instead of moving on to the next. */
+let cancelRequested = false;
+
+function cancel() {
+  if (!busy) return;
+  cancelRequested = true;
+  $<HTMLButtonElement>('cancel').disabled = true;
+  api.cancel();
+}
+
+$('cancel').addEventListener('click', cancel);
+window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && busy) cancel();
+});
+
 api.onProgress((fraction) => {
   $('progress-bar').style.width = `${(fraction * 100).toFixed(1)}%`;
   $('progress-label').textContent = `${progressLabel} ${Math.floor(fraction * 100)}%`;
@@ -879,6 +903,7 @@ async function open(path: string) {
   if (busy) return;
   const name = path.split(/[\\/]/).pop()!;
   progressLabel = `Analysing ${name}`;
+  cancelRequested = false;
   setBusy(progressLabel);
   $('export-status').textContent = '';
   try {
@@ -900,7 +925,7 @@ async function open(path: string) {
     if (restored.fromLastTime) $('export-status').textContent = 'Picked up where you left off.';
     requestAnimationFrame(() => requestAnimationFrame(() => api.painted()));
   } catch (error) {
-    $('export-status').textContent = `Could not open ${name}: ${message(error)}`;
+    $('export-status').textContent = wasCancelled(error) ? 'Analysis cancelled.' : `Could not open ${name}: ${message(error)}`;
   } finally {
     setBusy(null);
   }
@@ -1084,6 +1109,18 @@ api.onMenu(async (command) => {
 
 /** File-name-safe version of a mix name. */
 const fileName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'mix';
+/** Whether a mix still has the name it was given automatically. */
+const hasDefaultName = (m: Mix) => /^Mix \d+$/.test(m.name);
+const recordingStem = () => recording!.name.replace(/\.[^.]+$/, '');
+
+/**
+ * What an exported mix is called, as a file and in its tags. A mix the user
+ * named goes by exactly that name; otherwise the recording's name is used.
+ */
+function exportName(m: Mix): string {
+  if (!hasDefaultName(m)) return m.name;
+  return mixes.length > 1 ? `${recordingStem()} - ${m.name}` : `${recordingStem()} mastered`;
+}
 
 function renderMix(m: Mix, output: string) {
   const { gainDb, bassDb } = compute(m).detail;
@@ -1095,6 +1132,7 @@ function renderMix(m: Mix, output: string) {
     gainDb,
     bassDb: bassDb ?? new Float32Array(gainDb.length),
     ceilingDb: m.ceilingDb,
+    title: exportName(m),
   });
 }
 
@@ -1110,19 +1148,19 @@ function showExported(text: string, reveal: string) {
 async function exportMix() {
   if (!recording || busy) return;
   player.pause();
-  const base = recording.path.replace(/\.[^./\\]+$/, '');
-  const suggested = mixes.length > 1 ? `${base} - ${fileName(mix.name)}.wav` : `${base} mastered.wav`;
-  const output = await api.pickOutput(suggested);
+  const folder = recording.path.replace(/[^\\/]+$/, '');
+  const output = await api.pickOutput(`${folder}${fileName(exportName(mix))}.wav`);
   if (!output) return;
   $('export-status').textContent = '';
   progressLabel = `Exporting ${mix.name}`;
+  cancelRequested = false;
   setBusy(progressLabel);
   try {
     const result = await renderMix(mix, output);
     const peakDb = 20 * Math.log10(Math.max(result.peak, 1e-9));
     showExported(`Exported at ${lufs(result.integratedLufs)}, peak ${peakDb.toFixed(1)} dBFS.`, output);
   } catch (error) {
-    $('export-status').textContent = `Export failed: ${message(error)}`;
+    $('export-status').textContent = wasCancelled(error) ? 'Export cancelled.' : `Export failed: ${message(error)}`;
   } finally {
     setBusy(null);
   }
@@ -1135,10 +1173,17 @@ async function exportAll() {
   const folder = await api.pickFolder();
   if (!folder) return;
   const extension = $<HTMLSelectElement>('format').value;
-  const stem = recording.name.replace(/\.[^.]+$/, '');
-  const outputs = mixes.map(
-    (m, index) => `${folder}/${stem} - ${String(index + 1).padStart(2, '0')} ${fileName(m.name)}.${extension}`,
-  );
+  // Named mixes become files of that name; the rest are numbered in order.
+  const taken = new Set<string>();
+  const outputs = mixes.map((m, index) => {
+    const wanted = hasDefaultName(m)
+      ? `${recordingStem()} - ${String(index + 1).padStart(2, '0')} ${m.name}`
+      : fileName(m.name);
+    let name = wanted;
+    for (let copy = 2; taken.has(name.toLowerCase()); copy++) name = `${wanted} (${copy})`;
+    taken.add(name.toLowerCase());
+    return `${folder}/${name}.${extension}`;
+  });
   const existing = await api.existing(outputs);
   if (existing.length > 0) {
     const names = existing.map((path) => path.split(/[\\/]/).pop()).join('\n');
@@ -1147,10 +1192,12 @@ async function exportAll() {
   }
 
   $('export-status').textContent = '';
+  cancelRequested = false;
   setBusy('Exporting');
   let done = 0;
   try {
     for (const [index, m] of mixes.entries()) {
+      if (cancelRequested) throw new Error('Cancelled');
       progressLabel = `Exporting ${index + 1} of ${mixes.length}: ${m.name}`;
       $('progress-bar').style.width = '0';
       await renderMix(m, outputs[index]);
@@ -1158,7 +1205,9 @@ async function exportAll() {
     }
     showExported(`Exported ${done} mixes.`, outputs[0]);
   } catch (error) {
-    $('export-status').textContent = `Export stopped at "${mixes[done].name}" after ${done} of ${mixes.length}: ${message(error)}`;
+    $('export-status').textContent = wasCancelled(error)
+      ? `Export cancelled after ${done} of ${mixes.length} mixes.`
+      : `Export stopped at "${mixes[done].name}" after ${done} of ${mixes.length}: ${message(error)}`;
   } finally {
     setBusy(null);
   }

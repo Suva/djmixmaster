@@ -8,6 +8,8 @@ export interface RenderRequest {
   end: number;
   gainDb: Float32Array;
   bassDb: Float32Array;
+  /** Written into the exported file's tags. */
+  title: string;
   ceilingDb: number | null;
 }
 
@@ -49,6 +51,8 @@ export interface Api {
   existing(paths: string[]): Promise<string[]>;
   confirm(message: string, detail: string, action: string): Promise<boolean>;
   render(request: RenderRequest): Promise<RenderResult>;
+  /** Stops the analysis or export in progress; its call then fails with "Cancelled". */
+  cancel(): void;
   reveal(path: string): void;
   onProgress(listener: (fraction: number) => void): void;
   /** A command chosen from the menu bar or by its keyboard shortcut. */
