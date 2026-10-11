@@ -157,6 +157,8 @@ Do not write test data there.
   and must stay that way.
 - **Audio files are ignored by git**, as are `dist/` and `release/`. Test
   recordings in the project folder stay local.
+- **Tests run on GitHub** for every push to `main` and every pull request
+  (`.github/workflows/test.yml`), on Linux with the bundled ffmpeg.
 - **Releases are built by GitHub.** Pushing a tag such as `v0.2.0` runs
   `.github/workflows/release.yml`, which tests and packages on macOS and
   Windows and publishes both installers. The version comes from the tag.

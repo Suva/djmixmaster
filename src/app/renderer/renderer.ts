@@ -357,6 +357,7 @@ function showMix() {
   $('export-all-group').hidden = !several;
   $('export-all').textContent = `Export all ${mixes.length}…`;
   $<HTMLButtonElement>('delete-mix').disabled = !several;
+  $<HTMLButtonElement>('apply-all').disabled = !several;
   $<HTMLButtonElement>('split-gaps').disabled = !recording || piecesBetweenGaps(mix) === null;
   scheduleSave();
   scheduleDraw();
@@ -1174,6 +1175,22 @@ $('reset').addEventListener('click', () => {
   delete mix.loudness;
   syncControls();
   scheduleRecompute();
+});
+
+// Gives every other mix the settings of this one. Fades and hand adjustments
+// belong to a particular place in a particular mix, so they are left alone.
+$('apply-all').addEventListener('click', () => {
+  if (!recording || busy || mixes.length < 2) return;
+  for (const other of mixes) {
+    if (other === mix) continue;
+    other.options = { ...mix.options };
+    other.ceilingDb = mix.ceilingDb;
+    if (mix.loudness) other.loudness = mix.loudness;
+    else delete other.loudness;
+  }
+  const others = mixes.length - 1;
+  $('readout').textContent = `These settings now apply to the other ${others === 1 ? 'mix' : `${others} mixes`} too. Undo takes it back.`;
+  scheduleSave();
 });
 
 // ---------------------------------------------------------------------------

@@ -50,16 +50,15 @@ the two channel faults; the rest need a few narrow bands.
 Done when opening a recording with one of these faults says so, and a clean
 recording says nothing is wrong.
 
-### Copy settings between mixes, and presets — small
+### Named settings presets — small
 
-After tuning one mix, the others from the same night usually want the same
-settings, and a favourite setup is worth keeping for next time.
+"Apply to all mixes" copies one mix's settings to the rest of a recording. A
+favourite setup is also worth keeping for the next recording.
 
-- "Apply these settings to all mixes" for the current recording.
 - Named presets that can be saved, applied and deleted, stored with the
   app's other data.
-- Hand adjustments are not settings: they belong to their place in one mix
-  and are not copied.
+- Like "Apply to all mixes", a preset holds the settings only, not fades or
+  hand adjustments.
 
 ### Cue sheets on export — medium
 
@@ -72,16 +71,6 @@ tracks inside a mix.
   and consider suggestions later.
 
 Done when a player that reads cue sheets shows the tracks of an exported mix.
-
-### Automated tests on GitHub — small
-
-Nothing runs the tests on a push.
-
-- A workflow that installs, type-checks and runs `npm test` on macOS and
-  Linux.
-- ffmpeg has to be installed on the runner; the end-to-end test needs it.
-
-Done when a push shows a passing check.
 
 ### Finer waveform when zoomed in — medium
 

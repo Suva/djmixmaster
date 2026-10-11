@@ -1,5 +1,7 @@
 # DJ Mix Master
 
+[![Tests](https://github.com/Suva/djmixmaster/actions/workflows/test.yml/badge.svg)](https://github.com/Suva/djmixmaster/actions/workflows/test.yml)
+
 Masters recorded DJ mixes. Open a long recording, mark the mix inside it, and
 the tool evens out the loudness from track to track: louder tracks are turned
 down and quieter ones up, while breakdowns keep their natural dip instead of
@@ -81,7 +83,8 @@ Automatically.
   at gaps" cuts a mix apart at them; "Split at playhead" is for handovers that
   were mixed without a gap.
 - **Several mixes per recording**: each has its own name, settings and
-  adjustments. Double-click a mix's tab to rename it.
+  adjustments. Double-click a mix's tab to rename it. "Apply to all mixes"
+  copies the selected mix's settings to the others.
 
 ### Listening and adjusting
 

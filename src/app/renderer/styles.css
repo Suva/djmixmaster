@@ -204,4 +204,5 @@ h2 {
 #stats { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0 0 14px; }
 #stats dt { color: var(--muted); }
 #stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 #stats dd a { color: var(--accent); cursor: pointer; text-decoration: underline; }

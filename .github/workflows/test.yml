@@ -1,0 +1,35 @@
+# Type-checks and runs the tests on every push to main and on pull requests.
+# Releases run the same checks on macOS and Windows before building.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Type-check and test
+    runs-on: ubuntu-latest
+    env:
+      # The tests never open a window, so Electron itself is not needed here.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      # The tests need ffmpeg; use the copy that gets bundled into the app.
+      - run: npm test
+        env:
+          DJMASTER_FFMPEG: ${{ github.workspace }}/node_modules/ffmpeg-static/ffmpeg
