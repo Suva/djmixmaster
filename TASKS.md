@@ -25,31 +25,38 @@ Things to judge by ear:
 
 ## Next
 
-### Check-up, second round — medium
+### Check the hum, rumble and offset findings on real recordings — small
 
-Opening a recording reports clipping, a quieter or dead channel, a channel
-out of phase, mono, possible dropouts, a quiet recording and the edge a low
-bitrate leaves (`src/checkup.ts`, measured by `src/diagnostics.ts`). These
-remain, and need more care to avoid false alarms:
+The check-up reports mains hum (50 or 60 Hz), rumble below 20 Hz and a DC
+offset, but these have only met synthetic signals. Neither of the two real
+recordings at hand has any of them, which at least shows they do not raise
+false alarms there.
 
-- **Mains hum.** Mains is 50 Hz in some regions and 60 Hz in others, so look
-  for both and say which was found. Check the harmonics as well (100/150 Hz
-  or 120/180 Hz): a steady tone with its harmonics, present in the quiet
-  parts too, is hum; a bassline near the same note is not.
-- **Rumble or DC offset**: energy below anything musical.
-- **Clicks and glitches**: sudden jumps typical of a recorder losing samples.
-- **Already limited**: the level barely moves, so a limiter was probably in
-  the chain. Heavily compressed genres can look the same.
+- Try a recording known to hum, ideally one from each mains region.
+- Try a vinyl set for rumble.
+- If the thresholds need moving, they are in `src/checkup.ts`: the hum has to
+  stand 12 dB clear of its surroundings with a harmonic 10 dB clear, in 70%
+  of the quietest stretches; rumble has to come within 15 dB of the bass.
 
-Lessons from the first round, on an 8-hour club recording:
+### Check-up findings that were tried and left out
 
-- Dance music is full of deliberate silences. Looking for any short silence
-  found 32 "dropouts" that were pauses before drops and gated stutters. Only
-  a gap under 50 ms with no other silence within two seconds is reported now,
-  and as a note, not a fault. Nobody has yet listened to the four it finds in
-  that recording to see whether they are real.
-- The average spectrum is already collected (one stretch every four
-  seconds), which is what hum, rumble and the EQ suggestion need.
+Written down so they are not tried the same way again.
+
+- **Already limited.** The idea was that a limiter pins the peaks at one
+  level whatever the loudness. But so does any DJ playing mastered tracks at
+  steady gains: on a clean one-hour recording the top peak of every five
+  minutes stayed within 0.6 dB while the loudness moved by 2.4 dB. The two
+  cannot be told apart this way, and the finding would not change what
+  anyone does.
+- **Clicks and glitches.** A recorder losing samples leaves a sudden jump in
+  the waveform, but so does the attack of a kick drum, a square wave, or any
+  bit-crushed sound. A detector strict enough to ignore those has nothing
+  left to find in an MP3, where such jumps are smoothed away anyway. Worth
+  another look only with real examples of glitched recordings to learn from.
+- **Dropouts**, from the first round: dance music is full of deliberate
+  silences. Only a gap under 50 ms with no other silence within two seconds
+  is reported, and as a note. Nobody has yet listened to the four it finds
+  in the 8-hour test recording to see whether they are real.
 
 ### Named settings presets — small
 

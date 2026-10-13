@@ -39,9 +39,9 @@ There is no build for Intel Macs or Linux yet. On those, the tool can be run
 ## Getting started
 
 1. **Open a recording.** Drop a file on the window or use "Open recording…".
-   It is analysed once, which takes about a minute for an eight-hour file. A
-   button next to the file name then says whether anything is wrong with the
-   recording itself.
+   It is analysed once, which takes a little over a minute for an eight-hour
+   file. A button next to the file name then says whether anything is wrong
+   with the recording itself.
 2. **Mark the mix.** The whole recording starts out as one mix. Drag its edges
    in, or press "Split at gaps" to cut a night apart at the silences. Drag
    across a free part to mark another mix.
@@ -100,6 +100,9 @@ or "2 things to know". It opens a short report on the recording as it is:
 - a recording made very quietly;
 - the sharp upper edge that MP3 or similar encoding leaves, also in a file
   that is lossless now;
+- mains hum, at 50 or 60 Hz, told apart from a bass note by its exact pitch
+  and its harmonics;
+- rumble below anything musical, and a waveform that sits off centre;
 - the format, sample rate, length, loudness and peak level.
 
 Clipping is marked in red along the top of the overview and possible

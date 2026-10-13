@@ -251,6 +251,53 @@ test('check-up tells a dropout from a pause in the music', () => {
   assert.deepEqual(found(stutter), [], 'two short gaps close together');
 });
 
+/** A minute of noise that is loud for five seconds and nearly silent for five, with `extra` added throughout. */
+function loudAndQuiet(extra: (seconds: number) => number): Float32Array {
+  const rate = 48000;
+  const samples = new Float32Array(rate * 60 * 2);
+  let seed = 11;
+  const noise = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 2147483648 - 1;
+  };
+  // Music has next to nothing below 20 Hz, unlike plain noise, so the slow part is taken out.
+  let slowLeft = 0;
+  let slowRight = 0;
+  for (let f = 0; f < samples.length / 2; f++) {
+    const seconds = f / rate;
+    const amount = Math.floor(seconds / 5) % 2 === 0 ? 0.3 : 0.0004;
+    const added = extra(seconds);
+    const left = noise();
+    const right = 0.6 * left + 0.8 * noise();
+    slowLeft += 0.01 * (left - slowLeft);
+    slowRight += 0.01 * (right - slowRight);
+    samples[f * 2] = amount * (left - slowLeft) + added;
+    samples[f * 2 + 1] = amount * (right - slowRight) + added;
+  }
+  return samples;
+}
+
+const tone = (hz: number, level: number, seconds: number) => level * Math.sin(2 * Math.PI * hz * seconds);
+
+test('check-up finds mains hum at either frequency, and not a bass note', () => {
+  assert.deepEqual(found(loudAndQuiet(() => 0)), [], 'no hum');
+  for (const mains of [50, 60]) {
+    const report = checkup(examine(loudAndQuiet((t) => tone(mains, 0.004, t) + tone(mains * 2, 0.002, t) + tone(mains * 3, 0.001, t))));
+    assert.deepEqual(report.findings.map((f) => f.id), ['hum'], `${mains} Hz`);
+    assert.match(report.findings[0].title, new RegExp(`${mains} Hz`));
+  }
+  // The G below 50 Hz and the B above 60, held all the way through, with their octaves.
+  assert.deepEqual(found(loudAndQuiet((t) => tone(49, 0.004, t) + tone(98, 0.002, t))), [], 'a bass note near 50 Hz');
+  assert.deepEqual(found(loudAndQuiet((t) => tone(61.74, 0.004, t) + tone(123.47, 0.002, t))), [], 'a bass note near 60 Hz');
+  // A lone 50 Hz tone without harmonics is a sine wave, not mains hum.
+  assert.deepEqual(found(loudAndQuiet((t) => tone(50, 0.004, t))), [], 'a pure tone');
+});
+
+test('check-up finds rumble and a DC offset', () => {
+  assert.deepEqual(found(loudAndQuiet((t) => tone(9, 0.2, t))), ['rumble']);
+  assert.deepEqual(found(stereoNoise((l, r) => [l + 0.01, r + 0.01])), ['dc-offset']);
+});
+
 test('check-up notes a quiet recording', () => {
   assert.deepEqual(found(stereoNoise((l, r) => [l * 0.2, r * 0.2])), ['quiet']);
 });

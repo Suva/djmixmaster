@@ -3,7 +3,7 @@
 // that hold across the recording, or are plainly faults, are reported; dance
 // music does unusual things on purpose. Free of Node imports.
 
-import { SPECTRUM_SIZE, type Diagnostics } from './diagnostics.ts';
+import { LOW_FIELDS, MAINS_TONES, SPECTRUM_SIZE, type Diagnostics } from './diagnostics.ts';
 import type { BlockRange } from './gaps.ts';
 import { energyToLufs, HOP_SECONDS } from './loudness.ts';
 
@@ -19,7 +19,9 @@ export interface SourceInfo {
 }
 
 export interface Finding {
-  id: 'clipping' | 'quieter-channel' | 'dead-channel' | 'out-of-phase' | 'mono' | 'dropouts' | 'quiet' | 'lossy';
+  id:
+    | 'clipping' | 'quieter-channel' | 'dead-channel' | 'out-of-phase' | 'mono' | 'dropouts' | 'quiet' | 'lossy'
+    | 'hum' | 'rumble' | 'dc-offset';
   /** A fault harms the sound; a note is only worth knowing. */
   kind: 'fault' | 'note';
   title: string;
@@ -237,6 +239,95 @@ function lossy(e: Examined): Finding | null {
   };
 }
 
+/** The low-spectrum stretches as rows, each with the loudness of the recording at that moment. */
+function lowRows(e: Examined) {
+  const { low } = e.diagnostics;
+  const n = e.shortTerm.length;
+  const rows = [];
+  for (let at = 0; at + LOW_FIELDS <= low.length; at += LOW_FIELDS) {
+    const block = Math.min(n - 1, Math.max(0, Math.round(low[at])));
+    rows.push({ level: e.shortTerm[block], values: low.subarray(at, at + LOW_FIELDS) });
+  }
+  return rows;
+}
+
+/**
+ * Mains hum is a steady tone on exactly 50 or 60 Hz, according to the country,
+ * with harmonics above it, and it is there whether music plays or not. So it
+ * is looked for in the quietest parts of the recording, where a bass note that
+ * happens to be nearby would not be: the tone must stand well clear of what
+ * is just beside it, together with a harmonic, in most of those quiet parts.
+ * No note of the usual scale falls within half a hertz of a mains tone.
+ */
+function hum(e: Examined, loud: number): Finding | null {
+  // Digital silence carries no hum to find; it would only water the result down.
+  const rows = lowRows(e).filter((row) => row.level > -90);
+  if (rows.length < 12) return null;
+  rows.sort((a, b) => a.level - b.level);
+  const quiet = rows.slice(0, Math.max(6, Math.round(rows.length * 0.15)));
+  const standsOut = (values: Float32Array, tone: number) => decibels(values[3 + tone * 2] / Math.max(values[4 + tone * 2], 1e-30));
+
+  let best: { mains: number; share: number; first: number } | null = null;
+  for (const first of [0, 3]) {
+    const present = quiet.filter(
+      ({ values }) => standsOut(values, first) >= 12 && Math.max(standsOut(values, first + 1), standsOut(values, first + 2)) >= 10,
+    );
+    const share = present.length / quiet.length;
+    if (!best || share > best.share) best = { mains: MAINS_TONES[first], share, first };
+  }
+  if (!best || best.share < 0.7) return null;
+
+  // A full-scale tone reads as (N/4) squared in a Hann-windowed spectrum of N points.
+  const fullScale = (SPECTRUM_SIZE / 4) ** 2;
+  const levels = quiet.map(({ values }) => decibels((values[3 + best.first * 2] + values[5 + best.first * 2] + values[7 + best.first * 2]) / fullScale));
+  levels.sort((a, b) => a - b);
+  const level = levels[levels.length >> 1];
+  // Far below anything a listener could pick out, it is not worth a mention.
+  if (level < -85) return null;
+  const below = Math.round(loud - level);
+  return {
+    id: 'hum',
+    kind: 'fault',
+    title: `Mains hum at ${best.mains} Hz`,
+    detail:
+      `A steady ${best.mains} Hz tone with its harmonics runs through the recording, about ${below} dB below the music. ` +
+      'It comes from the wiring, usually a ground loop between the mixer and the recorder, and is heard in breakdowns and between sets.',
+  };
+}
+
+/** Energy below anything musical: a turntable, handling noise, air conditioning, a faulty input. */
+function rumble(e: Examined, gate: number): Finding | null {
+  const ratios = lowRows(e)
+    .filter((row) => row.level > gate && row.values[2] > 0)
+    .map((row) => decibels(row.values[1] / row.values[2]))
+    .sort((a, b) => a - b);
+  if (ratios.length < 5) return null;
+  const typical = ratios[ratios.length >> 1];
+  // Clean recordings sit around 35 dB below the bass down here.
+  if (typical < -15) return null;
+  return {
+    id: 'rumble',
+    kind: 'fault',
+    title: 'Rumble below 20 Hz',
+    detail:
+      `There is steady energy below anything musical, only ${Math.abs(Math.round(typical))} dB under the bass. ` +
+      'It cannot be heard on most systems, but it uses up headroom and works the limiter. A turntable, vibration or a faulty input are the usual sources.',
+  };
+}
+
+function dcOffset(e: Examined): Finding | null {
+  const offset = Math.max(Math.abs(e.diagnostics.dc[0]), Math.abs(e.diagnostics.dc[1]));
+  if (offset < 0.003) return null;
+  return {
+    id: 'dc-offset',
+    kind: 'note',
+    title: 'The waveform sits off centre',
+    detail:
+      `It is shifted by ${(2 * decibels(offset)).toFixed(0)} dBFS from the middle (a DC offset), which a recorder input can cause. ` +
+      'It costs a little headroom and can click where the recording starts and stops.',
+  };
+}
+
 function describeSource(e: Examined): string {
   const { codec, bitrateKbps, extension } = e.source;
   const bits = /^pcm_[a-z]?(\d+)/.exec(codec)?.[1];
@@ -276,6 +367,9 @@ export function checkup(e: Examined): Checkup {
     }
     const edge = lossy(e);
     if (edge) findings.push(edge);
+    for (const finding of [hum(e, loud), rumble(e, gate), dcOffset(e)]) {
+      if (finding) findings.push(finding);
+    }
   }
   // Faults first, in the order found.
   findings.sort((a, b) => Number(b.kind === 'fault') - Number(a.kind === 'fault'));
