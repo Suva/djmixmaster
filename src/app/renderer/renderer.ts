@@ -1374,7 +1374,7 @@ async function open(path: string) {
     settled = snapshot();
     showHistory();
     if (restored.fromLastTime) $('export-status').textContent = 'Picked up where you left off.';
-    requestAnimationFrame(() => requestAnimationFrame(() => api.painted()));
+    requestAnimationFrame(() => requestAnimationFrame(() => api.painted(path)));
   } catch (error) {
     $('export-status').textContent = wasCancelled(error) ? 'Analysis cancelled.' : `Could not open ${name}: ${message(error)}`;
   } finally {

@@ -133,10 +133,27 @@ function runJob(job: Job): Promise<unknown> {
 /** A recording dropped on the app's icon or chosen with "Open With" before the window was ready. */
 let openedFromFinder: string | null = null;
 
-function initialFile(): string | null {
+const lastRecordingFile = () => join(app.getPath('userData'), 'last-recording.json');
+
+/**
+ * The recording worked on last time, if it is still there. A file that has
+ * been moved or sits on a drive that is not plugged in gives nothing, and the
+ * app starts empty without a word.
+ */
+async function lastRecording(): Promise<string | null> {
+  const last = (await readJson(lastRecordingFile())) as { path?: unknown } | null;
+  if (typeof last?.path !== 'string' || !existsSync(last.path)) return null;
+  // Forgotten until it has opened again, so a recording that brings the app
+  // down while opening is not tried on every start.
+  await rm(lastRecordingFile(), { force: true });
+  return last.path;
+}
+
+async function initialFile(): Promise<string | null> {
   if (openedFromFinder) return openedFromFinder;
   const argument = process.argv.slice(app.isPackaged ? 1 : 2).find((arg) => !arg.startsWith('-'));
-  return argument && existsSync(argument) ? resolve(argument) : null;
+  if (argument && existsSync(argument)) return resolve(argument);
+  return lastRecording();
 }
 
 app.on('open-file', (event, path) => {
@@ -273,7 +290,10 @@ ipcMain.on('cancel', () => running?.terminate());
 
 ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 
-ipcMain.on('painted', async () => {
+ipcMain.on('painted', async (_event, path: string) => {
+  writeStored(lastRecordingFile(), JSON.stringify({ path })).catch((error) =>
+    console.error('Could not note the recording for next time:', error),
+  );
   if (!SCREENSHOT || !window) return;
   // Optionally drive the window first, to capture a state other than "just opened".
   if (process.env.DJMASTER_SHOT_SCRIPT) {

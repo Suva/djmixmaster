@@ -115,8 +115,9 @@ by id, dispatch mouse and keyboard events, and call `window.api` directly.
 
 - **Always set `DJMASTER_SHOT_DATA`.** Without it the check uses a shared
   temporary folder and earlier runs leak into later ones.
-- **A recording must be given on the command line**, or the window never
-  reports that it has drawn and the app does not quit.
+- **A recording must be given on the command line**, unless the data folder
+  remembers one from an earlier run. Otherwise the window never reports that
+  it has drawn and the app does not quit.
 - **Native dialogs cannot be scripted.** Call `window.api.render(...)` or use
   `DJMASTER_SHOT_FOLDER` instead of clicking Export.
 - **Wait for changes to settle.** Edits are saved, and become undo steps,
@@ -137,6 +138,7 @@ macOS, the same for `npm start` and the packaged app.
 | `analyses/` | One measurement per recording, keyed on path, size, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
 | `sessions/` | The mixes, settings and hand adjustments per recording, keyed on its path |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
+| `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
 | `updates.json` | Whether to check for updates, when it was last done, and what was found |
 
 Do not write test data there.

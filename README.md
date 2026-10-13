@@ -130,7 +130,8 @@ dropouts in white. The report describes; it does not repair yet.
   the corner to remove the fade.
 - **Undo and redo** cover every change to the mixes.
 - **Your work is remembered**: mixes, settings and adjustments are saved per
-  recording and restored when you open it again.
+  recording and restored when you open it again. The app starts with the
+  recording you had open last, if it is still where it was.
 
 ### The settings
 

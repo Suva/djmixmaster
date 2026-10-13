@@ -22,7 +22,7 @@ const api: Api = {
   skipVersion: (version) => ipcRenderer.send('skip-version', version),
   onMenu: (listener) => ipcRenderer.on('menu', (_event, command: MenuCommand) => listener(command)),
   onOpenFile: (listener) => ipcRenderer.on('open-file', (_event, path: string) => listener(path)),
-  painted: () => ipcRenderer.send('painted'),
+  painted: (path: string) => ipcRenderer.send('painted', path),
 };
 
 contextBridge.exposeInMainWorld('api', api);

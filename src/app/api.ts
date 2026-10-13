@@ -43,7 +43,7 @@ export type MenuCommand = 'open' | 'undo' | 'redo' | 'help';
 /** What the window may ask the main process to do. */
 export interface Api {
   pickFile(): Promise<string | null>;
-  /** File passed on the command line, if any. */
+  /** The recording to start with: one handed to the app, or else the one worked on last time. */
   initialFile(): Promise<string | null>;
   pathForFile(file: File): string;
   measure(path: string): Promise<Examination>;
@@ -71,8 +71,8 @@ export interface Api {
   onMenu(listener: (command: MenuCommand) => void): void;
   /** A recording handed to the app from outside while it is running. */
   onOpenFile(listener: (path: string) => void): void;
-  /** Tells the main process the window has drawn a loaded file. */
-  painted(): void;
+  /** Tells the main process the window has drawn this recording; it is the one to reopen next time. */
+  painted(path: string): void;
 }
 
 export type Job = { kind: 'measure'; input: string } | ({ kind: 'render' } & RenderRequest);
