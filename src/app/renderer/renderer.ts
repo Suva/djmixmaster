@@ -8,6 +8,7 @@ import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
 import type { Api } from '../api.ts';
 import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
+import { LevelMeter } from './meter.ts';
 import { Player } from './player.ts';
 import { initTooltips } from './tooltip.ts';
 
@@ -81,6 +82,9 @@ let hoverX: number | null = null;
 let busy = false;
 
 const player = new Player(location.search.includes('silent'));
+const levelMeter = new LevelMeter($<HTMLCanvasElement>('level-meter'));
+/** How much the limiter last said it was taking off, in dB. */
+let limiterReductionDb = 0;
 /** Whether playback is heard with the levelling applied or as recorded. */
 let hearLevelled = true;
 
@@ -1051,6 +1055,15 @@ function follow() {
     ceilingDb: mix.ceilingDb,
     bypass: !hearLevelled,
   });
+  const [left, right] = player.outputPeaks();
+  const block = clamp(Math.floor(time / HOP_SECONDS), 0, recording.measured.peaks.length - 1);
+  levelMeter.update({
+    left,
+    right,
+    reductionDb: hearLevelled ? limiterReductionDb : 0,
+    sourceClipped: recording.measured.diagnostics.clipped[block] >= 3,
+    ceilingDb: mix.ceilingDb,
+  });
   showPlayback();
   requestAnimationFrame(follow);
 }
@@ -1085,26 +1098,20 @@ player.onPlay = () => {
 player.onPause = () => {
   showPlaying(false);
   $('meter').textContent = '';
+  limiterReductionDb = 0;
+  levelMeter.release();
   showPlayback();
 };
 player.onSeek = showPlayback;
 
-// Hold the readings briefly so the numbers can be read.
-let held = { peak: 0, gain: 1, since: 0 };
+// The limiter reports how hard it worked many times a second. The lights show
+// that; the row above the curves says what the levelling is doing right now.
 player.onReport = ({ gain }) => {
   if (player.paused) return;
-  // The limiter says how hard it worked; the level shown is what was heard, fades included.
-  const peak = player.outputPeak();
-  const now = performance.now();
-  if (now - held.since > 600) held = { peak: 0, gain: 1, since: now };
-  held.peak = Math.max(held.peak, peak);
-  held.gain = Math.min(held.gain, gain);
-  const peakDb = 20 * Math.log10(Math.max(held.peak, 1e-6));
-  const limiting = -20 * Math.log10(held.gain);
+  limiterReductionDb = -20 * Math.log10(gain);
   $('meter').textContent =
     `gain ${hearLevelled ? db(20 * Math.log10(gainAt(player.time))) : 'off'}` +
-    (hearLevelled && detail?.bassDb ? `    bass ${db(bassAt(player.time))}` : '') +
-    `    peak ${peakDb.toFixed(1)} dBFS    limiter ${limiting < 0.05 ? 'idle' : `-${limiting.toFixed(1)} dB`}`;
+    (hearLevelled && detail?.bassDb ? `    bass ${db(bassAt(player.time))}` : '');
 };
 
 /** Shows the play button as play or pause, to match what pressing it would do. */

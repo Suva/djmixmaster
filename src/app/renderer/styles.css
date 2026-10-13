@@ -191,11 +191,12 @@ dialog input[type="text"]:focus { outline: 1px solid var(--accent); }
 canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane); }
 #overview { height: 84px; flex: none; }
 #detail-area { position: relative; flex: 1; min-height: 0; display: flex; }
-#detail { flex: 1; min-height: 0; height: 100%; cursor: pointer; }
+#detail { flex: 1; min-width: 0; min-height: 0; height: 100%; cursor: pointer; }
+#level-meter { flex: none; width: 72px; height: 100%; margin-left: 8px; }
 /* Sits in the top right corner of the gain lane; where exactly is set from the lane's position. */
 #adjust-switch {
   position: absolute;
-  right: 8px;
+  right: 88px;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -224,7 +225,7 @@ button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; f
 #play.playing .when-playing { display: block; }
 #play-time { font-variant-numeric: tabular-nums; min-width: 66px; font-size: 15px; }
 /* Kept at its full width when empty, so the row does not shift when playback starts. */
-#meter { min-width: 330px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
+#meter { min-width: 170px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
 .toggle { display: flex; flex: none; }
 .toggle-label { color: var(--muted); margin-right: -6px; white-space: nowrap; }
 .toggle button { border-radius: 0; margin-left: -1px; color: var(--muted); }

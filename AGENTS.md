@@ -54,6 +54,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/renderer.ts` | The window: state, mixes, interaction, undo, export |
 | `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
 | `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
+| `src/app/renderer/meter.ts` | The level meter beside the curves |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
 

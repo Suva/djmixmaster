@@ -32,7 +32,7 @@ export class Player {
   #shelf: BiquadFilterNode | null = null;
   #limiter: AudioWorkletNode | null = null;
   #fade: GainNode | null = null;
-  #meter: AnalyserNode | null = null;
+  #meters: [AnalyserNode, AnalyserNode] | null = null;
   readonly #heard = new Float32Array(2048);
   #settings: Required<LimiterSettings> = { ceilingDb: -1, bypass: false };
 
@@ -131,13 +131,15 @@ export class Player {
     }
   }
 
-  /** The highest level in the last moment of what reached the speakers, linear. */
-  outputPeak(): number {
-    if (!this.#meter) return 0;
-    this.#meter.getFloatTimeDomainData(this.#heard);
-    let peak = 0;
-    for (const sample of this.#heard) peak = Math.max(peak, Math.abs(sample));
-    return peak;
+  /** The highest level in the last moment of what reached the left and the right speaker, linear. */
+  outputPeaks(): [number, number] {
+    if (!this.#meters) return [0, 0];
+    return this.#meters.map((meter) => {
+      meter.getFloatTimeDomainData(this.#heard);
+      let peak = 0;
+      for (const sample of this.#heard) peak = Math.max(peak, Math.abs(sample));
+      return peak;
+    }) as [number, number];
   }
 
   #stopped() {
@@ -167,15 +169,21 @@ export class Player {
     limiter.port.onmessage = (event: MessageEvent<LimiterReport>) => this.onReport(event.data);
     limiter.port.postMessage(this.#settings);
     const fade = context.createGain();
-    // Listens in on what goes to the speakers, after everything else.
-    const meter = new AnalyserNode(context, { fftSize: this.#heard.length });
+    // Listens in on what goes to each speaker, after everything else.
+    const split = new ChannelSplitterNode(context, { numberOfOutputs: 2 });
+    const meters: [AnalyserNode, AnalyserNode] = [
+      new AnalyserNode(context, { fftSize: this.#heard.length }),
+      new AnalyserNode(context, { fftSize: this.#heard.length }),
+    ];
     source.connect(shelf).connect(gain).connect(limiter).connect(fade).connect(context.destination);
-    fade.connect(meter);
+    fade.connect(split);
+    split.connect(meters[0], 0);
+    split.connect(meters[1], 1);
     this.#context = context;
     this.#gain = gain;
     this.#shelf = shelf;
     this.#limiter = limiter;
     this.#fade = fade;
-    this.#meter = meter;
+    this.#meters = meters;
   }
 }

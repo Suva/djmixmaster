@@ -117,6 +117,10 @@ dropouts in white. The report describes; it does not repair yet.
   keeps stepping.
 - **Live preview**: settings change what you hear immediately, and the preview
   uses the same limiter as the export.
+- **Level meter**: beside the curves, two columns of lights show what reaches
+  the left and right speaker, turning red above your ceiling. A thinner column
+  lights from the top as the limiter works, and a lamp lights when the
+  recording itself is clipped at that moment.
 - **Adjusting by hand**: drag sideways across the gain lane to mark a stretch,
   then drag it up or down. The switch in the corner of the gain lane (Level or
   Bass) chooses whether a new stretch changes the whole sound or the bass only. Drag an edge to resize
