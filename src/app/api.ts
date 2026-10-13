@@ -38,7 +38,7 @@ export interface MediaSource {
   streamed: boolean;
 }
 
-export type MenuCommand = 'open' | 'undo' | 'redo';
+export type MenuCommand = 'open' | 'undo' | 'redo' | 'help';
 
 /** What the window may ask the main process to do. */
 export interface Api {

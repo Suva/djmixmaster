@@ -40,6 +40,12 @@ header {
 #checkup { flex: none; font-size: 12px; padding: 4px 10px; color: var(--muted); }
 #checkup[hidden] { display: none; }
 #checkup.faults { color: #f2a83b; border-color: #6b4d1c; }
+#help-content { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 32px; margin-bottom: 18px; }
+#help-dialog { width: 760px; }
+#help-content h4 { margin: 0 0 6px; }
+#help-content .how { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; font-size: 12.5px; border-bottom: 1px solid var(--border); }
+#help-content .how span:first-child { color: var(--text); white-space: nowrap; }
+#help-content .how span:last-child { color: var(--muted); text-align: right; }
 #checkup-findings { margin-bottom: 16px; }
 .finding { margin-bottom: 14px; padding-left: 12px; border-left: 3px solid var(--border); }
 .finding.fault { border-left-color: #f2a83b; }
@@ -184,7 +190,22 @@ dialog input[type="text"]:focus { outline: 1px solid var(--accent); }
 
 canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane); }
 #overview { height: 84px; flex: none; }
-#detail { flex: 1; min-height: 0; cursor: pointer; }
+#detail-area { position: relative; flex: 1; min-height: 0; display: flex; }
+#detail { flex: 1; min-height: 0; height: 100%; cursor: pointer; }
+/* Sits in the top right corner of the gain lane; where exactly is set from the lane's position. */
+#adjust-switch {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--muted);
+  pointer-events: none;
+}
+#adjust-switch .toggle { pointer-events: auto; }
+#adjust-switch button { font-size: 11px; padding: 2px 9px; background: #14161a; }
+#adjust-switch button.on { background: var(--accent); }
 
 .transport { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 /* The playback buttons sit together as one block, with play standing out in the middle. */
@@ -195,13 +216,15 @@ canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane
 button.icon { display: grid; place-items: center; width: 36px; height: 32px; padding: 0; color: var(--muted); }
 button.icon:hover:not(:disabled) { color: var(--text); }
 button.icon svg { width: 15px; height: 15px; fill: currentColor; }
+button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; font-weight: 600; }
+.toggle button.icon { width: 34px; height: auto; }
 #play { width: 48px; color: var(--accent); }
 #play:hover:not(:disabled) { color: #5be6ab; }
 #play .when-playing, #play.playing .when-paused { display: none; }
 #play.playing .when-playing { display: block; }
-.zoom-hint { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-#play-time { font-variant-numeric: tabular-nums; min-width: 60px; }
-#meter { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
+#play-time { font-variant-numeric: tabular-nums; min-width: 66px; font-size: 15px; }
+/* Kept at its full width when empty, so the row does not shift when playback starts. */
+#meter { min-width: 330px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
 .toggle { display: flex; flex: none; }
 .toggle-label { color: var(--muted); margin-right: -6px; white-space: nowrap; }
 .toggle button { border-radius: 0; margin-left: -1px; color: var(--muted); }
@@ -209,7 +232,7 @@ button.icon svg { width: 15px; height: 15px; fill: currentColor; }
 .toggle button:last-child { border-radius: 0 6px 6px 0; }
 .toggle button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
-.hint { margin: 6px 0 8px; color: var(--muted); font-size: 12px; }
+#overview { margin-bottom: 10px; }
 #readout { padding-top: 6px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
 
 aside {

@@ -115,6 +115,8 @@ function scheduleDraw() {
     if (!recording) return;
     const playhead = player.time / HOP_SECONDS;
     drawOverview(overview, overviewData(recording), overviewShown, mixes.map((m) => ({ ...m.region, name: m.name })), mixes.indexOf(mix), view, playhead);
+    // The switch for what dragging adjusts lives in the corner of the gain lane.
+    $('adjust-switch').style.top = `${detailLanes(detailCanvas.clientHeight).gain.top + 1}px`;
     if (!detail) return;
     // The curves can be one frame behind the region while it is being dragged.
     const length = detail.gainDb.length;
@@ -1120,7 +1122,7 @@ $('hear-levelled').addEventListener('click', () => setHearLevelled(true));
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
   // While a dialog is up, the keys belong to it.
-  if (exportDialog.open || checkupDialog.open) return;
+  if (exportDialog.open || checkupDialog.open || helpDialog.open) return;
   if (event.code === 'Space') {
     event.preventDefault();
     // Otherwise a focused button would also act on the same key press.
@@ -1578,7 +1580,87 @@ api.onUpdateAvailable((version) => {
   note.hidden = false;
 });
 
+// ---------------------------------------------------------------------------
+// Help: everything the window responds to, on one page, in place of hints
+// printed permanently under each view
+
+const helpDialog = $<HTMLDialogElement>('help-dialog');
+const onMac = navigator.userAgent.includes('Mac');
+const COMMAND = onMac ? '⌘' : 'Ctrl+';
+const OPTION = onMac ? 'Option' : 'Alt';
+
+const HELP: [string, [string, string][]][] = [
+  ['The recording, at the top', [
+    ['Drag across a free part', 'Mark a new mix'],
+    ['Drag a mix\'s edge', 'Move where it starts or ends'],
+    ['Drag the middle of a mix', 'Move it'],
+    ['Click inside a mix', 'Select it and put the playhead there'],
+    ['Click a mix\'s edge', 'Jump to its start, or just before its end'],
+    ['Scroll, or pinch', 'Zoom in and out'],
+    ['Swipe sideways', 'Move along the recording'],
+    ['Orange, red and white marks', 'Silences, clipping and possible dropouts'],
+  ]],
+  ['The mix, below it', [
+    ['Click', 'Put the playhead there'],
+    ['Scroll, or pinch', 'Zoom in and out'],
+    ['Swipe sideways', 'Move along the mix'],
+    ['Drag a square handle inwards', 'Fade in or out; back to the corner removes it'],
+    ['Drag across the gain lane', 'Mark a stretch to adjust by hand'],
+    ['Drag a marked stretch up or down', 'Raise or lower it'],
+    ['Drag a stretch\'s edge', 'Make it longer or shorter'],
+    ['Double-click a stretch', 'Remove it'],
+  ]],
+  ['Playback', [
+    ['Space', 'Play or pause'],
+    ['A', 'Switch between original and levelled'],
+    ['← →', 'Back or forward 5 seconds'],
+    [`Shift+← →, ${OPTION}+← →`, '30 seconds, 1 second'],
+    ['Return', 'Jump to the start of the mix'],
+    ['End', 'Jump to just before its end'],
+  ]],
+  ['Everything else', [
+    [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
+    [`${COMMAND}O`, 'Open a recording'],
+    ['Esc', 'Cancel an analysis or an export'],
+    ['Double-click a mix\'s tab', 'Rename it'],
+    ['Rest the pointer on a control', 'See what it does'],
+  ]],
+];
+
+$('help-content').replaceChildren(
+  ...HELP.map(([title, rows]) => {
+    const section = document.createElement('section');
+    const heading = document.createElement('h4');
+    heading.textContent = title;
+    section.append(
+      heading,
+      ...rows.map(([what, does]) => {
+        const row = document.createElement('div');
+        row.className = 'how';
+        const left = document.createElement('span');
+        left.textContent = what;
+        const right = document.createElement('span');
+        right.textContent = does;
+        row.append(left, right);
+        return row;
+      }),
+    );
+    return section;
+  }),
+);
+
+function showHelp() {
+  if (!helpDialog.open) helpDialog.showModal();
+}
+
+$('help').addEventListener('click', showHelp);
+$('help-close').addEventListener('click', () => helpDialog.close());
+
 api.onMenu(async (command) => {
+  if (command === 'help') {
+    showHelp();
+    return;
+  }
   if (command === 'open') {
     const path = busy ? null : await api.pickFile();
     if (path) open(path);

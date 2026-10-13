@@ -377,6 +377,8 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
+        { label: 'Gestures and Shortcuts', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
+        { type: 'separator' },
         { label: 'Check for Updates…', click: checkForUpdatesNow },
         {
           label: 'Check for Updates Automatically',
