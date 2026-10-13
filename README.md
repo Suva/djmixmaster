@@ -112,6 +112,9 @@ dropouts in white. The report describes; it does not repair yet.
 
 - **Detail view**: the waveform, the loudness before and after, and the gain
   being applied. Scroll to zoom in on a transition.
+- **Transport**: the buttons above the curves jump to the start, step back,
+  play or pause, step forward, and jump to the end. Holding back or forward
+  keeps stepping.
 - **Live preview**: settings change what you hear immediately, and the preview
   uses the same limiter as the export.
 - **Adjusting by hand**: drag sideways across the gain lane to mark a stretch,
@@ -145,6 +148,7 @@ dropouts in white. The report describes; it does not repair yet.
 | A | Switch between the original and the levelled sound |
 | ← → | Move the playhead 5 seconds (30 with Shift, 1 with Option or Alt) |
 | Return | Jump to the start of the mix |
+| End | Jump to 10 seconds before the end of the mix |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
 | Cmd/Ctrl+O | Open a recording |
 | Esc | Cancel an analysis or export in progress |

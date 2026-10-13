@@ -54,6 +54,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/renderer.ts` | The window: state, mixes, interaction, undo, export |
 | `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
 | `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
+| `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
 
 ## Rules that are easy to break
@@ -79,6 +80,10 @@ and curves in the code are block indexes unless a name says seconds.
   there, or old sessions lose it. A breaking change needs a new `version`.
 - **Never load a recording whole.** Files are hours long. Decode and encode
   as streams; keep per-block data, not per-sample data, in memory.
+- **Tooltips are written as `title`.** `tooltip.ts` takes every `title` over,
+  in markup and when set from code, and shows it sooner than the system
+  would. Give an icon button an `aria-label` as well, and name its shortcut
+  in the tooltip.
 - **Clicks are not drags.** Pointer handlers ignore movement under
   `DRAG_START_PX`. New drag interactions should do the same.
 

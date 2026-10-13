@@ -8,6 +8,9 @@ import { BASS_SHELF_HZ } from '../../shelf.ts';
 import type { MediaSource } from '../api.ts';
 import type { LimiterReport, LimiterSettings } from './limiter-worklet.ts';
 
+/** How long after the last jump a streamed recording starts playing again from the new place. */
+const STREAM_RESTART_MS = 150;
+
 export class Player {
   onReport: (report: LimiterReport) => void = () => {};
   onPlay: () => void = () => {};
@@ -22,6 +25,7 @@ export class Player {
   /** For a streamed recording: where the current stream starts, and whether one is loaded. */
   #streamStart = 0;
   #streamLoaded = false;
+  #restart: ReturnType<typeof setTimeout> | undefined;
 
   #context: AudioContext | null = null;
   #gain: GainNode | null = null;
@@ -69,8 +73,15 @@ export class Player {
     }
     this.#streamStart = seconds;
     this.#streamLoaded = false;
-    // A playing stream is replaced by one from the new position.
-    if (this.#playing) this.#startStream().catch(() => {});
+    // A playing stream is replaced by one from the new position, but only once
+    // the jumping has stopped: holding a button down jumps many times a second.
+    if (this.#playing) {
+      this.#audio.pause();
+      clearTimeout(this.#restart);
+      this.#restart = setTimeout(() => {
+        if (this.#playing && !this.#streamLoaded) this.#startStream().catch(() => {});
+      }, STREAM_RESTART_MS);
+    }
     this.onSeek();
   }
 

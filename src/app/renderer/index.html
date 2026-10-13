@@ -62,8 +62,24 @@
           <button id="delete-mix" title="Remove this mix; the recording itself is not touched">Delete</button>
         </div>
         <div class="transport">
-          <button id="to-start" title="Move the playhead to the start of the mix (Return)">⏮</button>
-          <button id="play" title="Space">Play</button>
+          <div class="transport-buttons" role="group" aria-label="Playback">
+            <button id="to-start" class="icon" title="Jump to the start of the mix (Return)" aria-label="Jump to the start of the mix">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h2.5v12H2zM14 2v12L5.5 8z"/></svg>
+            </button>
+            <button id="rewind" class="icon" title="Back 5 seconds (←). Hold to keep going; Shift for 30 seconds, Option for 1." aria-label="Back">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11L1 8zM15 2.5v11L8 8z"/></svg>
+            </button>
+            <button id="play" class="icon" title="Play (Space)" aria-label="Play">
+              <svg class="when-paused" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2l10 6-10 6z"/></svg>
+              <svg class="when-playing" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h3.5v12H3zM9.5 2H13v12H9.5z"/></svg>
+            </button>
+            <button id="forward" class="icon" title="Forward 5 seconds (→). Hold to keep going; Shift for 30 seconds, Option for 1." aria-label="Forward">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 2.5L8 8l-7 5.5zM8 2.5L15 8l-7 5.5z"/></svg>
+            </button>
+            <button id="to-end" class="icon" title="Jump to just before the end of the mix (End)" aria-label="Jump to the end of the mix">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2l8.5 6L2 14zM11.5 2H14v12h-2.5z"/></svg>
+            </button>
+          </div>
           <output id="play-time">0:00:00</output>
           <div class="toggle" role="group" aria-label="What to listen to">
             <button id="hear-original" title="A switches between the two">Original</button>

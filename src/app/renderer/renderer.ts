@@ -9,6 +9,7 @@ import type { Examination } from '../../master.ts';
 import type { Api } from '../api.ts';
 import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
 import { Player } from './player.ts';
+import { initTooltips } from './tooltip.ts';
 
 declare global {
   interface Window {
@@ -1076,11 +1077,11 @@ function setHearLevelled(levelled: boolean) {
 }
 
 player.onPlay = () => {
-  $('play').textContent = 'Pause';
+  showPlaying(true);
   follow();
 };
 player.onPause = () => {
-  $('play').textContent = 'Play';
+  showPlaying(false);
   $('meter').textContent = '';
   showPlayback();
 };
@@ -1103,6 +1104,14 @@ player.onReport = ({ gain }) => {
     (hearLevelled && detail?.bassDb ? `    bass ${db(bassAt(player.time))}` : '') +
     `    peak ${peakDb.toFixed(1)} dBFS    limiter ${limiting < 0.05 ? 'idle' : `-${limiting.toFixed(1)} dB`}`;
 };
+
+/** Shows the play button as play or pause, to match what pressing it would do. */
+function showPlaying(playing: boolean) {
+  const button = $('play');
+  button.classList.toggle('playing', playing);
+  button.title = playing ? 'Pause (Space)' : 'Play (Space)';
+  button.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+}
 
 $('play').addEventListener('click', togglePlay);
 $('hear-original').addEventListener('click', () => setHearLevelled(false));
@@ -1130,7 +1139,7 @@ window.addEventListener('keydown', (event) => {
     toStart();
   } else if (event.code === 'End') {
     event.preventDefault();
-    seek(Math.max(mix.region.start, mix.region.end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
+    toEnd();
   }
 });
 
@@ -1151,7 +1160,42 @@ function toStart() {
   if (recording) seek(mix.region.start * HOP_SECONDS);
 }
 
+function toEnd() {
+  if (recording) seek(Math.max(mix.region.start, mix.region.end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
+}
+
 $('to-start').addEventListener('click', toStart);
+$('to-end').addEventListener('click', toEnd);
+
+// Back and forward step once on a press and keep stepping while held, like the arrow keys do.
+const HOLD_DELAY_MS = 350;
+const HOLD_EVERY_MS = 110;
+for (const [id, direction] of [['rewind', -1], ['forward', 1]] as const) {
+  const button = $(id);
+  let holding: ReturnType<typeof setTimeout> | undefined;
+  const stop = () => {
+    clearTimeout(holding);
+    clearInterval(holding);
+    holding = undefined;
+  };
+  const step = (event: MouseEvent) => {
+    stepPlayhead(direction * (event.altKey ? STEP_FINE_SECONDS : event.shiftKey ? STEP_COARSE_SECONDS : STEP_SECONDS));
+  };
+  button.addEventListener('mousedown', (event) => {
+    if (event.button !== 0 || !recording || busy) return;
+    step(event);
+    stop();
+    holding = setTimeout(() => {
+      holding = setInterval(() => step(event), HOLD_EVERY_MS);
+    }, HOLD_DELAY_MS);
+  });
+  button.addEventListener('mouseup', stop);
+  button.addEventListener('mouseleave', stop);
+  // A press of the mouse has already stepped; this is for the button being worked from the keyboard.
+  button.addEventListener('click', (event) => {
+    if (event.detail === 0 && recording && !busy) step(event);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -1264,7 +1308,7 @@ function setBusy(label: string | null) {
   $<HTMLButtonElement>('export').disabled = busy || !recording;
   $<HTMLButtonElement>('export-all').disabled = busy || !recording;
   $<HTMLButtonElement>('play').disabled = busy || !recording;
-  $<HTMLButtonElement>('to-start').disabled = busy || !recording;
+  for (const id of ['to-start', 'rewind', 'forward', 'to-end']) $<HTMLButtonElement>(id).disabled = busy || !recording;
   showHistory();
 }
 
@@ -1884,6 +1928,7 @@ new ResizeObserver(scheduleDraw).observe(detailCanvas);
 new ResizeObserver(scheduleDraw).observe(overview);
 
 syncControls();
+initTooltips();
 api.onOpenFile(open);
 api.initialFile().then((path) => {
   if (path) open(path);

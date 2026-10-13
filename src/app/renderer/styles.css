@@ -114,6 +114,22 @@ select {
 }
 #export-all-group { display: flex; gap: 6px; }
 
+#tooltip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: 300px;
+  padding: 6px 9px;
+  color: var(--text);
+  background: #0b0d10;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
 dialog {
   width: 520px;
   max-height: 86vh;
@@ -171,7 +187,18 @@ canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane
 #detail { flex: 1; min-height: 0; cursor: pointer; }
 
 .transport { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-#play { min-width: 68px; }
+/* The playback buttons sit together as one block, with play standing out in the middle. */
+.transport-buttons { display: flex; flex: none; }
+.transport-buttons button { border-radius: 0; margin-left: -1px; }
+.transport-buttons button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.transport-buttons button:last-child { border-radius: 0 6px 6px 0; }
+button.icon { display: grid; place-items: center; width: 36px; height: 32px; padding: 0; color: var(--muted); }
+button.icon:hover:not(:disabled) { color: var(--text); }
+button.icon svg { width: 15px; height: 15px; fill: currentColor; }
+#play { width: 48px; color: var(--accent); }
+#play:hover:not(:disabled) { color: #5be6ab; }
+#play .when-playing, #play.playing .when-paused { display: none; }
+#play.playing .when-playing { display: block; }
 .zoom-hint { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #play-time { font-variant-numeric: tabular-nums; min-width: 60px; }
 #meter { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
