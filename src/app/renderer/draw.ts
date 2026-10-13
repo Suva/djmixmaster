@@ -14,6 +14,9 @@ const COLOR = {
   gain: '#f2a83b',
   bass: '#6aa9ff',
   warn: '#ff5d5d',
+  // The limiter at work is no fault, so it is not red, which stays for clipping
+  // in the recording. The meter's limiter column uses the same amber.
+  limited: '#f2a83b',
   hover: '#e6e8ec',
 };
 const FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
@@ -309,7 +312,7 @@ export function drawDetail(
       ctx.fillRect(GUTTER + x, mid - inner, 1, inner * 2);
       if (after[x] > detail.ceiling) {
         // Peaks the limiter will have to hold down.
-        ctx.fillStyle = COLOR.warn;
+        ctx.fillStyle = COLOR.limited;
         ctx.fillRect(GUTTER + x, mid - a - 3, 1, 3);
         ctx.fillRect(GUTTER + x, mid + a, 1, 3);
       }
@@ -353,7 +356,7 @@ export function drawDetail(
     }
 
     laneLabel(ctx, GUTTER + 8, waveLane.top + 10, [
-      ['Waveform', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['limited', COLOR.warn],
+      ['Waveform', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['limited', COLOR.limited],
     ]);
   }
 
