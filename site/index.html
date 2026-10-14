@@ -6,68 +6,7 @@
   <title>DJ Mix Master</title>
   <meta name="description" content="Masters recorded DJ mixes: evens out the loudness from track to track without pumping the breakdowns. Free and open source, for macOS and Windows.">
   <link rel="icon" href="icon.png">
-  <style>
-    :root {
-      --bg: #101216;
-      --panel: #1b1e24;
-      --border: #2a2e37;
-      --text: #e6e8ec;
-      --muted: #9aa2b1;
-      --accent: #3ddc97;
-      --accent-ink: #06281a;
-      color-scheme: dark;
-    }
-    * { box-sizing: border-box; }
-    html { -webkit-text-size-adjust: 100%; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    a { color: var(--accent); }
-    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
-
-    header { display: flex; align-items: center; gap: 12px; padding: 22px 0; }
-    header img { width: 40px; height: 40px; }
-    header .name { font-weight: 650; font-size: 18px; }
-    header .spacer { flex: 1; }
-    header a { color: var(--muted); text-decoration: none; }
-    header a:hover { color: var(--text); }
-
-    .hero { padding: 36px 0 28px; }
-    h1 { margin: 0 0 16px; font-size: clamp(32px, 6vw, 52px); line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; }
-    .lead { max-width: 640px; margin: 0 0 28px; font-size: 19px; color: var(--muted); }
-    .downloads { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
-    .button {
-      display: inline-flex;
-      flex-direction: column;
-      padding: 12px 22px;
-      border-radius: 10px;
-      background: var(--accent);
-      color: var(--accent-ink);
-      font-weight: 650;
-      text-decoration: none;
-    }
-    .button:hover { background: #5be6ab; }
-    .button small { font-weight: 500; font-size: 13px; opacity: 0.8; }
-    .version { margin: 0; font-size: 14px; color: var(--muted); }
-
-    .screenshot { display: block; width: 100%; height: auto; margin: 20px 0 8px; border: 1px solid var(--border); border-radius: 12px; }
-
-    h2 { margin: 64px 0 20px; font-size: 26px; letter-spacing: -0.01em; }
-    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-    .features div, .steps div { padding: 20px 22px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
-    h3 { margin: 0 0 8px; font-size: 17px; }
-    .features p, .steps p, .steps ol { margin: 0; font-size: 15.5px; color: var(--muted); }
-    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-    .steps ol { padding-left: 20px; }
-    .steps li { margin-bottom: 4px; }
-    .note { max-width: 720px; font-size: 15.5px; color: var(--muted); }
-
-    footer { margin-top: 72px; padding: 28px 0 44px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); }
-    footer p { margin: 0 0 6px; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="wrap">
@@ -75,6 +14,7 @@
       <img src="icon.png" alt="">
       <span class="name">DJ Mix Master</span>
       <span class="spacer"></span>
+      <a href="changes.html">What's new</a>
       <a href="{{REPOSITORY_URL}}">Source on GitHub</a>
     </header>
 
@@ -86,7 +26,7 @@
           <a class="button" href="{{MAC_URL}}">Download for Mac<small>{{MAC_DETAIL}}</small></a>
           <a class="button" href="{{WINDOWS_URL}}">Download for Windows<small>{{WINDOWS_DETAIL}}</small></a>
         </div>
-        <p class="version">{{VERSION_LINE}} Free and open source. <a href="{{RELEASES_URL}}">Release notes</a></p>
+        <p class="version">{{VERSION_LINE}} Free and open source. <a href="changes.html">What's new</a></p>
       </section>
 
       <img class="screenshot" src="screenshot.png" width="2720" height="1720" alt="The DJ Mix Master window: a recording with two mixes marked, the first shown with a fade at each end, its loudness before and after, and the gain being applied.">

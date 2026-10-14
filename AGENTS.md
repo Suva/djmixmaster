@@ -232,16 +232,20 @@ git push --follow-tags
 ```
 
 - The working folder has to be clean first.
+- `npm version` turns "Not released yet" in `CHANGELOG.md` into a heading for
+  the new version (`scripts/release-changelog.mjs`), and stops if there is
+  nothing under it.
 - Use `minor` for new features and `patch` for fixes only.
 - A tag made any other way still builds, with a warning that `package.json`
   disagrees. Fix it by setting the version there to match.
 
 ## The website
 
-`site/` holds a one-page website. `scripts/build-site.mjs` fills in the
+`site/` holds the website: a front page, and a "What's new" page made from
+the released part of `CHANGELOG.md`. `scripts/build-site.mjs` fills in the
 newest release's version and download links and writes the result to `_site/`;
 `.github/workflows/site.yml` publishes that to GitHub Pages after every
-release and whenever `site/` changes. Run the script locally to look at the
+release and whenever `site/` or `CHANGELOG.md` changes. Run the script locally to look at the
 page (it needs the GitHub CLI signed in).
 
 `site/screenshot.png` is also the picture in the README. It is taken with the
@@ -264,3 +268,7 @@ The file name of the recording shows in the picture, so use a neutral one.
 - When a change makes something in the README or in this file untrue, fix
   the text in the same change.
 - When a task in [TASKS.md](TASKS.md) is done, remove it from there.
+- When a change is something a person using the app would notice, add a line
+  for it under "Not released yet" in [CHANGELOG.md](CHANGELOG.md), written for
+  them rather than for developers. The website's "What's new" page is made
+  from that file.

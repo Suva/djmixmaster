@@ -24,7 +24,8 @@
     "package": "node scripts/build.mjs && electron-builder",
     "master": "node src/cli.ts",
     "test": "node scripts/build.mjs && node --test test/*.test.ts",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "version": "node scripts/release-changelog.mjs && git add CHANGELOG.md"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

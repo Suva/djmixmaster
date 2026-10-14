@@ -14,7 +14,9 @@ that shares the same processing.
 
 ## Download and install
 
-Installers are on the [releases page](https://github.com/Suva/djmixmaster/releases).
+Installers are on the [releases page](https://github.com/Suva/djmixmaster/releases). What changed in each
+release is in [CHANGELOG.md](CHANGELOG.md), and on the website's
+[What's new](https://suva.github.io/djmixmaster/changes.html) page.
 Nothing else needs to be installed; the app carries everything it uses.
 
 | System | File | Needs |
