@@ -264,6 +264,43 @@ test('the keys move the playhead, switch what is heard and show the help', { ski
   assert.ok(seen.help);
 });
 
+test('I and O put the start and the end of the mix at the playhead', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    const region = () => [page.element<HTMLInputElement>('region-start').value, page.element<HTMLInputElement>('region-end').value];
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(60);
+    page.key('KeyI');
+    await page.wait(60);
+    const afterIn = region();
+
+    for (let i = 0; i < 4; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(60);
+    // The button does what the key does.
+    page.click('mark-end');
+    await page.wait(60);
+    const afterOut = region();
+
+    // Five seconds after the start is too close for an end.
+    page.key('Enter');
+    page.key('ArrowRight');
+    await page.wait(60);
+    page.key('KeyO');
+    await page.wait(60);
+    const refused = { region: region(), said: page.text('readout') };
+
+    await page.settle();
+    page.click('undo');
+    await page.settle();
+    return { afterIn, afterOut, refused, afterUndo: region(), length: page.text('region-length') };
+  });
+  assert.deepEqual(seen.afterIn, ['0:01:00', '0:09:00']);
+  assert.deepEqual(seen.afterOut, ['0:01:00', '0:03:00']);
+  assert.deepEqual(seen.refused.region, ['0:01:00', '0:03:00']);
+  assert.match(seen.refused.said, /at least 10 seconds/);
+  assert.deepEqual(seen.afterUndo, ['0:00:00', '0:09:00'], 'the two marks made in one go undo together');
+});
+
 test('playing moves the playhead and lights the meter', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     const meter = page.element('level-meter');

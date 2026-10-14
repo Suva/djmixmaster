@@ -158,6 +158,7 @@ everything below together with the mouse and trackpad gestures.
 | Space | Play or pause |
 | A | Switch between the original and the levelled sound |
 | ← → | Move the playhead 5 seconds (30 with Shift, 1 with Option or Alt) |
+| I, O | Put the start, or the end, of the mix at the playhead |
 | Return | Jump to the start of the mix |
 | End | Jump to 10 seconds before the end of the mix |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |

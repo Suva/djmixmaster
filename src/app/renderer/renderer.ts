@@ -430,6 +430,30 @@ function showMix() {
   scheduleDraw();
 }
 
+/**
+ * Puts the start or the end of the selected mix at the playhead, so that a
+ * set can be picked out of a long recording by ear, without zooming out to
+ * reach the handles.
+ */
+function markEdge(edge: 'start' | 'end') {
+  if (!recording || busy) return;
+  const at = Math.round(player.time / HOP_SECONDS);
+  const { start, end } = mix.region;
+  const length = edge === 'start' ? end - at : at - start;
+  if (length < MIN_REGION_BLOCKS) {
+    $('readout').textContent =
+      edge === 'start'
+        ? 'The start has to be at least 10 seconds before the end of the mix.'
+        : 'The end has to be at least 10 seconds after the start of the mix.';
+    return;
+  }
+  if (edge === 'start') setRegion(at, end);
+  else setRegion(start, at);
+}
+
+$('mark-start').addEventListener('click', () => markEdge('start'));
+$('mark-end').addEventListener('click', () => markEdge('end'));
+
 /** Moves the selected mix, keeping it inside the free space around it. */
 function setRegion(start: number, end: number) {
   if (!recording) return;
@@ -1179,6 +1203,8 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     const step = event.altKey ? STEP_FINE_SECONDS : event.shiftKey ? STEP_COARSE_SECONDS : STEP_SECONDS;
     stepPlayhead(event.code === 'ArrowLeft' ? -step : step);
+  } else if ((event.code === 'KeyI' || event.code === 'KeyO') && !event.metaKey && !event.ctrlKey) {
+    markEdge(event.code === 'KeyI' ? 'start' : 'end');
   } else if (event.code === 'Backspace' || event.code === 'Delete') {
     event.preventDefault();
     // The stretch under the pointer, if there is one; otherwise the mix.
@@ -1730,6 +1756,7 @@ const HELP: [string, [string, string][]][] = [
     ['A', 'Switch between original and levelled'],
     ['← →', 'Back or forward 5 seconds'],
     [`Shift+← →, ${OPTION}+← →`, '30 seconds, 1 second'],
+    ['I, O', 'Start, or end, the mix at the playhead'],
     ['Return', 'Jump to the start of the mix'],
     ['End', 'Jump to just before its end'],
   ]],

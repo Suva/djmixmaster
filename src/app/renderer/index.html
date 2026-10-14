@@ -58,12 +58,14 @@
         <canvas id="overview"></canvas>
         <div class="region-bar">
           <label>Name <input id="mix-name" type="text" spellcheck="false"></label>
-          <label>Start <input id="region-start" type="text" spellcheck="false"></label>
-          <label>End <input id="region-end" type="text" spellcheck="false"></label>
+          <label title="Where the mix starts in the recording. I puts the start at the playhead.">Start <input id="region-start" type="text" spellcheck="false"></label>
+          <label title="Where the mix ends in the recording. O puts the end at the playhead.">End <input id="region-end" type="text" spellcheck="false"></label>
           <span>Length <output id="region-length"></output></span>
           <span class="spacer"></span>
           <button id="split-gaps" class="with-icon" title="Cut this mix apart at the silences inside it, and trim silence from its ends"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h3.5v6H1zM6.25 5h3.5v6h-3.5zM11.5 5H15v6h-3.5z"/></svg>Split at gaps</button>
           <div class="toggle" role="group" aria-label="This mix">
+            <button id="mark-start" class="icon" title="Start here (I): put the start of this mix at the playhead" aria-label="Start the mix at the playhead"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3H3.5v10H6M7.5 8h6M10 5.5 7.5 8l2.5 2.5"/></svg></button>
+            <button id="mark-end" class="icon" title="End here (O): put the end of this mix at the playhead" aria-label="End the mix at the playhead"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3h2.5v10H10M8.5 8h-6M6 5.5 8.5 8 6 10.5"/></svg></button>
             <button id="split-here" class="icon" title="Split at playhead: cut this mix in two where the playhead is" aria-label="Split at playhead"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 4.5H6v7H1.5zM10 4.5h4.5v7H10zM7.4 1.5h1.2v13H7.4z"/></svg></button>
             <button id="select-all" class="icon" title="Expand: stretch this mix over all the free space around it" aria-label="Expand"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3v10M14.5 3v10M4.5 8h7M6.5 5.5 4 8l2.5 2.5M9.5 5.5 12 8l-2.5 2.5"/></svg></button>
             <button id="delete-mix" class="icon" title="Delete this mix (Backspace); the recording itself is not touched" aria-label="Delete this mix"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h11M6.25 4.5V2.75h3.5V4.5M4 4.5l.6 9h6.8l.6-9M6.75 7.25v3.5M9.25 7.25v3.5"/></svg></button>
