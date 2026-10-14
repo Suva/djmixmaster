@@ -203,7 +203,8 @@ dialog input[type="text"]:focus { outline: 1px solid var(--accent); }
 .region-title { color: var(--text); font-weight: 600; }
 .region-bar output { color: var(--text); font-variant-numeric: tabular-nums; }
 .region-bar input {
-  width: 86px;
+  /* Room for a time with its thousandths: 0:00:00.000. */
+  width: 104px;
   margin-left: 4px;
   font: inherit;
   font-variant-numeric: tabular-nums;

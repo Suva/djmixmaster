@@ -74,6 +74,13 @@ and curves in the code are block indexes unless a name says seconds.
 - **Preview and export must sound the same.** They share the limiter code.
   The bass shelf in `shelf.ts` uses the same formulas as the Web Audio
   `lowshelf` filter the preview uses; change one and the other must follow.
+- **A mix has two kinds of position.** `region` is in whole blocks and is what
+  indexes the curves. The mix's real edges are kept to the millisecond as
+  `trimStart` and `trimEnd`, fractions of the first and last block; `edges()`
+  in `renderer.ts` gives them and `setEdges()` sets them. Use `edges()` for
+  anything about time: playback, export, drawing an edge, whether two mixes
+  touch. Two mixes cut apart inside a block both have that block in their
+  `region`, so do not compare regions to tell whether mixes overlap.
 - **Bump `ANALYSIS_VERSION`** in `loudness.ts` whenever a recording would
   measure differently. Stored analyses are keyed on it and are redone.
 - **Saved sessions are read defensively.** `restore` in `renderer.ts` checks

@@ -118,7 +118,9 @@ dropouts in white. The report describes; it does not repair yet.
   keeps stepping.
 - **Zooming in**: scroll over the curves to zoom, down to half a second across
   the window. From 20 seconds inwards the waveform is drawn from the sound
-  itself, so single beats and bass notes can be seen.
+  itself, so single beats and bass notes can be seen. The start and end of a
+  mix, and a split, land on the playhead to the millisecond, and the Start
+  and End fields take fractions of a second.
 - **Live preview**: settings change what you hear immediately, and the preview
   uses the same limiter as the export.
 - **Level meter**: beside the curves, two columns of lights show what reaches

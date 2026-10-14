@@ -128,7 +128,12 @@ export async function render(
   // The fades come last, after the limiter, so nothing downstream works against them.
   const fadeIn = Math.round((options.fadeInSeconds ?? 0) * sampleRate);
   const fadeOut = Math.round((options.fadeOutSeconds ?? 0) * sampleRate);
-  const expectedFrames = gain.length * hopFrames;
+  // The region can be a little shorter than the curve: it is given to the
+  // millisecond, the curve in whole blocks. The fade out has to end with the sound.
+  const expectedFrames =
+    region.start !== undefined && region.end !== undefined
+      ? Math.round((region.end - region.start) * sampleRate)
+      : gain.length * hopFrames;
   let emitted = 0;
 
   const emit = async (samples: Float32Array) => {

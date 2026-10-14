@@ -5,10 +5,10 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { ffmpeg } from '../src/audio-io.ts';
+import { ffmpeg, probe } from '../src/audio-io.ts';
 import { HOP_SECONDS } from '../src/loudness.ts';
 import { measure } from '../src/master.ts';
 import { TRACK_LEVELS_DB, TRACK_SECONDS, writeSyntheticMix } from './synthetic-mix.ts';
@@ -465,6 +465,56 @@ test('zoomed in close, the waveform is drawn from the wave itself', { skip }, as
     return afterMark;
   });
   assert.deepEqual(seen, { wave: 'fine', start: '0:01:30', afterSplit: 'fine', mixes: 2 });
+});
+
+test('edges and cuts land on the playhead to the millisecond, and so does the export', { skip }, async () => {
+  const exportFolder = join(work, 'exact');
+  await mkdir(exportFolder);
+  const seen = await runApp({ recording: mix, data: await fresh(), exportFolder, timeoutMs: 120_000 }, async (page) => {
+    const playing = () => page.element('play').classList.contains('playing');
+    const field = (id: string) => page.element<HTMLInputElement>(id).value;
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
+    // Stop playback wherever it happens to be and start the mix there; again
+    // in the rare case that it stopped on a whole tenth of a second.
+    do {
+      page.key('Space');
+      await page.until(playing, 'playback to start');
+      await page.wait(350);
+      page.key('Space');
+      await page.until(() => !playing(), 'playback to stop');
+      page.key('KeyI');
+      await page.wait(100);
+    } while (!/\.\d\d/.test(field('region-start')));
+
+    // A minute on, cut. The first piece is then a minute long exactly.
+    for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(100);
+    page.click('split-here');
+    await page.settle();
+    const first = { start: field('region-start'), end: field('region-end'), length: page.text('region-length') };
+    document.querySelectorAll<HTMLElement>('.mix-tab')[1].click();
+    await page.wait(100);
+    const second = { start: field('region-start'), end: field('region-end') };
+
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    page.click('export-go');
+    await page.until(() => page.text('export-status').startsWith('Exported'), 'the export to finish', 90_000);
+    return { first, second };
+  });
+  const seconds = (time: string) => time.split(':').reduce((total, part) => total * 60 + Number(part), 0);
+  assert.match(seen.first.start, /^0:01:0\d\.\d+$/, 'the start is kept to a fraction of a second');
+  assert.equal(seen.first.length, '0:01:00');
+  assert.equal(seen.second.start, seen.first.end, 'the second piece starts exactly where the first ends');
+  assert.equal(seen.second.end, '0:09:00');
+
+  const [one, two] = (await readdir(exportFolder)).sort();
+  const lengths = [(await probe(join(exportFolder, one))).duration, (await probe(join(exportFolder, two))).duration];
+  // The length of a file is read to a hundredth of a second.
+  assert.ok(Math.abs(lengths[0] - 60) < 0.011, `the first file is ${lengths[0]} s long`);
+  const rest = MIX_SECONDS - seconds(seen.first.end);
+  assert.ok(Math.abs(lengths[1] - rest) < 0.011, `the second file is ${lengths[1]} s long, not ${rest}`);
 });
 
 test('playing moves the playhead and lights the meter', { skip }, async () => {

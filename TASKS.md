@@ -80,13 +80,6 @@ tracks inside a mix.
 
 Done when a player that reads cue sheets shows the tracks of an exported mix.
 
-### Edges and splits finer than a tenth of a second — small
-
-Zoomed in close, the waveform is drawn from the wave itself and shows single
-beats, but a mix's edges, a split and the playhead's steps still land on the
-100 ms blocks everything else works in. If placing a cut by eye turns out to
-want more, regions would have to be kept in seconds rather than blocks.
-
 ## Sharing the app
 
 The repository is public, under GPL-3.0-or-later, with installers for Apple

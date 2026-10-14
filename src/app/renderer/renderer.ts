@@ -52,6 +52,15 @@ interface Mix {
   adjustments: Adjustment[];
   /** Who played it, for the exported file's tags. */
   artist?: string;
+  /**
+   * The mix's edges to the millisecond. `region` is in whole blocks, as the
+   * curves need it, and always covers the mix. These say how far into its
+   * first block the mix really starts, and how far short of the end of its
+   * last block it stops, as fractions of a block. Absent means none. Two
+   * mixes cut apart inside a block therefore share that block.
+   */
+  trimStart?: number;
+  trimEnd?: number;
   /** Length in blocks of the fade at the start and at the end; absent means none. */
   fadeIn?: number;
   fadeOut?: number;
@@ -150,7 +159,7 @@ function fetchFinePiece(piece: number) {
 function fineWave(start: number, end: number): FineWave | null {
   if (!recording || end - start > FINE_BELOW_BLOCKS) return null;
   const first = Math.floor(start / FINE_PIECE_BLOCKS);
-  const last = Math.floor((end - 1) / FINE_PIECE_BLOCKS);
+  const last = Math.floor((end - 1 / FINE_PER_BLOCK) / FINE_PIECE_BLOCKS);
   let complete = true;
   for (let piece = first; piece <= last; piece++) {
     const have = finePieces.get(piece);
@@ -168,12 +177,12 @@ function fineWave(start: number, end: number): FineWave | null {
   // seconds to read, and playing or scrolling on should not wait for it.
   fetchFinePiece(last + 1);
   fetchFinePiece(first - 1);
-  const length = (end - start) * FINE_PER_BLOCK;
+  const length = Math.round((end - start) * FINE_PER_BLOCK);
   const low = new Float32Array(length);
   const high = new Float32Array(length);
   for (let piece = first; piece <= last; piece++) {
     const wave = finePieces.get(piece)!;
-    const offset = (piece * FINE_PIECE_BLOCKS - start) * FINE_PER_BLOCK;
+    const offset = Math.round((piece * FINE_PIECE_BLOCKS - start) * FINE_PER_BLOCK);
     const from = Math.max(0, -offset);
     const to = Math.min(wave.low.length, length - offset);
     if (to <= from) continue;
@@ -190,7 +199,7 @@ function scheduleDraw() {
     drawQueued = false;
     if (!recording) return;
     const playhead = player.time / HOP_SECONDS;
-    drawOverview(overview, overviewData(recording), overviewShown, mixes.map((m) => ({ ...m.region, name: m.name })), mixes.indexOf(mix), view, playhead);
+    drawOverview(overview, overviewData(recording), overviewShown, mixes.map((m) => ({ ...edges(m), name: m.name })), mixes.indexOf(mix), view, playhead);
     // The switch for what dragging adjusts lives in the corner of the gain lane.
     $('adjust-switch').style.top = `${detailLanes(detailCanvas.clientHeight).gain.top + 1}px`;
     if (!detail) return;
@@ -222,9 +231,39 @@ interface Stats {
   deepestLimit: number;
 }
 
+/** Edges are kept to a hundredth of a block, which is a millisecond. */
+const fine = (blocks: number) => Math.round(blocks * 100) / 100;
+
+/** Where a mix really starts and ends, in blocks and fractions of one. Use `region` for anything that indexes the curves. */
+function edges(m: Mix): Region {
+  return { start: m.region.start + (m.trimStart ?? 0), end: m.region.end - (m.trimEnd ?? 0) };
+}
+
+/** Puts a mix's edges at these positions, in blocks and fractions of one. */
+function setEdges(m: Mix, start: number, end: number) {
+  start = fine(start);
+  end = fine(end);
+  m.region = { start: Math.floor(start), end: Math.ceil(end) };
+  const trimStart = fine(start - m.region.start);
+  const trimEnd = fine(m.region.end - end);
+  if (trimStart > 0) m.trimStart = trimStart;
+  else delete m.trimStart;
+  if (trimEnd > 0) m.trimEnd = trimEnd;
+  else delete m.trimEnd;
+}
+
+/** A position in the recording as a time, with the fraction of a second only where there is one. */
+function stamp(blocks: number): string {
+  const milliseconds = Math.round(blocks * HOP_SECONDS * 1000);
+  const whole = clock(Math.floor(milliseconds / 1000));
+  const rest = milliseconds % 1000;
+  return rest === 0 ? whole : `${whole}.${String(rest).padStart(3, '0').replace(/0+$/, '')}`;
+}
+
 /** A mix's fades in blocks. Together they can never be longer than the mix. */
 function fades(m: Mix): { in: number; out: number } {
-  const half = Math.floor((m.region.end - m.region.start) / 2);
+  const { start, end } = edges(m);
+  const half = Math.floor((end - start) / 2);
   return { in: clamp(m.fadeIn ?? 0, 0, half), out: clamp(m.fadeOut ?? 0, 0, half) };
 }
 
@@ -325,8 +364,11 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
   // The fades shape what is shown, but not the numbers above: the levelling
   // and the limiter estimate describe the music as if it were not faded.
   const fade = fades(m);
+  // Counted from the mix's real edges, which may lie inside the first and last block.
+  const from = m.trimStart ?? 0;
+  const to = n - (m.trimEnd ?? 0);
   for (let i = 0; i < n; i++) {
-    const held = fadeGain(i + 0.5, n, fade.in, fade.out);
+    const held = fadeGain(i + 0.5 - from, to - from, fade.in, fade.out);
     if (held === 1) continue;
     peaksOut[i] *= held;
     peakGain[i] *= held;
@@ -337,7 +379,7 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
   return {
     detail: {
       startBlock: start, peaksIn, peaksOut, bodyOut, peakGain, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, adjustments,
-      fadeIn: fade.in, fadeOut: fade.out, targetLufs, ceiling,
+      fadeIn: fade.in, fadeOut: fade.out, from, to, targetLufs, ceiling,
     },
     stats: {
       loudnessIn: integratedLoudness(blocksIn),
@@ -459,8 +501,9 @@ function freeSpace(block: number, except: Mix | null): Region {
   const space = { start: 0, end: recording!.measured.peaks.length };
   for (const other of mixes) {
     if (other === except) continue;
-    if (other.region.end <= block) space.start = Math.max(space.start, other.region.end);
-    else if (other.region.start >= block) space.end = Math.min(space.end, other.region.start);
+    const taken = edges(other);
+    if (taken.end <= block) space.start = Math.max(space.start, taken.end);
+    else if (taken.start >= block) space.end = Math.min(space.end, taken.start);
   }
   return space;
 }
@@ -472,10 +515,10 @@ function showMix() {
   mixes.forEach((m, index) => {
     if (hasDefaultName(m)) m.name = `Mix ${index + 1}`;
   });
-  const { start, end } = mix.region;
-  $<HTMLInputElement>('region-start').value = clock(start * HOP_SECONDS);
-  $<HTMLInputElement>('region-end').value = clock(end * HOP_SECONDS);
-  $('region-length').textContent = clock((end - start) * HOP_SECONDS);
+  const { start, end } = edges(mix);
+  $<HTMLInputElement>('region-start').value = stamp(start);
+  $<HTMLInputElement>('region-end').value = stamp(end);
+  $('region-length').textContent = stamp(end - start);
   const nameInput = $<HTMLInputElement>('mix-name');
   if (document.activeElement !== nameInput) nameInput.value = mix.name;
 
@@ -486,7 +529,7 @@ function showMix() {
       tab.className = m === mix ? 'mix-tab on' : 'mix-tab';
       const number = document.createElement('b');
       number.textContent = String(index + 1);
-      tab.append(number, `${m.name}  ·  ${clock((m.region.end - m.region.start) * HOP_SECONDS)}`);
+      tab.append(number, `${m.name}  ·  ${clock((edges(m).end - edges(m).start) * HOP_SECONDS)}`);
       tab.title = 'Double-click to rename';
       tab.addEventListener('click', () => select(m));
       tab.addEventListener('dblclick', () => {
@@ -514,8 +557,8 @@ function showMix() {
  */
 function markEdge(edge: 'start' | 'end') {
   if (!recording || busy) return;
-  const at = Math.round(player.time / HOP_SECONDS);
-  const { start, end } = mix.region;
+  const at = fine(player.time / HOP_SECONDS);
+  const { start, end } = edges(mix);
   const length = edge === 'start' ? end - at : at - start;
   if (length < MIN_REGION_BLOCKS) {
     $('readout').textContent =
@@ -538,12 +581,13 @@ $('mark-end').addEventListener('click', () => markEdge('end'));
 /** Moves the selected mix, keeping it inside the free space around it. */
 function setRegion(start: number, end: number) {
   if (!recording) return;
-  const space = freeSpace((mix.region.start + mix.region.end) / 2, mix);
+  const now = edges(mix);
+  const space = freeSpace((now.start + now.end) / 2, mix);
   const minimum = Math.min(MIN_REGION_BLOCKS, space.end - space.start);
-  start = clamp(Math.round(start), space.start, space.end - minimum);
-  end = clamp(Math.round(end), start + minimum, space.end);
-  mix.region = { start, end };
-  view = { start, end };
+  start = clamp(fine(start), space.start, space.end - minimum);
+  end = clamp(fine(end), start + minimum, space.end);
+  setEdges(mix, start, end);
+  view = { ...mix.region };
   showMix();
   scheduleRecompute();
 }
@@ -568,6 +612,7 @@ function addMix(region: Region) {
     adjustments: [],
     ...(mix.loudness ? { loudness: mix.loudness } : {}),
   };
+  setEdges(added, region.start, region.end);
   mixes.push(added);
   select(added);
 }
@@ -639,11 +684,11 @@ function hit(event: MouseEvent): { kind: Drag['kind']; mix: Mix | null } {
   const toX = (at: number) => ((at - overviewShown.start) / span) * rect.width;
   const ordered = [mix, ...mixes.filter((m) => m !== mix)];
   for (const m of ordered) {
-    if (Math.abs(x - toX(m.region.start)) <= HANDLE_PX) return { kind: 'start', mix: m };
-    if (Math.abs(x - toX(m.region.end)) <= HANDLE_PX) return { kind: 'end', mix: m };
+    if (Math.abs(x - toX(edges(m).start)) <= HANDLE_PX) return { kind: 'start', mix: m };
+    if (Math.abs(x - toX(edges(m).end)) <= HANDLE_PX) return { kind: 'end', mix: m };
   }
   const block = overviewShown.start + (x / rect.width) * span;
-  const inside = mixes.find((m) => block > m.region.start && block < m.region.end);
+  const inside = mixes.find((m) => block > edges(m).start && block < edges(m).end);
   return inside ? { kind: 'move', mix: inside } : { kind: 'new', mix: null };
 }
 
@@ -652,7 +697,7 @@ overview.addEventListener('mousedown', (event) => {
   const block = overviewBlock(event);
   const grabbed = hit(event);
   if (grabbed.mix && grabbed.mix !== mix) select(grabbed.mix);
-  if (grabbed.kind === 'move') drag = { kind: 'move', offset: block - mix.region.start };
+  if (grabbed.kind === 'move') drag = { kind: 'move', offset: block - edges(mix).start };
   else if (grabbed.kind === 'new') drag = { kind: 'new', anchor: block, added: false };
   else drag = { kind: grabbed.kind };
   dragged = false;
@@ -673,7 +718,7 @@ window.addEventListener('mousemove', (event) => {
   if (!dragged && Math.abs(event.clientX - pressX) < DRAG_START_PX) return;
   dragged = true;
   const block = overviewBlock(event);
-  const { start, end } = mix.region;
+  const { start, end } = edges(mix);
   if (drag.kind === 'start') setRegion(Math.min(block, end - MIN_REGION_BLOCKS), end);
   else if (drag.kind === 'end') setRegion(start, Math.max(block, start + MIN_REGION_BLOCKS));
   else if (drag.kind === 'move') {
@@ -711,8 +756,8 @@ window.addEventListener('mouseup', (event) => {
   // start of the mix on its left edge, and to just before the end on its right.
   if (drag && !dragged) {
     if (drag.kind === 'move') seek(overviewBlock(event) * HOP_SECONDS);
-    else if (drag.kind === 'start') seek(mix.region.start * HOP_SECONDS);
-    else if (drag.kind === 'end') seek(Math.max(mix.region.start, mix.region.end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
+    else if (drag.kind === 'start') seek(edges(mix).start * HOP_SECONDS);
+    else if (drag.kind === 'end') seek(Math.max(edges(mix).start, edges(mix).end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
   }
   drag = null;
 });
@@ -742,7 +787,8 @@ $<HTMLInputElement>('mix-name').addEventListener('blur', showMix);
 /** Stretches the selected mix over all the free space around it. */
 function expandMix() {
   if (!recording || busy) return;
-  const space = freeSpace((mix.region.start + mix.region.end) / 2, mix);
+  const now = edges(mix);
+  const space = freeSpace((now.start + now.end) / 2, mix);
   setRegion(space.start, space.end);
 }
 
@@ -760,28 +806,30 @@ function piecesBetweenGaps(m: Mix): Region[] | null {
   const pieces = soundBetween(recording!.gaps, m.region)
     .filter((piece) => piece.end - piece.start >= MIN_REGION_BLOCKS)
     .map((piece) => ({
-      start: Math.max(m.region.start, piece.start - LEAD_IN_BLOCKS),
-      end: Math.min(m.region.end, piece.end + TAIL_BLOCKS),
+      start: Math.max(edges(m).start, piece.start - LEAD_IN_BLOCKS),
+      end: Math.min(edges(m).end, piece.end + TAIL_BLOCKS),
     }));
   if (pieces.length === 0) return null;
-  const unchanged = pieces.length === 1 && pieces[0].start === m.region.start && pieces[0].end === m.region.end;
+  const unchanged = pieces.length === 1 && pieces[0].start === edges(m).start && pieces[0].end === edges(m).end;
   return unchanged ? null : pieces;
 }
 
 /** Replaces the selected mix by one mix per region, all with its settings. The first keeps its name. */
 function splitInto(regions: Region[]) {
   const original = mix;
-  original.region = regions[0];
+  setEdges(original, regions[0].start, regions[0].end);
   for (const region of regions.slice(1)) {
     mixesCreated++;
-    mixes.push({
+    const piece: Mix = {
       name: `Mix ${mixesCreated}`,
       region,
       options: { ...original.options },
       ceilingDb: original.ceilingDb,
       adjustments: original.adjustments.map((a) => ({ ...a })),
       ...(original.loudness ? { loudness: original.loudness } : {}),
-    });
+    };
+    setEdges(piece, region.start, region.end);
+    mixes.push(piece);
   }
   // The fade out belongs to the end of the music, which is now the last piece.
   if (regions.length > 1 && original.fadeOut) {
@@ -798,8 +846,8 @@ $('split-gaps').addEventListener('click', () => {
 
 function splitAtPlayhead() {
   if (!recording || busy) return;
-  const at = Math.round(player.time / HOP_SECONDS);
-  const { start, end } = mix.region;
+  const at = fine(player.time / HOP_SECONDS);
+  const { start, end } = edges(mix);
   if (at - start < MIN_REGION_BLOCKS || end - at < MIN_REGION_BLOCKS) {
     $('readout').textContent = 'Put the playhead inside this mix, at least 10 seconds from either end, to split there.';
     return;
@@ -839,9 +887,11 @@ $('delete-mix').addEventListener('click', deleteMix);
 /** Shows `start` to `end` of the selected mix, clamped to the mix and the closest zoom. */
 function setView(start: number, end: number) {
   const region = mix.region;
-  const span = clamp(Math.round(end - start), Math.min(MIN_VIEW_BLOCKS, region.end - region.start), region.end - region.start);
-  const from = clamp(Math.round(start), region.start, region.end - span);
-  view = { start: from, end: from + span };
+  // Kept to the millisecond rather than the block: close up, a view that
+  // moved a block at a time would scroll and zoom in jumps.
+  const span = clamp(fine(end - start), Math.min(MIN_VIEW_BLOCKS, region.end - region.start), region.end - region.start);
+  const from = clamp(fine(start), region.start, region.end - span);
+  view = { start: from, end: fine(from + span) };
   scheduleDraw();
 }
 
@@ -1007,7 +1057,7 @@ const FADE_GRAB_PX = 9;
 /** Where the fade handles are drawn, in pixels from the left of the detail view. */
 function fadeHandleX(which: 'in' | 'out'): number | null {
   const fade = fades(mix);
-  const block = which === 'in' ? mix.region.start + fade.in : mix.region.end - fade.out;
+  const block = which === 'in' ? edges(mix).start + fade.in : edges(mix).end - fade.out;
   if (block < view.start || block > view.end) return null;
   const plot = detailCanvas.clientWidth - GUTTER;
   return clamp(GUTTER + ((block - view.start) / (view.end - view.start)) * plot, GUTTER + 5, detailCanvas.clientWidth - 5);
@@ -1043,7 +1093,7 @@ window.addEventListener('mousemove', (event) => {
   const plot = rect.width - GUTTER;
   const x = clamp(event.clientX - rect.left - GUTTER, 0, plot);
   const block = view.start + (x / plot) * (view.end - view.start);
-  const { start, end } = mix.region;
+  const { start, end } = edges(mix);
   const half = Math.floor((end - start) / 2);
   // Within a few pixels of the corner counts as no fade at all.
   const snap = (FADE_GRAB_PX / 2 / plot) * (view.end - view.start);
@@ -1183,7 +1233,7 @@ function showFigures() {
     return;
   }
   const seconds = player.time;
-  const inside = seconds >= mix.region.start * HOP_SECONDS && seconds < mix.region.end * HOP_SECONDS;
+  const inside = seconds >= edges(mix).start * HOP_SECONDS && seconds < edges(mix).end * HOP_SECONDS;
   const loudness = inside ? curveAt(hearLevelled ? detail.loudnessOut : detail.loudnessIn, seconds) : NaN;
   const applied = inside && hearLevelled;
   levelMeter.setFigures([
@@ -1202,7 +1252,7 @@ function showPlayback() {
 function follow() {
   if (!recording || player.paused) return;
   const time = player.time;
-  const { start, end } = mix.region;
+  const { start, end } = edges(mix);
   if (time >= end * HOP_SECONDS) {
     // Playback covers the selected mix only, and comes to rest at its end.
     player.pause();
@@ -1286,7 +1336,7 @@ function shuttleBackwards() {
       stopShuttle();
       return;
     }
-    const start = mix.region.start * HOP_SECONDS;
+    const start = edges(mix).start * HOP_SECONDS;
     position = Math.max(start, Math.min(position, player.time) - ((now - last) / 1000) * -shuttle);
     last = now;
     if (now - sought >= BACKWARDS_SEEK_MS || position === start) {
@@ -1315,7 +1365,7 @@ async function togglePlay() {
 /** Starts playback at the playhead, or at the start of the mix when the playhead is outside it or at its end. */
 async function startPlaying() {
   const time = player.time;
-  const { start, end } = mix.region;
+  const { start, end } = edges(mix);
   // Resting at the very end, where playback stops, there is nothing left to
   // play: start over. Anywhere else, even just short of the end, play from there.
   if (time < start * HOP_SECONDS || time >= (end - 1) * HOP_SECONDS) player.seek(start * HOP_SECONDS);
@@ -1417,18 +1467,18 @@ const STEP_FINE_SECONDS = 1;
 /** Moves the playhead by a number of seconds, staying inside the selected mix. */
 function stepPlayhead(seconds: number) {
   if (!recording) return;
-  const { start, end } = mix.region;
+  const { start, end } = edges(mix);
   // From outside the mix, the first step lands on its nearest edge.
   const from = clamp(player.time, start * HOP_SECONDS, end * HOP_SECONDS);
   seek(clamp(from + seconds, start * HOP_SECONDS, end * HOP_SECONDS - 0.5));
 }
 
 function toStart() {
-  if (recording) seek(mix.region.start * HOP_SECONDS);
+  if (recording) seek(edges(mix).start * HOP_SECONDS);
 }
 
 function toEnd() {
-  if (recording) seek(Math.max(mix.region.start, mix.region.end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
+  if (recording) seek(Math.max(edges(mix).start, edges(mix).end - END_PREVIEW_BLOCKS) * HOP_SECONDS);
 }
 
 $('to-start').addEventListener('click', toStart);
@@ -1801,6 +1851,8 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
       ).map((a) => (a.bass === true ? { start: a.start, end: a.end, db: a.db, bass: true } : { start: a.start, end: a.end, db: a.db })),
       ...(typeof m.artist === 'string' && m.artist ? { artist: m.artist } : {}),
       ...(isPreset(m.loudness) ? { loudness: m.loudness } : {}),
+      ...(isNumber(m.trimStart) && m.trimStart > 0 && m.trimStart < 1 ? { trimStart: fine(m.trimStart) } : {}),
+      ...(isNumber(m.trimEnd) && m.trimEnd > 0 && m.trimEnd < 1 ? { trimEnd: fine(m.trimEnd) } : {}),
       ...(isNumber(m.fadeIn) && m.fadeIn > 0 ? { fadeIn: Math.round(m.fadeIn) } : {}),
       ...(isNumber(m.fadeOut) && m.fadeOut > 0 ? { fadeOut: Math.round(m.fadeOut) } : {}),
     }));
@@ -2068,7 +2120,7 @@ const kHz = (rate: number) => `${rate / 1000} kHz`;
 
 /** Roughly how large one exported mix will be, in bytes. */
 function estimatedBytes(m: Mix, settings: ExportSettings): number {
-  const seconds = (m.region.end - m.region.start) * HOP_SECONDS;
+  const seconds = (edges(m).end - edges(m).start) * HOP_SECONDS;
   if (settings.format === 'mp3') return (seconds * settings.mp3Kbps * 1000) / 8;
   if (settings.format === 'm4a') return (seconds * settings.aacKbps * 1000) / 8;
   const rate = settings.sampleRate ?? recording!.measured.sampleRate;
@@ -2245,8 +2297,9 @@ function renderMix(m: Mix, output: string, track?: string) {
   return api.render({
     input: recording!.path,
     output,
-    start: m.region.start * HOP_SECONDS,
-    end: m.region.end * HOP_SECONDS,
+    // To the millisecond; the curves are a block coarser, which at their pace makes no difference.
+    start: edges(m).start * HOP_SECONDS,
+    end: edges(m).end * HOP_SECONDS,
     gainDb,
     bassDb: bassDb ?? new Float32Array(gainDb.length),
     ceilingDb: m.ceilingDb,

@@ -217,6 +217,9 @@ export interface Detail {
   /** Length in blocks of the fades at the two ends of the mix. */
   fadeIn: number;
   fadeOut: number;
+  /** Where in these curves the mix really starts and ends, in blocks: its edges can lie inside the first and last block. */
+  from: number;
+  to: number;
   targetLufs: number;
   /** Limiter ceiling as a linear sample value. */
   ceiling: number;
@@ -285,7 +288,20 @@ export function drawDetail(
   const total = detail.gainDb.length;
   const n = view.end - view.start;
   if (plot < 10 || total === 0 || n <= 0) return;
-  const shown = <T extends Float32Array>(values: T) => values.subarray(view.start, view.end);
+  // The view need not start or end on a block: close up it moves by the
+  // millisecond, or scrolling and zooming would go in jumps of a tenth of a second.
+  /** A curve reduced to one value per pixel across the view. */
+  const across = (values: Float32Array, reduce: 'max' | 'mean'): Float32Array => {
+    const out = new Float32Array(plot);
+    for (let x = 0; x < plot; x++) {
+      const lo = clampTo(Math.floor(view.start + (x / plot) * n), 0, total - 1);
+      const hi = clampTo(Math.ceil(view.start + ((x + 1) / plot) * n), lo + 1, total);
+      let acc = reduce === 'max' ? -Infinity : 0;
+      for (let i = lo; i < hi; i++) acc = reduce === 'max' ? Math.max(acc, values[i]) : acc + values[i];
+      out[x] = reduce === 'max' ? acc : acc / (hi - lo);
+    }
+    return out;
+  };
   const pointer = hoverX !== null && hoverY !== null ? { x: hoverX, y: hoverY } : null;
 
   const usable = height - AXIS;
@@ -305,18 +321,26 @@ export function drawDetail(
   };
   const line = (values: Float32Array, toY: (v: number) => number, color: string, lineWidth: number) => {
     // One point per pixel when zoomed out, one per block when zoomed in.
-    const points = values.length > plot ? columns(values, plot, 'mean') : values;
-    const step = plot / points.length;
+    ctx.save();
     ctx.beginPath();
-    for (let i = 0; i < points.length; i++) {
-      const x = GUTTER + (i + 0.5) * step;
-      if (i === 0) ctx.moveTo(x, toY(points[i]));
-      else ctx.lineTo(x, toY(points[i]));
+    ctx.rect(GUTTER, 0, plot, usable);
+    ctx.clip();
+    ctx.beginPath();
+    if (n > plot) {
+      const points = across(values, 'mean');
+      for (let x = 0; x < plot; x++) ctx.lineTo(GUTTER + x + 0.5, toY(points[x]));
+    } else {
+      // Each value sits at the centre of its block. One more on either side
+      // carries the line out to the edges of the view.
+      const first = Math.max(0, Math.floor(view.start) - 1);
+      const last = Math.min(total - 1, Math.ceil(view.end));
+      for (let i = first; i <= last; i++) ctx.lineTo(GUTTER + ((i + 0.5 - view.start) / n) * plot, toY(values[i]));
     }
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     ctx.lineJoin = 'round';
     ctx.stroke();
+    ctx.restore();
   };
 
   // Lane 1: waveform, original behind the levelled result.
@@ -335,9 +359,14 @@ export function drawDetail(
         ctx.fillRect(GUTTER + x, top, 1, Math.max(1, mid - Math.max(-1, from) * scale - top));
       };
       for (let x = 0; x < plot; x++) {
-        const gain = detail.peakGain[Math.min(total - 1, view.start + Math.floor((x / plot) * n))];
+        // Nothing is left of the levelled sound outside the mix's own edges,
+        // which close up can be seen to lie inside the first or last block.
+        const at = view.start + ((x + 0.5) / plot) * n;
+        const inside = at >= detail.from && at < detail.to;
+        const gain = inside ? detail.peakGain[Math.min(total - 1, Math.floor(at))] : 0;
         ctx.fillStyle = COLOR.before;
         bar(x, low[x], high[x]);
+        if (!inside) continue;
         ctx.fillStyle = COLOR.after;
         bar(x, Math.max(-detail.ceiling, low[x] * gain), Math.min(detail.ceiling, high[x] * gain));
         // Peaks the limiter will have to hold down.
@@ -347,9 +376,9 @@ export function drawDetail(
         if (low[x] * gain < -detail.ceiling) ctx.fillRect(GUTTER + x, mid + edge, 1, 3);
       }
     }
-    const before = fine ? new Float32Array(0) : columns(shown(detail.peaksIn), plot, 'max');
-    const after = fine ? before : columns(shown(detail.peaksOut), plot, 'max');
-    const body = fine ? before : columns(shown(detail.bodyOut), plot, 'mean');
+    const before = fine ? new Float32Array(0) : across(detail.peaksIn, 'max');
+    const after = fine ? before : across(detail.peaksOut, 'max');
+    const body = fine ? before : across(detail.bodyOut, 'mean');
     for (let x = 0; x < before.length; x++) {
       const b = Math.min(1, before[x]) * scale;
       ctx.fillStyle = COLOR.before;
@@ -377,12 +406,12 @@ export function drawDetail(
     if (detail.fadeIn > 0 || detail.fadeOut > 0) {
       ctx.beginPath();
       for (let x = 0; x <= plot; x++) {
-        const fade = fadeGain(view.start + (x / plot) * n, total, detail.fadeIn, detail.fadeOut);
+        const fade = fadeGain(view.start + (x / plot) * n - detail.from, detail.to - detail.from, detail.fadeIn, detail.fadeOut);
         if (x === 0) ctx.moveTo(GUTTER + x, mid - fade * scale);
         else ctx.lineTo(GUTTER + x, mid - fade * scale);
       }
       for (let x = plot; x >= 0; x--) {
-        ctx.lineTo(GUTTER + x, mid + fadeGain(view.start + (x / plot) * n, total, detail.fadeIn, detail.fadeOut) * scale);
+        ctx.lineTo(GUTTER + x, mid + fadeGain(view.start + (x / plot) * n - detail.from, detail.to - detail.from, detail.fadeIn, detail.fadeOut) * scale);
       }
       ctx.closePath();
       ctx.strokeStyle = COLOR.hover;
@@ -391,7 +420,7 @@ export function drawDetail(
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    const handles: ['in' | 'out', number][] = [['in', detail.fadeIn], ['out', total - detail.fadeOut]];
+    const handles: ['in' | 'out', number][] = [['in', detail.from + detail.fadeIn], ['out', detail.to - detail.fadeOut]];
     for (const [which, block] of handles) {
       if (block < view.start || block > view.end) continue;
       // Keep the whole handle inside the lane when it sits in a corner.
@@ -436,8 +465,8 @@ export function drawDetail(
     ctx.beginPath();
     ctx.rect(GUTTER, loudLane.top, plot, loudLane.height);
     ctx.clip();
-    line(shown(detail.loudnessIn), toY, COLOR.before, 1.25);
-    line(shown(detail.loudnessOut), toY, COLOR.after, 1.5);
+    line(detail.loudnessIn, toY, COLOR.before, 1.25);
+    line(detail.loudnessOut, toY, COLOR.after, 1.5);
     ctx.restore();
     laneLabel(ctx, GUTTER + 8, loudLane.top + 10, [
       ['Loudness (LUFS)', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['- - target', COLOR.label],
@@ -483,15 +512,15 @@ export function drawDetail(
       }
       ctx.globalAlpha = 1;
     });
-    const cols = columns(shown(detail.gainDb), plot, 'mean');
+    const cols = across(detail.gainDb, 'mean');
     const zero = toY(0);
     ctx.fillStyle = 'rgba(242, 168, 59, 0.22)';
     for (let x = 0; x < plot; x++) {
       const y = toY(cols[x]);
       ctx.fillRect(GUTTER + x, Math.min(y, zero), 1, Math.abs(y - zero));
     }
-    line(shown(detail.gainDb), toY, COLOR.gain, 1.5);
-    if (detail.bassDb) line(shown(detail.bassDb), toY, COLOR.bass, 1.5);
+    line(detail.gainDb, toY, COLOR.gain, 1.5);
+    if (detail.bassDb) line(detail.bassDb, toY, COLOR.bass, 1.5);
     laneLabel(ctx, GUTTER + 8, gainLane.top + 10, [
       ['Gain (dB)', COLOR.label], ['whole mix', COLOR.gain], ...(detail.bassDb ? [['bass only', COLOR.bass] as [string, string]] : []),
     ], pointer);
