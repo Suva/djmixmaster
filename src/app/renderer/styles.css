@@ -244,9 +244,13 @@ canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane
 .transport-buttons button:last-child { border-radius: 0 6px 6px 0; }
 button.icon { display: grid; place-items: center; width: 36px; height: 32px; padding: 0; color: var(--muted); }
 button.icon:hover:not(:disabled) { color: var(--text); }
-button.icon svg { width: 15px; height: 15px; fill: currentColor; }
+button.icon svg, button.with-icon svg { width: 15px; height: 15px; fill: currentColor; }
+/* Icons drawn as outlines rather than filled shapes. */
+button.icon svg.line { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+button.with-icon { display: flex; align-items: center; gap: 7px; }
+button.with-icon svg { color: var(--muted); }
 button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; font-weight: 600; }
-.toggle button.icon { width: 34px; height: auto; }
+.toggle button.icon { width: 34px; height: auto; min-height: 32px; }
 #play { width: 48px; color: var(--accent); }
 #play:hover:not(:disabled) { color: #5be6ab; }
 #play .when-playing, #play.playing .when-paused { display: none; }

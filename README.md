@@ -160,6 +160,7 @@ everything below together with the mouse and trackpad gestures.
 | Return | Jump to the start of the mix |
 | End | Jump to 10 seconds before the end of the mix |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
+| Backspace or Delete | Delete the selected mix, or the hand adjustment under the pointer |
 | Cmd/Ctrl+O | Open a recording |
 | Shift+Cmd/Ctrl+W | Close the recording |
 | Esc | Cancel an analysis or export in progress |

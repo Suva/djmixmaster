@@ -689,12 +689,17 @@ $('split-here').addEventListener('click', () => {
   splitInto([{ start, end: at }, { start: at, end }]);
 });
 
-$('delete-mix').addEventListener('click', () => {
-  if (mixes.length < 2) return;
+/** Removes the selected mix, unless it is the only one. */
+function deleteMix() {
+  if (!recording || busy || mixes.length < 2) return;
   const index = mixes.indexOf(mix);
-  mixes.splice(index, 1);
+  const [removed] = mixes.splice(index, 1);
   select(mixes[Math.min(index, mixes.length - 1)]);
-});
+  // A key press can do this by accident, so say what happened and how to get it back.
+  $('export-status').textContent = `Deleted ${removed.name}. ${COMMAND}Z brings it back.`;
+}
+
+$('delete-mix').addEventListener('click', deleteMix);
 
 // ---------------------------------------------------------------------------
 // Zooming and reading the detail view
@@ -1143,6 +1148,11 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     const step = event.altKey ? STEP_FINE_SECONDS : event.shiftKey ? STEP_COARSE_SECONDS : STEP_SECONDS;
     stepPlayhead(event.code === 'ArrowLeft' ? -step : step);
+  } else if (event.code === 'Backspace' || event.code === 'Delete') {
+    event.preventDefault();
+    // The stretch under the pointer, if there is one; otherwise the mix.
+    if (hoveredAdjustment) removeAdjustment(hoveredAdjustment);
+    else deleteMix();
   } else if (event.code === 'Home' || event.code === 'Enter') {
     event.preventDefault();
     toStart();
@@ -1596,6 +1606,7 @@ function showHistory() {
 }
 
 function applyStep(step: Step) {
+  $('export-status').textContent = '';
   mixes = JSON.parse(step.mixes);
   mixesCreated = step.mixesCreated;
   settled = step;
@@ -1653,6 +1664,8 @@ const helpDialog = $<HTMLDialogElement>('help-dialog');
 const onMac = navigator.userAgent.includes('Mac');
 const COMMAND = onMac ? '⌘' : 'Ctrl+';
 const OPTION = onMac ? 'Option' : 'Alt';
+$('undo').title = `Undo the last change (${COMMAND}Z)`;
+$('redo').title = `Redo the change just undone (Shift+${COMMAND}Z)`;
 
 const HELP: [string, [string, string][]][] = [
   ['The recording, at the top', [
@@ -1673,7 +1686,7 @@ const HELP: [string, [string, string][]][] = [
     ['Drag across the gain lane', 'Mark a stretch to adjust by hand'],
     ['Drag a marked stretch up or down', 'Raise or lower it'],
     ['Drag a stretch\'s edge', 'Make it longer or shorter'],
-    ['Double-click a stretch', 'Remove it'],
+    ['Double-click a stretch', 'Remove it (or point at it and press Backspace)'],
   ]],
   ['Playback', [
     ['Space', 'Play or pause'],
@@ -1685,6 +1698,7 @@ const HELP: [string, [string, string][]][] = [
   ]],
   ['Everything else', [
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
+    ['Backspace', 'Delete the selected mix'],
     [`${COMMAND}O`, 'Open a recording'],
     [`Shift+${COMMAND}W`, 'Close the recording'],
     ['Esc', 'Cancel an analysis or an export'],
