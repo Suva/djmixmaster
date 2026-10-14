@@ -87,15 +87,17 @@ export function level(
     // Where the peaks of the music would land after levelling. A recording made
     // too hot peaks at full scale all the way through, so raising any of its
     // tracks would only feed the limiter; turn the whole mix down by that much.
-    const landed: number[] = [];
+    // A typed array: sorting this many plain numbers takes a tenth of a second on a whole night.
+    const landed = new Float64Array(gainDb.length);
+    let count = 0;
     for (let i = 0; i < gainDb.length; i++) {
       if (headroom.peaks[i] > 0 && curves.shortTerm[i] > typicalLufs - 20) {
-        landed.push(20 * Math.log10(headroom.peaks[i]) + gainDb[i] + bassDb[i] / 2);
+        landed[count++] = 20 * Math.log10(headroom.peaks[i]) + gainDb[i] + bassDb[i] / 2;
       }
     }
-    if (landed.length > 0) {
-      landed.sort((a, b) => a - b);
-      const reach = landed[Math.floor((landed.length - 1) * (1 - HEADROOM_OUTLIERS))];
+    if (count > 0) {
+      const sorted = landed.subarray(0, count).sort();
+      const reach = sorted[Math.floor((count - 1) * (1 - HEADROOM_OUTLIERS))];
       targetLufs = typicalLufs + Math.min(MAX_AUTO_RAISE_DB, headroom.ceilingDb - reach);
     }
   }

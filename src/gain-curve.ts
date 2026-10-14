@@ -65,15 +65,13 @@ function slidingPercentile(values: Float32Array, half: number, percentile: numbe
   let count = 0;
   const bin = (lufs: number) => Math.min(BINS - 1, Math.floor((lufs - GATE_LUFS) / BIN_DB));
 
-  // Only bins between the quietest and loudest value can ever be occupied.
-  let lowest = BINS - 1;
-  let highest = 0;
-  for (let i = 0; i < n; i++) {
-    if (values[i] >= gate) {
-      lowest = Math.min(lowest, bin(values[i]));
-      highest = Math.max(highest, bin(values[i]));
-    }
-  }
+  // The answer is the highest bin with at least `rank` values in it or above
+  // it. From one position to the next it hardly moves, so it is followed
+  // rather than looked for afresh: `b` is that bin, `atOrAbove` the count.
+  // A whole night is a few hundred thousand positions; searching the
+  // histogram at each made every change of a setting take a noticeable moment.
+  let b = BINS - 1;
+  let atOrAbove = 0;
 
   const out = new Float32Array(n).fill(NaN);
   let lo = 0;
@@ -83,27 +81,24 @@ function slidingPercentile(values: Float32Array, half: number, percentile: numbe
     const wantLo = Math.max(0, i - half);
     for (; hi < wantHi; hi++) {
       if (values[hi] >= gate) {
-        histogram[bin(values[hi])]++;
+        const at = bin(values[hi]);
+        histogram[at]++;
         count++;
+        if (at >= b) atOrAbove++;
       }
     }
     for (; lo < wantLo; lo++) {
       if (values[lo] >= gate) {
-        histogram[bin(values[lo])]--;
+        const at = bin(values[lo]);
+        histogram[at]--;
         count--;
+        if (at >= b) atOrAbove--;
       }
     }
     if (count === 0) continue;
-    // Count in from whichever end of the histogram the percentile is nearer to.
     const rank = Math.max(1, Math.ceil(count * (1 - percentile)));
-    let b: number;
-    if (percentile >= 0.5) {
-      b = highest;
-      for (let above = histogram[b]; above < rank; above += histogram[b]) b--;
-    } else {
-      b = lowest;
-      for (let below = histogram[b]; below < count - rank + 1; below += histogram[b]) b++;
-    }
+    while (atOrAbove < rank) atOrAbove += histogram[--b];
+    while (atOrAbove - histogram[b] >= rank) atOrAbove -= histogram[b++];
     out[i] = GATE_LUFS + (b + 0.5) * BIN_DB;
   }
   return out;
