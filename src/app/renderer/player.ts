@@ -55,6 +55,10 @@ export class Player {
     return !this.#playing;
   }
 
+  get rate(): number {
+    return this.#audio.playbackRate;
+  }
+
   /** How fast it plays: 1 is as recorded, 2 twice as fast. Above 4 the browser plays no sound. */
   set rate(rate: number) {
     // Both, or the next stream of a streamed recording would start at the old speed.

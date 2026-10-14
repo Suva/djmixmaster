@@ -1299,6 +1299,8 @@ const faster = (speed: number) => SHUTTLE_SPEEDS[Math.min(SHUTTLE_SPEEDS.length 
 
 function showShuttle() {
   $('shuttle').textContent = shuttle === 0 || shuttle === 1 ? '' : shuttle > 0 ? `${shuttle}×` : `◀ ${-shuttle}×`;
+  // The speed the player was really given, for scripted checks.
+  $('shuttle').dataset.rate = String(player.rate);
 }
 
 /** Back to standing still, or to playing at the ordinary speed. */
