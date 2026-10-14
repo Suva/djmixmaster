@@ -132,7 +132,7 @@ dropouts in white. The report describes; it does not repair yet.
 - **Your work is remembered**: mixes, settings and adjustments are saved per
   recording and restored when you open it again. The app starts with the
   recording you had open last, if it is still where it was; earlier ones are
-  under File > Open Recent. File > Close Recording puts the recording away,
+  listed on the start screen and under File > Open Recent. File > Close Recording puts the recording away,
   and the app then starts empty next time.
 
 ### The settings

@@ -24,6 +24,8 @@ const api: Api = {
   onOpenFile: (listener) => ipcRenderer.on('open-file', (_event, path: string) => listener(path)),
   painted: (path: string) => ipcRenderer.send('painted', path),
   closed: () => ipcRenderer.send('closed'),
+  recent: () => ipcRenderer.invoke('recent'),
+  onRecentChanged: (listener) => ipcRenderer.on('recent-changed', () => listener()),
 };
 
 contextBridge.exposeInMainWorld('api', api);

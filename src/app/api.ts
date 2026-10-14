@@ -38,6 +38,14 @@ export interface MediaSource {
   streamed: boolean;
 }
 
+/** A recording opened lately that is still where it was. */
+export interface RecentRecording {
+  path: string;
+  name: string;
+  /** Its folder, for showing: the home folder is shortened to "~". */
+  folder: string;
+}
+
 export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help';
 
 /** What the window may ask the main process to do. */
@@ -73,6 +81,10 @@ export interface Api {
   onOpenFile(listener: (path: string) => void): void;
   /** Tells the main process the window has drawn this recording; it is the one to reopen next time. */
   painted(path: string): void;
+  /** The recordings opened lately, newest first, without those that are not there right now. */
+  recent(): Promise<RecentRecording[]>;
+  /** That list has changed. */
+  onRecentChanged(listener: () => void): void;
   /** Tells the main process the recording has been closed, so it is not reopened next time. */
   closed(): void;
 }

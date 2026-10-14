@@ -96,7 +96,35 @@ main { flex: 1; display: flex; min-height: 0; }
 }
 #empty.dragging { border-color: var(--accent); color: var(--text); }
 #empty p { margin: 2px 0; }
+#empty-open {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 28px;
+  color: var(--muted);
+  background: none;
+  border-color: transparent;
+}
+#empty-open:hover:not(:disabled) { background: var(--panel); border-color: var(--border); }
 .empty-title { font-size: 16px; color: var(--text); }
+#recent { margin-top: 28px; width: min(440px, 80%); }
+#recent[hidden] { display: none; }
+#empty .recent-title { margin: 0 0 6px 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
+.recent-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  background: none;
+  border-color: transparent;
+}
+.recent-item:hover:not(:disabled) { background: var(--panel); border-color: var(--border); }
+.recent-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-item .name { color: var(--text); }
+/* A long folder loses its beginning, not its end: the end is what tells two apart. */
+.recent-item .folder { font-size: 12px; color: var(--muted); direction: rtl; text-align: left; }
 
 #views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #views[hidden], #empty[hidden], #progress[hidden] { display: none; }

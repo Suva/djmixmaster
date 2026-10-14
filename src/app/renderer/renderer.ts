@@ -1314,6 +1314,7 @@ function setBusy(label: string | null) {
   $('progress-bar').style.width = '0';
   $<HTMLButtonElement>('cancel').disabled = false;
   $<HTMLButtonElement>('open').disabled = busy;
+  $<HTMLButtonElement>('empty-open').disabled = busy;
   $<HTMLButtonElement>('export').disabled = busy || !recording;
   $<HTMLButtonElement>('export-all').disabled = busy || !recording;
   $<HTMLButtonElement>('play').disabled = busy || !recording;
@@ -1382,6 +1383,33 @@ async function open(path: string) {
   }
 }
 
+/** The recordings opened lately, on the start screen. One click opens one. */
+async function showRecent() {
+  const recent = await api.recent();
+  $('recent').hidden = recent.length === 0;
+  $('recent-list').replaceChildren(
+    ...recent.map(({ path, name, folder }) => {
+      const item = document.createElement('button');
+      item.className = 'recent-item';
+      for (const [kind, text] of [['name', name], ['folder', folder]]) {
+        const line = document.createElement('span');
+        line.className = kind;
+        // The mark keeps the leading slash in place where the folder is cut from the left.
+        line.textContent = kind === 'folder' ? `\u200e${text}` : text;
+        item.append(line);
+      }
+      item.title = `Open ${name}`;
+      item.addEventListener('click', async () => {
+        // Gone since the list was drawn: take it off the list rather than complain.
+        if ((await api.existing([path])).length > 0) open(path);
+        else showRecent();
+      });
+      return item;
+    }),
+  );
+}
+api.onRecentChanged(showRecent);
+
 /** Back to the empty window. The work on the recording is saved, as always. */
 function closeRecording() {
   if (!recording || busy) return;
@@ -1407,12 +1435,15 @@ function closeRecording() {
   setStats(null);
   setBusy(null);
   api.closed();
+  showRecent();
 }
 
-$('open').addEventListener('click', async () => {
-  const path = await api.pickFile();
-  if (path) open(path);
-});
+for (const id of ['open', 'empty-open']) {
+  $(id).addEventListener('click', async () => {
+    const path = await api.pickFile();
+    if (path) open(path);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Remembering the work on a recording between sessions
@@ -2051,6 +2082,7 @@ new ResizeObserver(scheduleDraw).observe(overview);
 syncControls();
 initTooltips();
 api.onOpenFile(open);
+showRecent();
 api.initialFile().then((path) => {
   if (path) open(path);
 });

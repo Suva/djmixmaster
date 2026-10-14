@@ -33,8 +33,14 @@
   <main>
     <section id="workspace">
       <div id="empty">
-        <p class="empty-title">Open a recording to start</p>
-        <p>Drop an MP3, WAV or FLAC here, or use Open recording.</p>
+        <button id="empty-open">
+          <span class="empty-title">Open a recording to start</span>
+          <span>Drop an MP3, WAV or FLAC here, or click to choose one.</span>
+        </button>
+        <div id="recent" hidden>
+          <p class="recent-title">Recent recordings</p>
+          <div id="recent-list"></div>
+        </div>
       </div>
 
       <div id="views" hidden>

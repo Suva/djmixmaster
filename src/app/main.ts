@@ -11,7 +11,7 @@ import { deserialize, serialize } from 'node:v8';
 import { CHANNELS, ffmpeg, probe } from '../audio-io.ts';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
-import type { Job, JobMessage, MediaSource, MenuCommand, Remembered, RenderRequest } from './api.ts';
+import type { Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
 import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
 
@@ -308,6 +308,7 @@ ipcMain.on('cancel', () => running?.terminate());
 
 ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 
+let checkStarted = false;
 ipcMain.on('painted', async (_event, path: string) => {
   writeStored(lastRecordingFile(), JSON.stringify({ path })).catch((error) =>
     console.error('Could not note the recording for next time:', error),
@@ -319,7 +320,9 @@ ipcMain.on('painted', async (_event, path: string) => {
   if (!SCREENSHOT) app.addRecentDocument(path);
   recordingOpen = true;
   buildMenu();
-  if (!SCREENSHOT || !window) return;
+  // The check runs once, on the first recording; its script may open others.
+  if (!SCREENSHOT || !window || checkStarted) return;
+  checkStarted = true;
   // Optionally drive the window first, to capture a state other than "just opened".
   // Menus cannot be clicked from a script, so a check names the command instead.
   if (process.env.DJMASTER_SHOT_MENU) window.webContents.send('menu', process.env.DJMASTER_SHOT_MENU);
@@ -406,16 +409,30 @@ ipcMain.on('closed', () => {
  * File > Open Recent. Recordings that are not there right now are left out
  * but not forgotten: one on a drive that is unplugged comes back with it.
  */
+function presentRecent(): RecentRecording[] {
+  return recent
+    .filter((path) => existsSync(path))
+    .map((path) => ({ path, name: basename(path), folder: dirname(path).replace(homedir(), '~') }));
+}
+
+/** The list has changed: the menu and the start screen both show it. */
+function recentChanged() {
+  buildMenu();
+  window?.webContents.send('recent-changed');
+}
+
+ipcMain.handle('recent', presentRecent);
+
 function recentMenu(): MenuItemConstructorOptions[] {
-  const present = recent.filter((path) => existsSync(path));
-  const names = present.map((path) => basename(path));
-  const items = present.map((path, index): MenuItemConstructorOptions => ({
+  const present = presentRecent();
+  const shared = (name: string) => present.filter((other) => other.name === name).length > 1;
+  const items = present.map(({ path, name, folder }): MenuItemConstructorOptions => ({
     // Two recordings of the same name are told apart by their folders.
-    label: names.indexOf(names[index]) !== names.lastIndexOf(names[index]) ? `${names[index]} — ${dirname(path).replace(homedir(), '~')}` : names[index],
+    label: shared(name) ? `${name} — ${folder}` : name,
     click: () => {
       // Gone since the menu was built: drop it from view rather than complain.
       if (existsSync(path)) window?.webContents.send('open-file', path);
-      else buildMenu();
+      else recentChanged();
     },
   }));
   return [
@@ -428,7 +445,7 @@ function recentMenu(): MenuItemConstructorOptions[] {
         recent = [];
         saveRecent();
         if (!SCREENSHOT) app.clearRecentDocuments();
-        buildMenu();
+        recentChanged();
       },
     },
   ];
