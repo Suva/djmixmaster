@@ -79,6 +79,7 @@ Automatically.
 ### The recording and its mixes
 
 - **Overview**: the whole recording. Drag across a free part to mark a mix,
+  or double-click it to fill it with one;
   drag an edge to adjust it, drag the middle to move it. Scroll to zoom, swipe
   sideways to move.
 - **Finding the sets**: silences in the recording are marked in orange. "Split
@@ -159,10 +160,11 @@ everything below together with the mouse and trackpad gestures.
 | A | Switch between the original and the levelled sound |
 | ← → | Move the playhead 5 seconds (30 with Shift, 1 with Option or Alt) |
 | I, O | Put the start, or the end, of the mix at the playhead |
+| Cmd/Ctrl+E | Split the mix at the playhead |
 | Return | Jump to the start of the mix |
 | End | Jump to 10 seconds before the end of the mix |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
-| Backspace or Delete | Delete the selected mix, or the hand adjustment under the pointer |
+| Backspace or Delete | Delete the selected mix, or the hand adjustment under the pointer. The only mix goes back to covering the whole recording |
 | Cmd/Ctrl+O | Open a recording |
 | ? or F1 | Show the gestures and shortcuts |
 | Shift+Cmd/Ctrl+W | Close the recording |

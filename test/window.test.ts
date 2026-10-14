@@ -98,13 +98,22 @@ test('settings change the levelling', { skip }, async () => {
 test('a mix can be split, deleted with Backspace, and both undone', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     await page.settle();
+    // Deleting the only mix takes away what was marked: it covers everything again.
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(100);
+    page.key('KeyI');
+    await page.wait(100);
+    const trimmed = page.text('region-length');
     page.key('Backspace');
-    const afterDeletingTheOnlyMix = page.tabs().length;
+    await page.wait(100);
+    const afterDeletingTheOnlyMix = { tabs: page.tabs().length, length: page.text('region-length'), trimmed };
 
     page.key('Enter');
     for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
-    page.click('split-here');
+    // Control+E, as on Windows; the app takes Command the same way.
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', ctrlKey: true, bubbles: true }));
     await page.settle();
     const afterSplit = page.tabs();
 
@@ -123,7 +132,7 @@ test('a mix can be split, deleted with Backspace, and both undone', { skip }, as
     await page.settle();
     return { afterDeletingTheOnlyMix, afterSplit, afterDelete, message, afterUndo, afterSecondUndo, afterRedo: page.tabs() };
   });
-  assert.equal(seen.afterDeletingTheOnlyMix, 1, 'the last mix cannot be deleted');
+  assert.deepEqual(seen.afterDeletingTheOnlyMix, { tabs: 1, length: '0:09:00', trimmed: '0:08:00' });
   assert.equal(seen.afterSplit.length, 2);
   assert.match(seen.afterSplit[0], /0:03:00/);
   assert.match(seen.afterSplit[1], /0:06:00/);
@@ -299,6 +308,38 @@ test('I and O put the start and the end of the mix at the playhead', { skip }, a
   assert.deepEqual(seen.refused.region, ['0:01:00', '0:03:00']);
   assert.match(seen.refused.said, /at least 10 seconds/);
   assert.deepEqual(seen.afterUndo, ['0:00:00', '0:09:00'], 'the two marks made in one go undo together');
+});
+
+test('a double click on a free part of the recording fills it with a mix', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    // Free the first and the last minutes by trimming the only mix.
+    page.key('Enter');
+    for (let i = 0; i < 4; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(60);
+    page.key('KeyI');
+    for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(60);
+    page.key('KeyO');
+    await page.settle();
+
+    const overview = page.element('overview');
+    const box = overview.getBoundingClientRect();
+    const doubleClick = (share: number) =>
+      overview.dispatchEvent(new MouseEvent('dblclick', { clientX: box.left + box.width * share, clientY: box.top + 20, bubbles: true }));
+
+    doubleClick(0.5);
+    await page.wait(100);
+    const onAMix = page.tabs().length;
+    doubleClick(0.9);
+    await page.wait(100);
+    const region = [page.element<HTMLInputElement>('region-start').value, page.element<HTMLInputElement>('region-end').value];
+    doubleClick(0.9);
+    await page.wait(100);
+    return { onAMix, tabs: page.tabs(), region };
+  });
+  assert.equal(seen.onAMix, 1, 'a double click on a mix adds nothing');
+  assert.equal(seen.tabs.length, 2, 'and a second one on the new mix adds nothing more');
+  assert.deepEqual(seen.region, ['0:05:00', '0:09:00']);
 });
 
 test('playing moves the playhead and lights the meter', { skip }, async () => {

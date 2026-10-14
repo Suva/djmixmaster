@@ -423,7 +423,6 @@ function showMix() {
   $('settings-for').textContent = several ? `Settings for ${mix.name}` : '';
   $('export-all-group').hidden = !several;
   $('export-all').textContent = `Export all ${mixes.length}…`;
-  $<HTMLButtonElement>('delete-mix').disabled = !several;
   $<HTMLButtonElement>('apply-all').disabled = !several;
   $<HTMLButtonElement>('split-gaps').disabled = !recording || piecesBetweenGaps(mix) === null;
   scheduleSave();
@@ -617,6 +616,14 @@ window.addEventListener('mousemove', (event) => {
   }
 });
 
+// A double click on a part no mix covers fills it with a new one, from the
+// mix before it to the mix after it.
+overview.addEventListener('dblclick', (event) => {
+  if (!recording || busy || hit(event).kind !== 'new') return;
+  const space = freeSpace(overviewBlock(event), null);
+  if (space.end - space.start >= MIN_REGION_BLOCKS) addMix(space);
+});
+
 window.addEventListener('mouseup', (event) => {
   // A plain click moves the playhead: to that spot inside a mix, to the very
   // start of the mix on its left edge, and to just before the end on its right.
@@ -650,11 +657,14 @@ $<HTMLInputElement>('mix-name').addEventListener('input', (event) => {
 });
 $<HTMLInputElement>('mix-name').addEventListener('blur', showMix);
 
-$('select-all').addEventListener('click', () => {
-  if (!recording) return;
+/** Stretches the selected mix over all the free space around it. */
+function expandMix() {
+  if (!recording || busy) return;
   const space = freeSpace((mix.region.start + mix.region.end) / 2, mix);
   setRegion(space.start, space.end);
-});
+}
+
+$('select-all').addEventListener('click', expandMix);
 
 // Leave a little air around the music when cutting at a silence.
 const LEAD_IN_BLOCKS = Math.round(0.5 / HOP_SECONDS);
@@ -704,7 +714,7 @@ $('split-gaps').addEventListener('click', () => {
   if (pieces) splitInto(pieces);
 });
 
-$('split-here').addEventListener('click', () => {
+function splitAtPlayhead() {
   if (!recording || busy) return;
   const at = Math.round(player.time / HOP_SECONDS);
   const { start, end } = mix.region;
@@ -713,11 +723,20 @@ $('split-here').addEventListener('click', () => {
     return;
   }
   splitInto([{ start, end: at }, { start: at, end }]);
-});
+}
 
-/** Removes the selected mix, unless it is the only one. */
+$('split-here').addEventListener('click', splitAtPlayhead);
+
+/**
+ * Removes the selected mix. A recording always has one, so deleting the only
+ * mix takes away what was marked instead: it covers the whole recording again.
+ */
 function deleteMix() {
-  if (!recording || busy || mixes.length < 2) return;
+  if (!recording || busy) return;
+  if (mixes.length < 2) {
+    expandMix();
+    return;
+  }
   const index = mixes.indexOf(mix);
   const [removed] = mixes.splice(index, 1);
   select(mixes[Math.min(index, mixes.length - 1)]);
@@ -1203,6 +1222,9 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     const step = event.altKey ? STEP_FINE_SECONDS : event.shiftKey ? STEP_COARSE_SECONDS : STEP_SECONDS;
     stepPlayhead(event.code === 'ArrowLeft' ? -step : step);
+  } else if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    splitAtPlayhead();
   } else if ((event.code === 'KeyI' || event.code === 'KeyO') && !event.metaKey && !event.ctrlKey) {
     markEdge(event.code === 'KeyI' ? 'start' : 'end');
   } else if (event.code === 'Backspace' || event.code === 'Delete') {
@@ -1727,12 +1749,14 @@ const helpDialog = $<HTMLDialogElement>('help-dialog');
 const onMac = navigator.userAgent.includes('Mac');
 const COMMAND = onMac ? '⌘' : 'Ctrl+';
 const OPTION = onMac ? 'Option' : 'Alt';
+$('split-here').title = `Split at playhead (${COMMAND}E): cut this mix in two where the playhead is`;
 $('undo').title = `Undo the last change (${COMMAND}Z)`;
 $('redo').title = `Redo the change just undone (Shift+${COMMAND}Z)`;
 
 const HELP: [string, [string, string][]][] = [
   ['The recording, at the top', [
     ['Drag across a free part', 'Mark a new mix'],
+    ['Double-click a free part', 'Fill it with a new mix'],
     ['Drag a mix\'s edge', 'Move where it starts or ends'],
     ['Drag the middle of a mix', 'Move it'],
     ['Click inside a mix', 'Select it and put the playhead there'],
@@ -1757,12 +1781,13 @@ const HELP: [string, [string, string][]][] = [
     ['← →', 'Back or forward 5 seconds'],
     [`Shift+← →, ${OPTION}+← →`, '30 seconds, 1 second'],
     ['I, O', 'Start, or end, the mix at the playhead'],
+    [`${COMMAND}E`, 'Split the mix at the playhead'],
     ['Return', 'Jump to the start of the mix'],
     ['End', 'Jump to just before its end'],
   ]],
   ['Everything else', [
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
-    ['Backspace', 'Delete the selected mix'],
+    ['Backspace', 'Delete the selected mix; the only mix goes back to the whole recording'],
     [`${COMMAND}O`, 'Open a recording'],
     [`Shift+${COMMAND}W`, 'Close the recording'],
     ['Esc', 'Cancel an analysis or an export'],
