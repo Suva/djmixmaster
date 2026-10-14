@@ -241,6 +241,7 @@ canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane
 #adjust-switch button.on { background: var(--accent); }
 
 .transport { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+#shuttle { margin-left: -4px; min-width: 34px; color: var(--accent); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The playback buttons sit together as one block, with play standing out in the middle. */
 .transport-buttons { display: flex; flex: none; }
 .transport-buttons button { border-radius: 0; margin-left: -1px; }

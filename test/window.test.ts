@@ -342,6 +342,61 @@ test('a double click on a free part of the recording fills it with a mix', { ski
   assert.deepEqual(seen.region, ['0:05:00', '0:09:00']);
 });
 
+test('J, K and L run the playhead backwards, stop it, and run it forwards at speed', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    const playing = () => page.element('play').classList.contains('playing');
+    page.key('Enter');
+    for (let i = 0; i < 4; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(100);
+
+    // Three presses at once, from standing still, as a hand would do it.
+    page.key('KeyL');
+    const once = page.text('shuttle');
+    page.key('KeyL');
+    page.key('KeyL');
+    await page.until(playing, 'L to start playback');
+    const thrice = page.text('shuttle');
+    const from = page.playhead();
+    await page.wait(1500);
+    const forwards = page.playhead() - from;
+
+    page.key('KeyK');
+    await page.until(() => !playing(), 'K to stop playback');
+    const stopped = { shown: page.text('shuttle'), at: page.playhead() };
+    await page.wait(300);
+    const stillThere = page.playhead() === stopped.at;
+
+    page.key('KeyJ');
+    page.key('KeyJ');
+    page.key('KeyJ');
+    const back = page.text('shuttle');
+    await page.wait(1500);
+    const backwards = stopped.at - page.playhead();
+    const soundless = !playing();
+
+    page.key('KeyL');
+    await page.until(playing, 'L to turn it round');
+    const turned = page.text('shuttle');
+    page.key('Space');
+    await page.until(() => !playing(), 'Space to stop it');
+    return {
+      once, thrice, forwards, stopped: stopped.shown, stillThere, back, backwards, soundless, turned,
+      after: page.text('shuttle'), message: page.text('export-status'),
+    };
+  });
+  assert.equal(seen.once, '', 'one press of L is ordinary playback');
+  assert.equal(seen.thrice, '4×');
+  assert.ok(seen.forwards >= 4 && seen.forwards <= 8, `ran ${seen.forwards} s forwards in 1.5 s at 4×`);
+  assert.equal(seen.stopped, '');
+  assert.ok(seen.stillThere);
+  assert.equal(seen.back, '◀ 4×');
+  assert.ok(seen.backwards >= 4 && seen.backwards <= 8, `ran ${seen.backwards} s backwards in 1.5 s at 4×`);
+  assert.ok(seen.soundless, 'nothing plays while running backwards');
+  assert.equal(seen.turned, '', 'L after J plays forwards at the ordinary speed');
+  assert.equal(seen.after, '');
+  assert.equal(seen.message, '', 'no complaint about playback');
+});
+
 test('playing moves the playhead and lights the meter', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     const meter = page.element('level-meter');

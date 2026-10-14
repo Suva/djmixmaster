@@ -1148,12 +1148,85 @@ function follow() {
   requestAnimationFrame(follow);
 }
 
+// Running through the mix at speed, as in an editor: L forwards, J backwards,
+// each press faster, K to stop. Forwards is ordinary playback sped up, with
+// sound up to four times; backwards has no sound, only the playhead moves.
+const SHUTTLE_SPEEDS = [1, 2, 4, 8];
+/** How fast the playhead is being run: negative is backwards, 0 is not at all (stopped, or playing as usual). */
+let shuttle = 0;
+let backwardsFrame = 0;
+/** The audio element is told where to be this often while running backwards; every frame would swamp it. */
+const BACKWARDS_SEEK_MS = 60;
+
+const faster = (speed: number) => SHUTTLE_SPEEDS[Math.min(SHUTTLE_SPEEDS.length - 1, SHUTTLE_SPEEDS.indexOf(speed) + 1)];
+
+function showShuttle() {
+  $('shuttle').textContent = shuttle === 0 || shuttle === 1 ? '' : shuttle > 0 ? `${shuttle}×` : `◀ ${-shuttle}×`;
+}
+
+/** Back to standing still, or to playing at the ordinary speed. */
+function stopShuttle() {
+  cancelAnimationFrame(backwardsFrame);
+  backwardsFrame = 0;
+  shuttle = 0;
+  player.rate = 1;
+  showShuttle();
+}
+
+async function shuttleForwards() {
+  if (!recording || busy) return;
+  const speed = shuttle > 0 ? faster(shuttle) : player.paused || backwardsFrame ? 1 : 2;
+  stopShuttle();
+  shuttle = speed;
+  player.rate = speed;
+  showShuttle();
+  if (player.paused) await startPlaying();
+}
+
+function shuttleBackwards() {
+  if (!recording || busy) return;
+  const speed = shuttle < 0 ? faster(-shuttle) : 1;
+  // Pausing resets the speed, so it comes first.
+  if (!player.paused) player.pause();
+  shuttle = -speed;
+  showShuttle();
+  if (backwardsFrame) return;
+  let position = player.time;
+  let last = performance.now();
+  let sought = 0;
+  const run = (now: number) => {
+    if (!recording) {
+      stopShuttle();
+      return;
+    }
+    const start = mix.region.start * HOP_SECONDS;
+    position = Math.max(start, Math.min(position, player.time) - ((now - last) / 1000) * -shuttle);
+    last = now;
+    if (now - sought >= BACKWARDS_SEEK_MS || position === start) {
+      seek(position);
+      sought = now;
+    }
+    if (position === start) stopShuttle();
+    else backwardsFrame = requestAnimationFrame(run);
+  };
+  backwardsFrame = requestAnimationFrame(run);
+}
+
 async function togglePlay() {
   if (!recording || busy) return;
+  if (backwardsFrame) {
+    stopShuttle();
+    return;
+  }
   if (!player.paused) {
     player.pause();
     return;
   }
+  await startPlaying();
+}
+
+/** Starts playback at the playhead, or at the start of the mix when the playhead is outside it or at its end. */
+async function startPlaying() {
   const time = player.time;
   if (time < mix.region.start * HOP_SECONDS || time >= mix.region.end * HOP_SECONDS - 0.5) {
     player.seek(mix.region.start * HOP_SECONDS);
@@ -1178,6 +1251,7 @@ player.onPlay = () => {
 };
 player.onPause = () => {
   showPlaying(false);
+  if (shuttle > 0) stopShuttle();
   limiterReductionDb = 0;
   levelMeter.release();
   showPlayback();
@@ -1222,6 +1296,13 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     const step = event.altKey ? STEP_FINE_SECONDS : event.shiftKey ? STEP_COARSE_SECONDS : STEP_SECONDS;
     stepPlayhead(event.code === 'ArrowLeft' ? -step : step);
+  } else if ((event.code === 'KeyJ' || event.code === 'KeyK' || event.code === 'KeyL') && !event.metaKey && !event.ctrlKey) {
+    if (event.code === 'KeyL') shuttleForwards();
+    else if (event.code === 'KeyJ') shuttleBackwards();
+    else {
+      if (!player.paused) player.pause();
+      stopShuttle();
+    }
   } else if (event.code === 'KeyE' && (event.metaKey || event.ctrlKey)) {
     event.preventDefault();
     splitAtPlayhead();
@@ -1782,6 +1863,7 @@ const HELP: [string, [string, string][]][] = [
     [`Shift+← →, ${OPTION}+← →`, '30 seconds, 1 second'],
     ['I, O', 'Start, or end, the mix at the playhead'],
     [`${COMMAND}E`, 'Split the mix at the playhead'],
+    ['J, K, L', 'Run backwards, stop, run forwards; press J or L again to go faster'],
     ['Return', 'Jump to the start of the mix'],
     ['End', 'Jump to just before its end'],
   ]],

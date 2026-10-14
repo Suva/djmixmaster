@@ -28,6 +28,7 @@ export class Player {
   #restart: ReturnType<typeof setTimeout> | undefined;
 
   #context: AudioContext | null = null;
+  #connecting: Promise<void> | null = null;
   #gain: GainNode | null = null;
   #shelf: BiquadFilterNode | null = null;
   #limiter: AudioWorkletNode | null = null;
@@ -52,6 +53,13 @@ export class Player {
 
   get paused(): boolean {
     return !this.#playing;
+  }
+
+  /** How fast it plays: 1 is as recorded, 2 twice as fast. Above 4 the browser plays no sound. */
+  set rate(rate: number) {
+    // Both, or the next stream of a streamed recording would start at the old speed.
+    this.#audio.defaultPlaybackRate = rate;
+    this.#audio.playbackRate = rate;
   }
 
   load(source: MediaSource) {
@@ -159,8 +167,13 @@ export class Player {
     return this.#audio.play();
   }
 
-  async #connect() {
-    if (this.#context) return;
+  /** Builds the chain on first use. Two presses in quick succession must not build it twice. */
+  #connect(): Promise<void> {
+    this.#connecting ??= this.#build();
+    return this.#connecting;
+  }
+
+  async #build() {
     const context = new AudioContext(this.#silent ? ({ sinkId: { type: 'none' } } as AudioContextOptions) : {});
     await context.audioWorklet.addModule('limiter-worklet.js');
     const source = context.createMediaElementSource(this.#audio);

@@ -161,6 +161,7 @@ everything below together with the mouse and trackpad gestures.
 | ← → | Move the playhead 5 seconds (30 with Shift, 1 with Option or Alt) |
 | I, O | Put the start, or the end, of the mix at the playhead |
 | Cmd/Ctrl+E | Split the mix at the playhead |
+| J, K, L | Run the playhead backwards, stop, run it forwards. Each further press of J or L doubles the speed, up to 8 times. Forwards plays sound up to 4 times the speed; backwards is silent |
 | Return | Jump to the start of the mix |
 | End | Jump to 10 seconds before the end of the mix |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
