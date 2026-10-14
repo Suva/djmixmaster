@@ -6,7 +6,7 @@ import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
-import type { Api } from '../api.ts';
+import type { Api, FineWave } from '../api.ts';
 import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
 import { Player } from './player.ts';
@@ -25,7 +25,7 @@ const detailCanvas = $<HTMLCanvasElement>('detail');
 
 const MIN_REGION_BLOCKS = Math.round(10 / HOP_SECONDS);
 /** Closest zoom of the detail view. */
-const MIN_VIEW_BLOCKS = Math.round(10 / HOP_SECONDS);
+const MIN_VIEW_BLOCKS = Math.round(0.5 / HOP_SECONDS);
 const DEFAULT_CEILING_DB = -1;
 /** Closest zoom of the recording overview. */
 const MIN_OVERVIEW_BLOCKS = Math.round(120 / HOP_SECONDS);
@@ -112,6 +112,77 @@ function scheduleRecompute() {
   });
 }
 
+// The waveform close up. The analysis has one value per block, too coarse to
+// show a beat, so once the view is short enough the stretch in sight is
+// decoded again and drawn as a wave, in pieces that are kept for a while.
+/** A slice of a millisecond: a bass note's swing is several of them wide. */
+const FINE_PER_BLOCK = 100;
+/** Views up to this long are drawn as a wave; in a longer one it would look no different from the levels. */
+const FINE_BELOW_BLOCKS = Math.round(20 / HOP_SECONDS);
+const FINE_PIECE_BLOCKS = Math.round(30 / HOP_SECONDS);
+const FINE_PIECES_KEPT = 20;
+/** Pieces by their number along the recording; null while one is on its way, or could not be had. */
+const finePieces = new Map<number, FineWave | null>();
+
+/** Asks for a piece of the wave, unless it is here, on its way, or outside the recording. */
+function fetchFinePiece(piece: number) {
+  const of = recording;
+  if (!of || finePieces.has(piece)) return;
+  if (piece < 0 || piece * FINE_PIECE_BLOCKS >= of.measured.peaks.length) return;
+  finePieces.set(piece, null);
+  const from = piece * FINE_PIECE_BLOCKS * HOP_SECONDS;
+  api
+    .fineWave(of.path, from, from + FINE_PIECE_BLOCKS * HOP_SECONDS, of.measured.sampleRate, FINE_PER_BLOCK / HOP_SECONDS)
+    .then((wave) => {
+      if (recording !== of) return;
+      finePieces.set(piece, wave);
+      for (const oldest of finePieces.keys()) {
+        if (finePieces.size <= FINE_PIECES_KEPT) break;
+        finePieces.delete(oldest);
+      }
+      scheduleDraw();
+    })
+    // Left as "on its way": the view stays as coarse as it was, which is no worse than before.
+    .catch((error) => console.error('Could not read the waveform finely:', error));
+}
+
+/** The wave across blocks `start` to `end` of the recording, or null until all of it has arrived. */
+function fineWave(start: number, end: number): FineWave | null {
+  if (!recording || end - start > FINE_BELOW_BLOCKS) return null;
+  const first = Math.floor(start / FINE_PIECE_BLOCKS);
+  const last = Math.floor((end - 1) / FINE_PIECE_BLOCKS);
+  let complete = true;
+  for (let piece = first; piece <= last; piece++) {
+    const have = finePieces.get(piece);
+    if (have) {
+      // Used again, so it is the last to be dropped.
+      finePieces.delete(piece);
+      finePieces.set(piece, have);
+    } else {
+      complete = false;
+      fetchFinePiece(piece);
+    }
+  }
+  if (!complete) return null;
+  // The pieces on either side as well: in a long MP3 one can take a couple of
+  // seconds to read, and playing or scrolling on should not wait for it.
+  fetchFinePiece(last + 1);
+  fetchFinePiece(first - 1);
+  const length = (end - start) * FINE_PER_BLOCK;
+  const low = new Float32Array(length);
+  const high = new Float32Array(length);
+  for (let piece = first; piece <= last; piece++) {
+    const wave = finePieces.get(piece)!;
+    const offset = (piece * FINE_PIECE_BLOCKS - start) * FINE_PER_BLOCK;
+    const from = Math.max(0, -offset);
+    const to = Math.min(wave.low.length, length - offset);
+    if (to <= from) continue;
+    low.set(wave.low.subarray(from, to), offset + from);
+    high.set(wave.high.subarray(from, to), offset + from);
+  }
+  return { low, high };
+}
+
 function scheduleDraw() {
   if (drawQueued) return;
   drawQueued = true;
@@ -130,10 +201,14 @@ function scheduleDraw() {
       end: clamp(view.end - mix.region.start, 1, length),
     };
     const active = grab && 'adjustment' in grab ? grab.adjustment : grab?.made ?? hoveredAdjustment;
+    const fine = fineWave(mix.region.start + shown.start, mix.region.start + shown.end);
     drawDetail(
       detailCanvas, detail, shown, hoverX, playhead - mix.region.start, hoverY,
       active ? mix.adjustments.indexOf(active) : null, fadeDrag ?? hoveredFade,
+      fine,
     );
+    // For scripted checks, which cannot see what the canvas shows.
+    detailCanvas.dataset.wave = fine ? 'fine' : 'blocks';
     showFigures();
   });
 }
@@ -216,6 +291,7 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
   const bassDb = options.bassCorrection > 0 || m.adjustments.some((a) => a.bass) ? levelling.bassDb : null;
   const ceiling = Math.pow(10, m.ceilingDb / 20);
   const peaksOut = new Float32Array(n);
+  const peakGain = new Float32Array(n);
   const bodyOut = new Float32Array(n);
   const loudnessOut = new Float32Array(n);
   const blocksOut = new Float64Array(n);
@@ -227,7 +303,8 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
     const g = gainDb[i];
     const linear = Math.pow(10, g / 20);
     // Bass carries much of the peak level, so count half of its change as an estimate.
-    peaksOut[i] = peaksIn[i] * linear * Math.pow(10, (bassDb?.[i] ?? 0) / 40);
+    peakGain[i] = linear * Math.pow(10, (bassDb?.[i] ?? 0) / 40);
+    peaksOut[i] = peaksIn[i] * peakGain[i];
     // The bass shelf only moves the share of the loudness that sits in the low band.
     let shelved = 0;
     if (bassDb && bassDb[i] !== 0) {
@@ -252,13 +329,14 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
     const held = fadeGain(i + 0.5, n, fade.in, fade.out);
     if (held === 1) continue;
     peaksOut[i] *= held;
+    peakGain[i] *= held;
     bodyOut[i] *= held;
     loudnessOut[i] += 20 * Math.log10(Math.max(held, 1e-6));
   }
 
   return {
     detail: {
-      startBlock: start, peaksIn, peaksOut, bodyOut, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, adjustments,
+      startBlock: start, peaksIn, peaksOut, bodyOut, peakGain, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, adjustments,
       fadeIn: fade.in, fadeOut: fade.out, targetLufs, ceiling,
     },
     stats: {
@@ -446,8 +524,12 @@ function markEdge(edge: 'start' | 'end') {
         : 'The end has to be at least 10 seconds after the start of the mix.';
     return;
   }
+  // The mark is placed while looking closely at the spot, so the view stays
+  // on it rather than drawing back to show the whole mix.
+  const looking = { ...view };
   if (edge === 'start') setRegion(at, end);
   else setRegion(start, at);
+  setView(looking.start, looking.end);
 }
 
 $('mark-start').addEventListener('click', () => markEdge('start'));
@@ -722,7 +804,12 @@ function splitAtPlayhead() {
     $('readout').textContent = 'Put the playhead inside this mix, at least 10 seconds from either end, to split there.';
     return;
   }
+  // The piece before the cut stays selected, with the playhead resting at its
+  // new end and the view still on the spot: the cut is usually made to finish
+  // that piece, and its ending is what gets worked on next.
+  const looking = { ...view };
   splitInto([{ start, end: at }, { start: at, end }]);
+  setView(looking.start, looking.end);
 }
 
 $('split-here').addEventListener('click', splitAtPlayhead);
@@ -1117,9 +1204,9 @@ function follow() {
   const time = player.time;
   const { start, end } = mix.region;
   if (time >= end * HOP_SECONDS) {
-    // Playback covers the selected mix only.
+    // Playback covers the selected mix only, and comes to rest at its end.
     player.pause();
-    player.seek(start * HOP_SECONDS);
+    player.seek(end * HOP_SECONDS);
   } else if (time < start * HOP_SECONDS) {
     player.seek(start * HOP_SECONDS);
   }
@@ -1228,9 +1315,10 @@ async function togglePlay() {
 /** Starts playback at the playhead, or at the start of the mix when the playhead is outside it or at its end. */
 async function startPlaying() {
   const time = player.time;
-  if (time < mix.region.start * HOP_SECONDS || time >= mix.region.end * HOP_SECONDS - 0.5) {
-    player.seek(mix.region.start * HOP_SECONDS);
-  }
+  const { start, end } = mix.region;
+  // Resting at the very end, where playback stops, there is nothing left to
+  // play: start over. Anywhere else, even just short of the end, play from there.
+  if (time < start * HOP_SECONDS || time >= (end - 1) * HOP_SECONDS) player.seek(start * HOP_SECONDS);
   try {
     await player.play();
   } catch (error) {
@@ -1531,6 +1619,7 @@ async function open(path: string) {
       gaps: findGaps(measured.blocks),
       checkup: checkup(measured),
     };
+    finePieces.clear();
     showCheckup();
     overviewShown = { start: 0, end: measured.peaks.length };
     player.load(await api.mediaUrl(path));
@@ -1589,6 +1678,7 @@ function closeRecording() {
   player.unload();
   levelMeter.release();
   recording = null;
+  finePieces.clear();
   mixes = [];
   detail = null;
   drag = null;

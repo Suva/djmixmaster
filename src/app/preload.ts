@@ -9,6 +9,7 @@ const api: Api = {
   recall: (path) => ipcRenderer.invoke('recall', path),
   remember: (path, remembered) => ipcRenderer.send('remember', path, remembered),
   mediaUrl: (path) => ipcRenderer.invoke('media-url', path),
+  fineWave: (path, start, end, sampleRate, perSecond) => ipcRenderer.invoke('fine-wave', path, start, end, sampleRate, perSecond),
   pickOutput: (suggested) => ipcRenderer.invoke('pick-output', suggested),
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   existing: (paths) => ipcRenderer.invoke('existing', paths),

@@ -116,6 +116,30 @@ test('a mix can be split, deleted with Backspace, and both undone', { skip }, as
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', ctrlKey: true, bubbles: true }));
     await page.settle();
     const afterSplit = page.tabs();
+    // The piece before the cut stays selected, with the playhead resting at its end.
+    const selected = document.querySelector('.mix-tab.on')!.textContent!.trim();
+    const playheadAfterSplit = page.playhead();
+
+    // Playing from a little before the end plays from there and comes to rest at the end.
+    const playing = () => page.element('play').classList.contains('playing');
+    for (let i = 0; i < 2; i++) page.key('ArrowLeft');
+    await page.wait(100);
+    page.key('Space');
+    await page.until(playing, 'playback to start');
+    const playedFrom = page.playhead();
+    for (let i = 0; i < 3; i++) page.key('KeyL');
+    await page.until(() => !playing(), 'playback to reach the end of the mix');
+    await page.wait(200);
+    const restedAt = page.playhead();
+    // Playing again from the end starts the mix over.
+    page.key('Space');
+    await page.until(playing, 'playback to start again');
+    const startedOverAt = page.playhead();
+    page.key('Space');
+    await page.until(() => !playing(), 'playback to stop');
+    page.key('Enter');
+    for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(100);
 
     page.key('Backspace');
     await page.settle();
@@ -130,13 +154,18 @@ test('a mix can be split, deleted with Backspace, and both undone', { skip }, as
     const afterSecondUndo = page.tabs();
     page.click('redo');
     await page.settle();
-    return { afterDeletingTheOnlyMix, afterSplit, afterDelete, message, afterUndo, afterSecondUndo, afterRedo: page.tabs() };
+    return { afterDeletingTheOnlyMix, afterSplit, selected, playheadAfterSplit, playedFrom, restedAt, startedOverAt, afterDelete, message, afterUndo, afterSecondUndo, afterRedo: page.tabs() };
   });
   assert.deepEqual(seen.afterDeletingTheOnlyMix, { tabs: 1, length: '0:09:00', trimmed: '0:08:00' });
   assert.equal(seen.afterSplit.length, 2);
   assert.match(seen.afterSplit[0], /0:03:00/);
   assert.match(seen.afterSplit[1], /0:06:00/);
   assert.equal(seen.afterDelete.length, 1);
+  assert.equal(seen.selected, seen.afterSplit[0]);
+  assert.equal(seen.playheadAfterSplit, 180);
+  assert.ok(seen.playedFrom >= 170 && seen.playedFrom <= 173, `played from ${seen.playedFrom}`);
+  assert.equal(seen.restedAt, 180);
+  assert.ok(seen.startedOverAt <= 2, `started over at ${seen.startedOverAt}`);
   assert.match(seen.message, /^Deleted Mix 1\./);
   assert.deepEqual(seen.afterUndo, seen.afterSplit);
   assert.equal(seen.afterSecondUndo.length, 1);
@@ -395,6 +424,35 @@ test('J, K and L run the playhead backwards, stop it, and run it forwards at spe
   assert.equal(seen.turned, '', 'L after J plays forwards at the ordinary speed');
   assert.equal(seen.after, '');
   assert.equal(seen.message, '', 'no complaint about playback');
+});
+
+test('zoomed in close, the waveform is drawn from the wave itself', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    const detail = page.element('detail');
+    await page.until(() => detail.dataset.wave === 'blocks', 'the whole mix to be drawn from the analysis');
+    for (let i = 0; i < 14; i++) {
+      page.click('zoom-in');
+      await page.wait(20);
+    }
+    await page.until(() => detail.dataset.wave === 'fine', 'the wave to arrive');
+    // Stepping on stays fine: the next stretch has been fetched ahead.
+    for (let i = 0; i < 3; i++) page.key('ArrowRight', { shift: true });
+    await page.until(() => detail.dataset.wave === 'fine', 'the wave further on');
+    // Marking the start of the mix here must not throw the view back out,
+    // and neither must cutting it further on.
+    page.key('KeyI');
+    await page.wait(300);
+    const afterMark = { wave: detail.dataset.wave, start: page.element<HTMLInputElement>('region-start').value };
+    page.key('ArrowRight', { shift: true });
+    await page.wait(100);
+    page.click('split-here');
+    await page.wait(300);
+    Object.assign(afterMark, { afterSplit: detail.dataset.wave, mixes: page.tabs().length });
+    page.click('zoom-fit');
+    await page.until(() => detail.dataset.wave === 'blocks', 'the whole mix again');
+    return afterMark;
+  });
+  assert.deepEqual(seen, { wave: 'fine', start: '0:01:30', afterSplit: 'fine', mixes: 2 });
 });
 
 test('playing moves the playhead and lights the meter', { skip }, async () => {

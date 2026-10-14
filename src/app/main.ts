@@ -8,10 +8,10 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
-import { CHANNELS, ffmpeg, probe } from '../audio-io.ts';
+import { CHANNELS, decode, ffmpeg, probe } from '../audio-io.ts';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
-import type { Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
 import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
 
@@ -222,6 +222,39 @@ ipcMain.handle('media-url', async (_event, path: string): Promise<MediaSource> =
   const [streamed, info] = await Promise.all([needsStreaming(path), probe(path)]);
   media = { id: media.id + 1, path, sampleRate: info.sampleRate };
   return { url: `${ORIGIN}/${streamed ? 'stream' : 'media'}/${media.id}`, streamed };
+});
+
+// The analysis keeps one value per 100 ms, which is too coarse to show a beat.
+// When the window is zoomed in far enough it asks for the stretch in view to
+// be decoded again and kept as a wave. A stretch is half a minute, so this
+// is quick, and it is done here rather than in the worker, which may be busy
+// with an export.
+async function fineWave(path: string, start: number, end: number, sampleRate: number, perSecond: number): Promise<FineWave> {
+  const count = Math.max(0, Math.round((end - start) * perSecond));
+  const low = new Float32Array(count);
+  const high = new Float32Array(count);
+  let frame = 0;
+  for await (const chunk of decode(path, { start, end })) {
+    for (let i = 0; i + 1 < chunk.length; i += CHANNELS, frame++) {
+      const at = Math.floor((frame * perSecond) / sampleRate);
+      if (at >= count) break;
+      const left = chunk[i];
+      const right = chunk[i + 1];
+      if (left < low[at]) low[at] = left;
+      if (right < low[at]) low[at] = right;
+      if (left > high[at]) high[at] = left;
+      if (right > high[at]) high[at] = right;
+    }
+  }
+  return { low, high };
+}
+
+/** One at a time: scrolling asks for several stretches in a row, and each is a decoder of its own. */
+let fineWaves: Promise<unknown> = Promise.resolve();
+ipcMain.handle('fine-wave', (_event, path: string, start: number, end: number, sampleRate: number, perSecond: number) => {
+  const wave = fineWaves.then(() => fineWave(path, start, end, sampleRate, perSecond));
+  fineWaves = wave.catch(() => {});
+  return wave;
 });
 
 // ---------------------------------------------------------------------------

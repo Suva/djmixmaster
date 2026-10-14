@@ -54,30 +54,35 @@ function fit(canvas: HTMLCanvasElement) {
 }
 
 /** Reduces `values` to one number per pixel column. */
-function columns(values: ArrayLike<number>, width: number, reduce: 'max' | 'mean'): Float32Array {
+function columns(values: ArrayLike<number>, width: number, reduce: 'max' | 'min' | 'mean'): Float32Array {
   const n = values.length;
   const out = new Float32Array(width);
   for (let x = 0; x < width; x++) {
     const lo = Math.min(n - 1, Math.floor((x * n) / width));
     const hi = Math.max(lo + 1, Math.min(n, Math.floor(((x + 1) * n) / width)));
-    let acc = reduce === 'max' ? -Infinity : 0;
-    for (let i = lo; i < hi; i++) acc = reduce === 'max' ? Math.max(acc, values[i]) : acc + values[i];
-    out[x] = reduce === 'max' ? acc : acc / (hi - lo);
+    let acc = reduce === 'max' ? -Infinity : reduce === 'min' ? Infinity : 0;
+    for (let i = lo; i < hi; i++) {
+      acc = reduce === 'max' ? Math.max(acc, values[i]) : reduce === 'min' ? Math.min(acc, values[i]) : acc + values[i];
+    }
+    out[x] = reduce === 'mean' ? acc / (hi - lo) : acc;
   }
   return out;
 }
 
-const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
+const TICK_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
 
 function timeAxis(ctx: CanvasRenderingContext2D, startSeconds: number, endSeconds: number, x0: number, x1: number, y: number) {
   const span = endSeconds - startSeconds;
   const step = TICK_STEPS.find((s) => (span / s) * 70 <= x1 - x0) ?? TICK_STEPS[TICK_STEPS.length - 1];
   ctx.fillStyle = COLOR.text;
   ctx.textAlign = 'center';
-  for (let t = Math.ceil(startSeconds / step) * step; t <= endSeconds; t += step) {
+  // Counted in tenths of a second, so that steps under a second add up exactly.
+  const stepTenths = Math.round(step * 10);
+  for (let tenths = Math.ceil((startSeconds * 10) / stepTenths) * stepTenths; tenths <= endSeconds * 10; tenths += stepTenths) {
+    const t = tenths / 10;
     const x = x0 + ((t - startSeconds) / span) * (x1 - x0);
     if (x < x0 + 24 || x > x1 - 24) continue;
-    ctx.fillText(clock(t), x, y);
+    ctx.fillText(step < 1 ? `${clock(Math.floor(t))}.${tenths % 10}` : clock(t), x, y);
   }
 }
 
@@ -200,6 +205,8 @@ export interface Detail {
   peaksOut: Float32Array;
   /** Average level of the levelled result per block. */
   bodyOut: Float32Array;
+  /** What the levelling, the bass change and the fades together do to the level of each block, as a factor. */
+  peakGain: Float32Array;
   loudnessIn: Float32Array;
   loudnessOut: Float32Array;
   gainDb: Float32Array;
@@ -270,6 +277,8 @@ export function drawDetail(
   activeAdjustment: number | null,
   /** Which fade handle is under the pointer or being dragged, if any. */
   activeFade: 'in' | 'out' | null,
+  /** The original as a wave across exactly this view, fine enough to show a beat; null when not zoomed in that far. */
+  fine: { low: Float32Array; high: Float32Array } | null,
 ) {
   const { ctx, width, height } = fit(canvas);
   const plot = width - GUTTER;
@@ -314,10 +323,34 @@ export function drawDetail(
   {
     const mid = waveLane.top + waveLane.height / 2;
     const scale = waveLane.height / 2 - 4;
-    const before = columns(shown(detail.peaksIn), plot, 'max');
-    const after = columns(shown(detail.peaksOut), plot, 'max');
-    const body = columns(shown(detail.bodyOut), plot, 'mean');
-    for (let x = 0; x < plot; x++) {
+    if (fine) {
+      // Close up it is the wave itself: from the lowest to the highest sample
+      // under each pixel, which is what gives a kick drum its shape. The
+      // levelling comes from the curves, which move far too slowly to need
+      // any finer steps.
+      const low = columns(fine.low, plot, 'min');
+      const high = columns(fine.high, plot, 'max');
+      const bar = (x: number, from: number, to: number) => {
+        const top = mid - Math.min(1, to) * scale;
+        ctx.fillRect(GUTTER + x, top, 1, Math.max(1, mid - Math.max(-1, from) * scale - top));
+      };
+      for (let x = 0; x < plot; x++) {
+        const gain = detail.peakGain[Math.min(total - 1, view.start + Math.floor((x / plot) * n))];
+        ctx.fillStyle = COLOR.before;
+        bar(x, low[x], high[x]);
+        ctx.fillStyle = COLOR.after;
+        bar(x, Math.max(-detail.ceiling, low[x] * gain), Math.min(detail.ceiling, high[x] * gain));
+        // Peaks the limiter will have to hold down.
+        ctx.fillStyle = COLOR.limited;
+        const edge = Math.min(1, detail.ceiling) * scale;
+        if (high[x] * gain > detail.ceiling) ctx.fillRect(GUTTER + x, mid - edge - 3, 1, 3);
+        if (low[x] * gain < -detail.ceiling) ctx.fillRect(GUTTER + x, mid + edge, 1, 3);
+      }
+    }
+    const before = fine ? new Float32Array(0) : columns(shown(detail.peaksIn), plot, 'max');
+    const after = fine ? before : columns(shown(detail.peaksOut), plot, 'max');
+    const body = fine ? before : columns(shown(detail.bodyOut), plot, 'mean');
+    for (let x = 0; x < before.length; x++) {
       const b = Math.min(1, before[x]) * scale;
       ctx.fillStyle = COLOR.before;
       ctx.fillRect(GUTTER + x, mid - b, 1, b * 2);

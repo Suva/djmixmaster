@@ -171,6 +171,12 @@ Do not write test data there.
 - **The window is served from `djm://app/`**, not `file://`, so that audio can
   pass through Web Audio. Only files listed in `APP_FILES` in `main.ts` are
   served; a new file in `dist/` has to be added there.
+- **The waveform has two sources.** Views of the selected mix longer than 20
+  seconds are drawn from the analysis, one value per block. Shorter ones are
+  drawn from the wave itself: the main process decodes half a minute at a
+  time on request (`fine-wave` in `main.ts`), and the window keeps the pieces
+  it was given (`fineWave` in `renderer.ts`). Until a piece arrives the view
+  falls back to blocks. This is for display only; nothing is levelled from it.
 - **Decoded MP3s can exceed full scale.** A clipped recording decodes with
   peaks several dB above 0 dBFS. The pipeline is floating point throughout
   and must stay that way.

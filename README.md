@@ -116,6 +116,9 @@ dropouts in white. The report describes; it does not repair yet.
 - **Transport**: the buttons above the curves jump to the start, step back,
   play or pause, step forward, and jump to the end. Holding back or forward
   keeps stepping.
+- **Zooming in**: scroll over the curves to zoom, down to half a second across
+  the window. From 20 seconds inwards the waveform is drawn from the sound
+  itself, so single beats and bass notes can be seen.
 - **Live preview**: settings change what you hear immediately, and the preview
   uses the same limiter as the export.
 - **Level meter**: beside the curves, two columns of lights show what reaches
@@ -156,7 +159,7 @@ everything below together with the mouse and trackpad gestures.
 
 | Key | Does |
 |---|---|
-| Space | Play or pause |
+| Space | Play or pause. Playback stops at the end of the mix; pressing play there starts the mix over |
 | A | Switch between the original and the levelled sound |
 | ← → | Move the playhead 5 seconds (30 with Shift, 1 with Option or Alt) |
 | I, O | Put the start, or the end, of the mix at the playhead |

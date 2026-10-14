@@ -80,16 +80,12 @@ tracks inside a mix.
 
 Done when a player that reads cue sheets shows the tracks of an exported mix.
 
-### Finer waveform when zoomed in — medium
+### Edges and splits finer than a tenth of a second — small
 
-The displays work in 100 ms blocks, so close zooms are blocky and individual
-beats cannot be seen when placing a mix edge or a split.
-
-- Decode the visible stretch on demand at a higher resolution when zoomed
-  past a threshold, and cache it.
-- The analysis should stay at 100 ms; this is for display only.
-
-Done when a kick drum is visible as a shape at the closest zoom.
+Zoomed in close, the waveform is drawn from the wave itself and shows single
+beats, but a mix's edges, a split and the playhead's steps still land on the
+100 ms blocks everything else works in. If placing a cut by eye turns out to
+want more, regions would have to be kept in seconds rather than blocks.
 
 ## Sharing the app
 

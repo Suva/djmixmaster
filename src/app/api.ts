@@ -46,6 +46,15 @@ export interface RecentRecording {
   folder: string;
 }
 
+/**
+ * A stretch of the recording as a wave, for drawing it close up: the lowest
+ * and the highest sample value in each slice of time, across both channels.
+ */
+export interface FineWave {
+  low: Float32Array;
+  high: Float32Array;
+}
+
 export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help';
 
 /** What the window may ask the main process to do. */
@@ -57,6 +66,11 @@ export interface Api {
   measure(path: string): Promise<Examination>;
   recall(path: string): Promise<Remembered>;
   remember(path: string, remembered: Remembered): void;
+  /**
+   * Decodes the stretch from `start` to `end` seconds and returns its shape in
+   * `perSecond` slices a second. Requests are served one after another.
+   */
+  fineWave(path: string, start: number, end: number, sampleRate: number, perSecond: number): Promise<FineWave>;
   /** How the window can play this recording. */
   mediaUrl(path: string): Promise<MediaSource>;
   pickOutput(suggested: string): Promise<string | null>;
