@@ -120,7 +120,8 @@ dropouts in white. The report describes; it does not repair yet.
 - **Level meter**: beside the curves, two columns of lights show what reaches
   the left and right speaker, turning red above your ceiling. A thinner column
   lights from the top as the limiter works, and a lamp lights when the
-  recording itself is clipped at that moment.
+  recording itself is clipped at that moment. Underneath are the loudness at
+  the playhead and the gain and bass change being applied there.
 - **Adjusting by hand**: drag sideways across the gain lane to mark a stretch,
   then drag it up or down. The switch in the corner of the gain lane (Level or
   Bass) chooses whether a new stretch changes the whole sound or the bass only. Drag an edge to resize

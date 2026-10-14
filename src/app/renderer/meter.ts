@@ -1,6 +1,7 @@
 // The level meter beside the curves: two columns of lights for what reaches
 // the left and right speaker, a thinner one that lights from the top as the
-// limiter works, and a lamp for when the recording itself is clipped.
+// limiter works, and a lamp for when the recording itself is clipped. Under
+// them, in figures, what the levelling is doing at the playhead.
 
 /** The scale runs from a little above full scale down to here, in dBFS. */
 const TOP_DB = 3;
@@ -25,6 +26,9 @@ const COLOR = {
   text: '#8b93a1',
   bright: '#e6e8ec',
 };
+/** Rows kept free under the lights for the figures, so the lights never change height. */
+const FIGURE_ROWS = 3;
+const FIGURE_ROW_HEIGHT = 13;
 const FONT = '10px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 export interface MeterReading {
@@ -38,6 +42,9 @@ export interface MeterReading {
   /** The ceiling in use, in dBFS, which is where the lights turn red. */
   ceilingDb: number;
 }
+
+/** One line under the lights: what it is, its value as it should read, and the colour of the value. */
+export type MeterFigure = [label: string, value: string, colour: string];
 
 const toDb = (linear: number) => (linear > 0 ? 20 * Math.log10(linear) : -Infinity);
 
@@ -59,6 +66,7 @@ export class LevelMeter {
   #ceilingDb = -1;
   #last = 0;
   #settling = false;
+  #figures: MeterFigure[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.#canvas = canvas;
@@ -85,6 +93,13 @@ export class LevelMeter {
     }
     if (reading.sourceClipped) this.#clippedAt = now;
     this.#draw(now);
+  }
+
+  /** The figures under the lights. They hold still when playback does, unlike the lights. */
+  setFigures(figures: MeterFigure[]) {
+    if (JSON.stringify(figures) === JSON.stringify(this.#figures)) return;
+    this.#figures = figures;
+    this.#draw(performance.now());
   }
 
   /** Lets the lights fall back by themselves once playback has stopped. */
@@ -131,7 +146,7 @@ export class LevelMeter {
     ctx.textBaseline = 'middle';
 
     const top = 26;
-    const bottom = height - 34;
+    const bottom = height - 40 - FIGURE_ROWS * FIGURE_ROW_HEIGHT;
     const ladder = bottom - top;
     const bar = 11;
     const leftX = 24;
@@ -201,11 +216,22 @@ export class LevelMeter {
     ctx.fillText(this.#heldReduction > 0.05 ? `-${this.#heldReduction.toFixed(1)}` : '', width - 1, bottom + 12);
     ctx.fillText(this.#heldReduction > 0.05 ? 'limit' : '', width - 1, bottom + 25);
 
+    this.#figures.slice(0, FIGURE_ROWS).forEach(([label, value, colour], row) => {
+      const y = bottom + 43 + row * FIGURE_ROW_HEIGHT;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = COLOR.text;
+      ctx.fillText(label, 1, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = colour;
+      ctx.fillText(value, width - 1, y);
+    });
+
     // The same numbers where a script can read them; lights are hard to check otherwise.
     canvas.dataset.peak = peak > BOTTOM_DB ? peak.toFixed(1) : '';
     canvas.dataset.left = this.#level[0] > BOTTOM_DB ? this.#level[0].toFixed(1) : '';
     canvas.dataset.right = this.#level[1] > BOTTOM_DB ? this.#level[1].toFixed(1) : '';
     canvas.dataset.reduction = this.#heldReduction.toFixed(1);
     canvas.dataset.clip = String(clipped);
+    canvas.dataset.figures = this.#figures.map(([label, value]) => `${label} ${value}`).join(', ');
   }
 }

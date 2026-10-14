@@ -8,7 +8,7 @@ import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
 import type { Api } from '../api.ts';
 import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
-import { LevelMeter } from './meter.ts';
+import { LevelMeter, type MeterFigure } from './meter.ts';
 import { Player } from './player.ts';
 import { initTooltips } from './tooltip.ts';
 
@@ -79,6 +79,7 @@ let view: Region = { start: 0, end: 0 };
 let overviewShown: Region = { start: 0, end: 0 };
 let detail: Detail | null = null;
 let hoverX: number | null = null;
+let hoverY: number | null = null;
 let busy = false;
 
 const player = new Player(location.search.includes('silent'));
@@ -130,9 +131,10 @@ function scheduleDraw() {
     };
     const active = grab && 'adjustment' in grab ? grab.adjustment : grab?.made ?? hoveredAdjustment;
     drawDetail(
-      detailCanvas, detail, shown, hoverX, playhead - mix.region.start,
+      detailCanvas, detail, shown, hoverX, playhead - mix.region.start, hoverY,
       active ? mix.adjustments.indexOf(active) : null, fadeDrag ?? hoveredFade,
     );
+    showFigures();
   });
 }
 
@@ -757,6 +759,7 @@ $('zoom-fit').addEventListener('click', () => setView(mix.region.start, mix.regi
 
 detailCanvas.addEventListener('mousemove', (event) => {
   hoverX = event.clientX - detailCanvas.getBoundingClientRect().left;
+  hoverY = event.clientY - detailCanvas.getBoundingClientRect().top;
   const block = detailBlock(event);
   const found = grab ? null : adjustmentAt(event);
   hoveredAdjustment = found?.adjustment ?? null;
@@ -786,6 +789,7 @@ detailCanvas.addEventListener('mousemove', (event) => {
 
 detailCanvas.addEventListener('mouseleave', () => {
   hoverX = null;
+  hoverY = null;
   hoveredAdjustment = null;
   hoveredFade = null;
   $('readout').textContent = ' ';
@@ -1031,6 +1035,30 @@ function seek(seconds: number) {
   showPlayback();
 }
 
+/** A change in dB as it reads in the narrow column under the meter. */
+const signed = (value: number) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)}`;
+
+/**
+ * The figures under the meter: the loudness at the playhead and what the
+ * levelling does there. They come from the same curves as the lanes, so the
+ * two always agree; the loudness does not know what the limiter takes off.
+ */
+function showFigures() {
+  if (!recording || !detail) {
+    levelMeter.setFigures([]);
+    return;
+  }
+  const seconds = player.time;
+  const inside = seconds >= mix.region.start * HOP_SECONDS && seconds < mix.region.end * HOP_SECONDS;
+  const loudness = inside ? curveAt(hearLevelled ? detail.loudnessOut : detail.loudnessIn, seconds) : NaN;
+  const applied = inside && hearLevelled;
+  levelMeter.setFigures([
+    ['LUFS', loudness > -60 ? loudness.toFixed(1).replace('-', '−') : '–', hearLevelled ? '#3ddc97' : '#e6e8ec'],
+    ['gain', applied ? signed(curveAt(detail.gainDb, seconds)) : '–', '#f2a83b'],
+    ...(detail.bassDb ? [['bass', applied ? signed(bassAt(seconds)) : '–', '#6aa9ff'] as MeterFigure] : []),
+  ]);
+}
+
 function showPlayback() {
   $('play-time').textContent = clock(player.time);
   scheduleDraw();
@@ -1086,7 +1114,7 @@ async function togglePlay() {
   try {
     await player.play();
   } catch (error) {
-    $('meter').textContent = `Cannot play this recording here (${message(error)}). Export still works.`;
+    $('export-status').textContent = `Cannot play this recording here (${message(error)}). Export still works.`;
   }
 }
 
@@ -1094,6 +1122,7 @@ function setHearLevelled(levelled: boolean) {
   hearLevelled = levelled;
   $('hear-levelled').classList.toggle('on', levelled);
   $('hear-original').classList.toggle('on', !levelled);
+  scheduleDraw();
 }
 
 player.onPlay = () => {
@@ -1102,21 +1131,16 @@ player.onPlay = () => {
 };
 player.onPause = () => {
   showPlaying(false);
-  $('meter').textContent = '';
   limiterReductionDb = 0;
   levelMeter.release();
   showPlayback();
 };
 player.onSeek = showPlayback;
 
-// The limiter reports how hard it worked many times a second. The lights show
-// that; the row above the curves says what the levelling is doing right now.
+// The limiter reports how hard it worked many times a second, for the meter.
 player.onReport = ({ gain }) => {
   if (player.paused) return;
   limiterReductionDb = -20 * Math.log10(gain);
-  $('meter').textContent =
-    `gain ${hearLevelled ? db(20 * Math.log10(gainAt(player.time))) : 'off'}` +
-    (hearLevelled && detail?.bassDb ? `    bass ${db(bassAt(player.time))}` : '');
 };
 
 /** Shows the play button as play or pause, to match what pressing it would do. */

@@ -94,7 +94,6 @@
             <button id="hear-levelled" class="on" title="A switches between the two">Levelled</button>
           </div>
           <span class="spacer"></span>
-          <span id="meter"></span>
           <div class="toggle" role="group" aria-label="Zoom the mix">
             <button id="zoom-out" class="icon" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.4 8.8l3.9 3.9-1.1 1.1-3.9-3.9A5.5 5.5 0 1 1 6.5 1zm0 1.6a3.9 3.9 0 1 0 0 7.8 3.9 3.9 0 0 0 0-7.8zM4 5.7h5v1.6H4z"/></svg></button>
             <button id="zoom-in" class="icon" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.4 8.8l3.9 3.9-1.1 1.1-3.9-3.9A5.5 5.5 0 1 1 6.5 1zm0 1.6a3.9 3.9 0 1 0 0 7.8 3.9 3.9 0 0 0 0-7.8zM5.7 4h1.6v1.7H9v1.6H7.3V9H5.7V7.3H4V5.7h1.7z"/></svg></button>
@@ -103,7 +102,7 @@
         </div>
         <div id="detail-area">
           <canvas id="detail"></canvas>
-          <canvas id="level-meter" title="What reaches the left and right speaker, with the peak held for a moment. The thin column lights from the top as the limiter works; the lamp above lights when the recording itself is clipped."></canvas>
+          <canvas id="level-meter" title="What reaches the left and right speaker, with the peak held for a moment. The thin column lights from the top as the limiter works; the lamp above lights when the recording itself is clipped. Underneath: the loudness at the playhead, and the gain and bass change the levelling applies there."></canvas>
           <div id="adjust-switch" title="What dragging across the gain lane raises or lowers">
             <span>Drag adjusts</span>
             <div class="toggle" role="group" aria-label="What dragging across the gain lane adjusts">

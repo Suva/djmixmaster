@@ -229,17 +229,32 @@ export function detailLanes(height: number) {
   return { wave, loudness, gain: { top: gainTop, height: usable - gainTop } };
 }
 
-function laneLabel(ctx: CanvasRenderingContext2D, x: number, y: number, parts: [string, string][]) {
+/** How much of a lane's legend shows while the pointer is elsewhere. */
+const LEGEND_FAINT = 0.28;
+
+/**
+ * The legend of a lane. It lies over the curves, so it is only a hint until
+ * the pointer rests on it; then it shows in full, on a backing that keeps it
+ * readable over a full waveform.
+ */
+function laneLabel(
+  ctx: CanvasRenderingContext2D, x: number, y: number, parts: [string, string][], pointer: { x: number; y: number } | null,
+) {
   ctx.textAlign = 'left';
-  // A backing keeps the legend readable over a full waveform.
   const widthOfAll = parts.reduce((sum, [text]) => sum + ctx.measureText(text).width + 12, 0);
-  ctx.fillStyle = 'rgba(16, 18, 22, 0.8)';
-  ctx.fillRect(x - 6, y - 9, widthOfAll + 2, 18);
+  const pointedAt =
+    pointer !== null && pointer.x >= x - 6 && pointer.x <= x - 4 + widthOfAll && pointer.y >= y - 10 && pointer.y <= y + 10;
+  if (pointedAt) {
+    ctx.fillStyle = 'rgba(16, 18, 22, 0.8)';
+    ctx.fillRect(x - 6, y - 9, widthOfAll + 2, 18);
+  }
+  ctx.globalAlpha = pointedAt ? 1 : LEGEND_FAINT;
   for (const [text, color] of parts) {
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
     x += ctx.measureText(text).width + 12;
   }
+  ctx.globalAlpha = 1;
 }
 
 /**
@@ -249,6 +264,8 @@ function laneLabel(ctx: CanvasRenderingContext2D, x: number, y: number, parts: [
  */
 export function drawDetail(
   canvas: HTMLCanvasElement, detail: Detail, view: Region, hoverX: number | null, playhead: number | null,
+  /** How far down the canvas the pointer is, when it is over it. */
+  hoverY: number | null,
   /** Index of the adjustment under the pointer or being dragged, if any. */
   activeAdjustment: number | null,
   /** Which fade handle is under the pointer or being dragged, if any. */
@@ -260,6 +277,7 @@ export function drawDetail(
   const n = view.end - view.start;
   if (plot < 10 || total === 0 || n <= 0) return;
   const shown = <T extends Float32Array>(values: T) => values.subarray(view.start, view.end);
+  const pointer = hoverX !== null && hoverY !== null ? { x: hoverX, y: hoverY } : null;
 
   const usable = height - AXIS;
   const gap = LANE_GAP;
@@ -357,7 +375,7 @@ export function drawDetail(
 
     laneLabel(ctx, GUTTER + 8, waveLane.top + 10, [
       ['Waveform', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['limited', COLOR.limited],
-    ]);
+    ], pointer);
   }
 
   // Lane 2: short-term loudness before and after.
@@ -390,7 +408,7 @@ export function drawDetail(
     ctx.restore();
     laneLabel(ctx, GUTTER + 8, loudLane.top + 10, [
       ['Loudness (LUFS)', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['- - target', COLOR.label],
-    ]);
+    ], pointer);
   }
 
   // Lane 3: the gain being applied.
@@ -404,8 +422,12 @@ export function drawDetail(
     }
     const toY = (db: number) => gainLane.top + 16 + ((hi - db) / (hi - lo)) * (gainLane.height - 20);
     const step = hi - lo > 12 ? 6 : 3;
+    // In a small window the lines crowd together; their labels then give way.
+    let labelled = Infinity;
     for (let db = Math.ceil(lo / step) * step; db <= hi; db += step) {
-      gridLine(toY(db), `${db > 0 ? '+' : ''}${db}`);
+      const roomy = labelled - toY(db) >= 11;
+      gridLine(toY(db), roomy ? `${db > 0 ? '+' : ''}${db}` : '');
+      if (roomy) labelled = toY(db);
     }
     // Manual adjustments as bands behind the curve.
     detail.adjustments.forEach((adjustment, index) => {
@@ -439,7 +461,7 @@ export function drawDetail(
     if (detail.bassDb) line(shown(detail.bassDb), toY, COLOR.bass, 1.5);
     laneLabel(ctx, GUTTER + 8, gainLane.top + 10, [
       ['Gain (dB)', COLOR.label], ['whole mix', COLOR.gain], ...(detail.bassDb ? [['bass only', COLOR.bass] as [string, string]] : []),
-    ]);
+    ], pointer);
   }
 
   const startSeconds = (detail.startBlock + view.start) * HOP_SECONDS;

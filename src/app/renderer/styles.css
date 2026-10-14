@@ -231,7 +231,11 @@ canvas { display: block; width: 100%; border-radius: 6px; background: var(--lane
   font-size: 11px;
   color: var(--muted);
   pointer-events: none;
+  /* Like the lanes' legends, it lies over the curves and stays faint until pointed at. */
+  opacity: 0.45;
+  transition: opacity 0.12s;
 }
+#adjust-switch:hover { opacity: 1; }
 #adjust-switch .toggle { pointer-events: auto; }
 #adjust-switch button { font-size: 11px; padding: 2px 9px; background: #14161a; }
 #adjust-switch button.on { background: var(--accent); }
@@ -257,7 +261,6 @@ button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; f
 #play.playing .when-playing { display: block; }
 #play-time { font-variant-numeric: tabular-nums; min-width: 66px; font-size: 15px; }
 /* Kept at its full width when empty, so the row does not shift when playback starts. */
-#meter { min-width: 170px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
 .toggle { display: flex; flex: none; }
 .toggle-label { color: var(--muted); margin-right: -6px; white-space: nowrap; }
 .toggle button { border-radius: 0; margin-left: -1px; color: var(--muted); }
