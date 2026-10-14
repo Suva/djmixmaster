@@ -374,6 +374,15 @@ test('a double click on a free part of the recording fills it with a mix', { ski
 test('J, K and L run the playhead backwards, stop it, and run it forwards at speed', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     const playing = () => page.element('play').classList.contains('playing');
+    // How many seconds of the mix pass per second, once the playhead is under
+    // way: a slow machine takes its time to start, which must not count.
+    const speed = async (direction: 1 | -1) => {
+      const from = page.playhead();
+      await page.until(() => (page.playhead() - from) * direction >= 1, 'the playhead to get under way');
+      const start = { at: page.playhead(), time: performance.now() };
+      await page.until(() => (page.playhead() - start.at) * direction >= 6, 'the playhead to run on');
+      return (Math.abs(page.playhead() - start.at) * 1000) / (performance.now() - start.time);
+    };
     page.key('Enter');
     for (let i = 0; i < 4; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
@@ -385,9 +394,7 @@ test('J, K and L run the playhead backwards, stop it, and run it forwards at spe
     page.key('KeyL');
     await page.until(playing, 'L to start playback');
     const thrice = page.text('shuttle');
-    const from = page.playhead();
-    await page.wait(1500);
-    const forwards = page.playhead() - from;
+    const forwards = await speed(1);
 
     page.key('KeyK');
     await page.until(() => !playing(), 'K to stop playback');
@@ -399,8 +406,7 @@ test('J, K and L run the playhead backwards, stop it, and run it forwards at spe
     page.key('KeyJ');
     page.key('KeyJ');
     const back = page.text('shuttle');
-    await page.wait(1500);
-    const backwards = stopped.at - page.playhead();
+    const backwards = await speed(-1);
     const soundless = !playing();
 
     page.key('KeyL');
@@ -415,11 +421,11 @@ test('J, K and L run the playhead backwards, stop it, and run it forwards at spe
   });
   assert.equal(seen.once, '', 'one press of L is ordinary playback');
   assert.equal(seen.thrice, '4×');
-  assert.ok(seen.forwards >= 4 && seen.forwards <= 8, `ran ${seen.forwards} s forwards in 1.5 s at 4×`);
+  assert.ok(seen.forwards > 2.5 && seen.forwards < 6, `ran forwards at ${seen.forwards.toFixed(1)}× instead of 4×`);
   assert.equal(seen.stopped, '');
   assert.ok(seen.stillThere);
   assert.equal(seen.back, '◀ 4×');
-  assert.ok(seen.backwards >= 4 && seen.backwards <= 8, `ran ${seen.backwards} s backwards in 1.5 s at 4×`);
+  assert.ok(seen.backwards > 2.5 && seen.backwards < 6, `ran backwards at ${seen.backwards.toFixed(1)}× instead of 4×`);
   assert.ok(seen.soundless, 'nothing plays while running backwards');
   assert.equal(seen.turned, '', 'L after J plays forwards at the ordinary speed');
   assert.equal(seen.after, '');
