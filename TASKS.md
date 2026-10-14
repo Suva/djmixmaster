@@ -239,6 +239,17 @@ interface to the library; the stock builds work on files held in memory,
 which an 8-hour recording does not fit. Revisit if per-platform binaries
 become a burden or a web version is wanted.
 
+### Set the recording and the selected mix apart
+
+The top of the window is about the whole recording (the mix tabs, its
+timeline, and the row that names, places, splits and deletes a mix); below it
+are the transport, curves and meter of the one selected mix. Nothing on
+screen says so, and the two rows of buttons where they meet read as one.
+
+Tried and taken out again: a bordered box around each half, with the mix's
+name leading the lower one. It made the window feel cramped. Something
+lighter is wanted: a thin line, more space at the join, or a quiet heading.
+
 ### A window test suite
 
 The window is checked with one-off scripts (see AGENTS.md). Keeping a few of

@@ -1036,7 +1036,11 @@ function seek(seconds: number) {
 }
 
 /** A change in dB as it reads in the narrow column under the meter. */
-const signed = (value: number) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)}`;
+function signed(value: number): string {
+  // Rounded first, so that a hair under zero does not read as "−0.0".
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded >= 0 ? '+' : '−'}${Math.abs(rounded).toFixed(1)}`;
+}
 
 /**
  * The figures under the meter: the loudness at the playhead and what the
