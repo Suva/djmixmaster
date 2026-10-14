@@ -94,7 +94,7 @@ and curves in the code are block indexes unless a name says seconds.
 window: each test starts the real app, runs a function inside its window and
 checks what comes back (`test/window-app.ts` does the starting). A change to
 how the window behaves should come with a test there. They take about half a
-minute, and are skipped where Electron is not installed.
+minute. Setting `DJMASTER_SKIP_WINDOW_TESTS` leaves them out.
 
 Both the tests and one-off checks rest on a mode of the app that these
 environment variables switch on:
@@ -177,8 +177,8 @@ Do not write test data there.
 - **Audio files are ignored by git**, as are `dist/` and `release/`. Test
   recordings in the project folder stay local.
 - **Tests run on GitHub** for every push to `main` and every pull request
-  (`.github/workflows/test.yml`), on Linux with the bundled ffmpeg. Electron
-  is not installed there, so the window tests are skipped. A second, trial
+  (`.github/workflows/test.yml`), on Linux with the bundled ffmpeg. The
+  window tests are switched off there, as that machine has no display. A second, trial
   job runs them on macOS and Windows without failing the workflow, and the
   release workflow leaves them out (`DJMASTER_SKIP_WINDOW_TESTS`) until that
   trial has shown them to be dependable there.

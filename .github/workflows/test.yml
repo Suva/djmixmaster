@@ -30,9 +30,12 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       # The tests need ffmpeg; use the copy that gets bundled into the app.
+      # The tests that start the app are left to the trial job below: this
+      # machine has no display for a window.
       - run: npm test
         env:
           DJMASTER_FFMPEG: ${{ github.workspace }}/node_modules/ffmpeg-static/ffmpeg
+          DJMASTER_SKIP_WINDOW_TESTS: 1
 
   # A trial: the tests that start the real app, on the two systems it ships
   # for. They have only ever run on a developer's Mac, so a failure here does
