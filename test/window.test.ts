@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { copyFile, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ffmpeg, probe } from '../src/audio-io.ts';
@@ -242,6 +243,55 @@ test('a recording that has been moved and renamed keeps its mixes and its analys
   assert.match(back.tabs[0], /Warm-up/);
   assert.equal(back.message, 'Picked up where you left off.');
   assert.equal((await readdir(join(data, 'analyses'))).length, analyses, 'it was not analysed a second time');
+});
+
+test('a recording in several files opens, plays and is remembered as one', { skip }, async () => {
+  const folder = join(work, 'parts');
+  await mkdir(folder);
+  // Cut into parts of a little over three minutes, as a recorder would at its file size limit.
+  execFileSync(ffmpeg(), [
+    '-v', 'error', '-i', mix, '-f', 'segment', '-segment_time', '200', '-segment_start_number', '1', '-c', 'copy',
+    join(folder, 'Night part %d.wav'),
+  ]);
+  const parts = (await readdir(folder)).map((name) => join(folder, name));
+  assert.equal(parts.length, 3);
+
+  const whole = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    await page.until(() => page.text('stat-out') !== '–', 'the levelling to be worked out');
+    return [page.text('stat-in'), page.text('stat-out'), page.text('stat-gain')];
+  });
+  const data = await dataFolder(work);
+  // Handed over out of order: they are put in order by name.
+  const joined = await runApp({ recording: [parts[2], parts[0], parts[1]], data, timeoutMs: 90_000 }, async (page) => {
+    await page.until(() => page.text('stat-out') !== '–', 'the levelling to be worked out');
+    const stats = [page.text('stat-in'), page.text('stat-out'), page.text('stat-gain')];
+    // Playback, and the close-up wave across the first join, at 3:20.
+    page.key('Space');
+    await page.until(() => page.playhead() >= 1, 'playback to move on');
+    page.key('Space');
+    page.key('Enter');
+    for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
+    for (let i = 0; i < 4; i++) page.key('ArrowRight');
+    await page.wait(100);
+    for (let i = 0; i < 14; i++) page.click('zoom-in');
+    await page.wait(150);
+    await page.until(() => page.element('detail').dataset.wave === 'fine', 'the wave across the join');
+    return { name: page.text('file-name'), length: page.text('region-length'), stats };
+  });
+  assert.equal(joined.name, 'Night part *.wav (3 files)');
+  assert.equal(joined.length, '0:09:00');
+  assert.deepEqual(joined.stats, whole, 'the parts measure exactly as the whole');
+  // The analysis noted how long each part is, which lets playback jump straight into a later one.
+  const [list] = await readdir(join(data, 'recordings'));
+  const lengths = [...readFileSync(join(data, 'recordings', list), 'utf8').matchAll(/^duration (\S+)$/gm)].map((m) => Number(m[1]));
+  assert.equal(lengths.length, 3);
+  assert.ok(Math.abs(lengths.reduce((a, b) => a + b) - MIX_SECONDS) < 0.001, `the parts add up to ${lengths}`);
+
+  const listed = await runApp({ data, menu: 'close' }, async (page) => {
+    await page.until(() => !page.element('recent').hidden, 'the recent recordings to be listed');
+    return [...document.querySelectorAll('.recent-item .name')].map((item) => item.textContent);
+  });
+  assert.deepEqual(listed, ['Night part *.wav (3 files)'], 'one entry for the three files');
 });
 
 test('a last recording that is gone gives an empty start, without a word', { skip }, async () => {

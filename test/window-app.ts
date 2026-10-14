@@ -92,8 +92,11 @@ const PAGE_SOURCE = `(() => {
 })()`;
 
 export interface Run<Given> {
-  /** The recording to start with. Without one the app starts as it would by itself: with the last one, or empty. */
-  recording?: string;
+  /**
+   * The recording to start with; several files are the parts of one. Without
+   * one the app starts as it would by itself: with the last one, or empty.
+   */
+  recording?: string | string[];
   /** The app's data folder for this run. Runs that share one see each other's saved work. */
   data: string;
   /** A menu command to send before the function runs: 'close', 'undo', 'redo' or 'help'. */
@@ -123,7 +126,7 @@ export function runApp<Result, Given = undefined>(
   })().catch((error) => JSON.stringify({ error: String(error && error.stack || error) }))`;
 
   return new Promise<Result>((done, fail) => {
-    const child = spawn(electron, [PROJECT, ...(run.recording ? [run.recording] : [])], {
+    const child = spawn(electron, [PROJECT, ...[run.recording ?? []].flat()], {
       env: {
         ...process.env,
         DJMASTER_SHOT: join(run.data, 'window.png'),

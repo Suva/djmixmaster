@@ -59,9 +59,12 @@ export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help';
 
 /** What the window may ask the main process to do. */
 export interface Api {
-  pickFile(): Promise<string | null>;
-  /** The recording to start with: one handed to the app, or else the one worked on last time. */
-  initialFile(): Promise<string | null>;
+  /** Asks for one recording: a file, or several that are its parts. */
+  pickFiles(): Promise<string[] | null>;
+  /** Turns the files chosen into one recording to open: a file stands for itself, several get a list joining them. */
+  recordingOf(files: string[]): Promise<{ path: string; name: string }>;
+  /** The recording to start with, as its files: the ones handed to the app, or else the one worked on last time. */
+  initialFile(): Promise<string[] | null>;
   pathForFile(file: File): string;
   measure(path: string): Promise<Examination>;
   recall(path: string): Promise<Remembered>;
@@ -92,7 +95,7 @@ export interface Api {
   /** A command chosen from the menu bar or by its keyboard shortcut. */
   onMenu(listener: (command: MenuCommand) => void): void;
   /** A recording handed to the app from outside while it is running. */
-  onOpenFile(listener: (path: string) => void): void;
+  onOpenFiles(listener: (paths: string[]) => void): void;
   /** Tells the main process the window has drawn this recording; it is the one to reopen next time. */
   painted(path: string): void;
   /** The recordings opened lately, newest first, without those that are not there right now. */

@@ -48,6 +48,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/cli.ts` | Command-line tool |
 | `src/app/main.ts` | Electron main process: windows, dialogs, storage, media serving |
 | `src/app/worker.ts` | Runs one measure or render job off the main thread |
+| `src/app/parts.ts` | The order and the name of a recording that came in several files |
 | `src/app/playback.ts` | Decides whether a recording must be streamed for playback |
 | `src/app/updates.ts` | The background check for a newer version |
 | `src/app/api.ts` | The interface between the window and the main process |
@@ -153,6 +154,7 @@ macOS, the same for `npm start` and the packaged app.
 | `analyses/` | One measurement per recording, keyed on its fingerprint, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
 | `sessions/` | The mixes, settings and hand adjustments per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
+| `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
 | `recent-recordings.json` | The ten recordings opened most recently, for File > Open Recent |
 | `updates.json` | Whether to check for updates, when it was last done, and what was found |
@@ -182,6 +184,19 @@ Do not write test data there.
 - **The window is served from `djm://app/`**, not `file://`, so that audio can
   pass through Web Audio. Only files listed in `APP_FILES` in `main.ts` are
   served; a new file in `dist/` has to be added there.
+- **A recording can be several files.** Recorders split long recordings at
+  2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
+  their numbers, or else by when each was written) and listed in
+  an ffmpeg concat file in the app's `recordings/` folder (`recordingOf` in
+  `main.ts`). That list's path then stands for the recording everywhere a
+  path does, and anything that reads audio goes through `inputArgs` and
+  `probe` in `audio-io.ts`, which know how to read it. Such a recording is
+  always played through the streamed path. Its fingerprint is made from its
+  parts', so it is found again when the parts are moved.
+  The analysis reads the parts one by one and counts each (`partFrames`);
+  their lengths are then written into the list. Without them ffmpeg has to
+  open every earlier part on each jump, and seeking slows down the further in
+  it goes.
 - **The waveform has two sources.** Views of the selected mix longer than 20
   seconds are drawn from the analysis, one value per block. Shorter ones are
   drawn from the wave itself: the main process decodes half a minute at a

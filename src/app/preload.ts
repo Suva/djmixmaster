@@ -2,7 +2,8 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type { Api, MenuCommand } from './api.ts';
 
 const api: Api = {
-  pickFile: () => ipcRenderer.invoke('pick-file'),
+  pickFiles: () => ipcRenderer.invoke('pick-file'),
+  recordingOf: (files) => ipcRenderer.invoke('recording-of', files),
   initialFile: () => ipcRenderer.invoke('initial-file'),
   pathForFile: (file) => webUtils.getPathForFile(file),
   measure: (path) => ipcRenderer.invoke('measure', path),
@@ -22,7 +23,7 @@ const api: Api = {
   openDownloadPage: () => ipcRenderer.send('open-download-page'),
   skipVersion: (version) => ipcRenderer.send('skip-version', version),
   onMenu: (listener) => ipcRenderer.on('menu', (_event, command: MenuCommand) => listener(command)),
-  onOpenFile: (listener) => ipcRenderer.on('open-file', (_event, path: string) => listener(path)),
+  onOpenFiles: (listener) => ipcRenderer.on('open-files', (_event, paths: string[]) => listener(paths)),
   painted: (path: string) => ipcRenderer.send('painted', path),
   closed: () => ipcRenderer.send('closed'),
   recent: () => ipcRenderer.invoke('recent'),

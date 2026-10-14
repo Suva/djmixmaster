@@ -1653,14 +1653,19 @@ api.onProgress((fraction) => {
   $('progress-label').textContent = `${progressLabel} ${Math.floor(fraction * 100)}%`;
 });
 
-async function open(path: string) {
-  if (busy) return;
-  const name = path.split(/[\\/]/).pop()!;
+/** Opens a recording: one file, or several that are its parts. */
+async function open(files: string[]) {
+  if (busy || files.length === 0) return;
+  let path = files[0];
+  let name = path.split(/[\\/]/).pop()!;
   progressLabel = `Analysing ${name}`;
   cancelRequested = false;
   setBusy(progressLabel);
   $('export-status').textContent = '';
   try {
+    ({ path, name } = await api.recordingOf(files));
+    progressLabel = `Analysing ${name}`;
+    $('progress-label').textContent = progressLabel;
     const measured = await api.measure(path);
     if (measured.peaks.length === 0) throw new Error('The recording is too short to analyse');
     recording = {
@@ -1713,7 +1718,7 @@ async function showRecent() {
       item.title = `Open ${name}`;
       item.addEventListener('click', async () => {
         // Gone since the list was drawn: take it off the list rather than complain.
-        if ((await api.existing([path])).length > 0) open(path);
+        if ((await api.existing([path])).length > 0) open([path]);
         else showRecent();
       });
       return item;
@@ -1758,8 +1763,8 @@ function closeRecording() {
 
 for (const id of ['open', 'empty-open']) {
   $(id).addEventListener('click', async () => {
-    const path = await api.pickFile();
-    if (path) open(path);
+    const files = await api.pickFiles();
+    if (files) open(files);
   });
 }
 
@@ -2062,8 +2067,8 @@ api.onMenu(async (command) => {
     return;
   }
   if (command === 'open') {
-    const path = busy ? null : await api.pickFile();
-    if (path) open(path);
+    const files = busy ? null : await api.pickFiles();
+    if (files) open(files);
     return;
   }
   // While typing in a field, undo belongs to the text.
@@ -2077,7 +2082,9 @@ api.onMenu(async (command) => {
 const fileName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-').trim() || 'mix';
 /** Whether a mix still has the name it was given automatically. */
 const hasDefaultName = (m: Mix) => /^Mix \d+$/.test(m.name);
-const recordingStem = () => recording!.name.replace(/\.[^.]+$/, '');
+// A recording in parts is named like "REC00*.WAV (3 files)"; its exports take the common part.
+const recordingStem = () =>
+  recording!.name.replace(/ \(\d+ files\)$/, '').replace(/\.[^.]+$/, '').replace(/\*/g, '').replace(/[\s_-]+$/, '') || 'recording';
 
 /**
  * What an exported mix is called, as a file and in its tags. A mix the user
@@ -2403,8 +2410,8 @@ window.addEventListener('dragleave', () => $('empty').classList.remove('dragging
 window.addEventListener('drop', (event) => {
   event.preventDefault();
   $('empty').classList.remove('dragging');
-  const file = event.dataTransfer?.files[0];
-  if (file) open(api.pathForFile(file));
+  // Several files dropped together are the parts of one recording.
+  open([...(event.dataTransfer?.files ?? [])].map((file) => api.pathForFile(file)));
 });
 
 new ResizeObserver(scheduleDraw).observe(detailCanvas);
@@ -2412,8 +2419,8 @@ new ResizeObserver(scheduleDraw).observe(overview);
 
 syncControls();
 initTooltips();
-api.onOpenFile(open);
+api.onOpenFiles(open);
 showRecent();
-api.initialFile().then((path) => {
-  if (path) open(path);
+api.initialFile().then((files) => {
+  if (files) open(files);
 });

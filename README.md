@@ -42,6 +42,10 @@ There is no build for Intel Macs or Linux yet. On those, the tool can be run
    It is analysed once, which takes a little over a minute for an eight-hour
    file. A button next to the file name then says whether anything is wrong
    with the recording itself.
+   A recorder that splits long recordings into several files (often at 2 or
+   4 GB) is no problem: select all the parts, or drop them together, and they
+   open as one recording. Parts numbered by the recorder are joined in the
+   order of their numbers; others in the order they were written.
 2. **Mark the mix.** The whole recording starts out as one mix. Drag its edges
    in, or press "Split at gaps" to cut a night apart at the silences. Drag
    across a free part to mark another mix.

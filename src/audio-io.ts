@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, extname, join } from 'node:path';
 import {
   DEFAULT_AAC_KBPS, DEFAULT_BIT_DEPTH, DEFAULT_MP3_KBPS, type EncodeOptions,
@@ -48,8 +48,75 @@ export function ffmpeg(): string {
   return ffmpegPath;
 }
 
+// A recording that came in several files, because the recorder's file system
+// would not hold one that large, is opened through a list of them in ffmpeg's
+// concat format. Anything that reads audio through ffmpeg then sees the files
+// as one, joined in the listed order.
+export const JOINED_EXTENSION = '.ffconcat';
+
+export const isJoined = (file: string) => extname(file).toLowerCase() === JOINED_EXTENSION;
+
+/**
+ * The text of a list joining these files, under a name to show for them.
+ * Given the exact length of each, in seconds, ffmpeg can jump straight to a
+ * place in a later file; without, it has to open and measure every file
+ * before it, which makes each jump slower the further in it goes.
+ */
+export function joinedList(files: string[], name: string, seconds?: number[]): string {
+  const quoted = (path: string) => `'${path.replace(/'/g, "'\\''")}'`;
+  const lines = files.flatMap((file, index) => [
+    `file ${quoted(file)}`,
+    ...(seconds ? [`duration ${seconds[index].toFixed(9)}`] : []),
+  ]);
+  return ['ffconcat version 1.0', `# name: ${name.replace(/\n/g, ' ')}`, ...lines, ''].join('\n');
+}
+
+/** Whether a list already says how long each file is. */
+export const joinedListHasLengths = (list: string) => /^duration /m.test(readFileSync(list, 'utf8'));
+
+/**
+ * Decodes the files a list joins one after another, and adds the number of
+ * frames in each to `frames` as it finishes. The sound is the same as from
+ * the list; this is how the analysis learns how long each file really is.
+ */
+export async function* decodeParts(list: string, frames: number[]): AsyncGenerator<Float32Array> {
+  for (const part of joinedFiles(list)) {
+    let count = 0;
+    for await (const chunk of decode(part)) {
+      count += chunk.length / CHANNELS;
+      yield chunk;
+    }
+    frames.push(count);
+  }
+}
+
+/** The files a list joins, in order. */
+export function joinedFiles(list: string): string[] {
+  return readFileSync(list, 'utf8')
+    .split('\n')
+    .filter((line) => line.startsWith('file '))
+    .map((line) => line.slice(5).trim().replace(/^'|'$/g, '').replace(/'\\''/g, "'"));
+}
+
+/** The name a list was given for its files, if any. */
+export function joinedName(list: string): string | null {
+  return /^# name: (.*)$/m.exec(readFileSync(list, 'utf8'))?.[1] ?? null;
+}
+
+/** How to name a file or a list of files as ffmpeg's input. */
+export function inputArgs(file: string): string[] {
+  return isJoined(file) ? ['-f', 'concat', '-safe', '0', '-i', file] : ['-i', file];
+}
+
+/** Reads the sample rate and length of a file, or of the files a list joins. */
+export async function probe(file: string): Promise<AudioInfo> {
+  if (!isJoined(file)) return probeFile(file);
+  const parts = await Promise.all(joinedFiles(file).map(probeFile));
+  return { ...parts[0], duration: parts.reduce((total, part) => total + part.duration, 0) };
+}
+
 /** Reads the sample rate and length from what ffmpeg reports about a file. */
-export function probe(file: string): Promise<AudioInfo> {
+function probeFile(file: string): Promise<AudioInfo> {
   return new Promise((resolve, reject) => {
     // With no output named, ffmpeg describes the input on stderr and stops.
     const child = spawn(ffmpeg(), ['-hide_banner', '-nostdin', '-i', file], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -84,7 +151,7 @@ export async function* decode(file: string, region: Region = {}): AsyncGenerator
   const args = ['-v', 'error', '-nostdin'];
   if (region.start !== undefined) args.push('-ss', String(region.start));
   if (region.end !== undefined) args.push('-to', String(region.end));
-  args.push('-i', file, '-map', 'a:0', '-ac', String(CHANNELS), '-f', 'f32le', '-');
+  args.push(...inputArgs(file), '-map', 'a:0', '-ac', String(CHANNELS), '-f', 'f32le', '-');
 
   const child = spawn(ffmpeg(), args, { stdio: ['ignore', 'pipe', 'pipe'] });
   let err = '';

@@ -1,5 +1,5 @@
 import { extname } from 'node:path';
-import { CHANNELS, decode, encode, probe, type EncodeOptions, type Region } from './audio-io.ts';
+import { CHANNELS, decode, decodeParts, encode, isJoined, joinedFiles, probe, type EncodeOptions, type Region } from './audio-io.ts';
 import type { SourceInfo } from './checkup.ts';
 import { RecordingExaminer, type Diagnostics } from './diagnostics.ts';
 import type { LoudnessCurves } from './level.ts';
@@ -30,6 +30,8 @@ export interface Measurement extends LoudnessCurves {
 export interface Examination extends Measurement {
   diagnostics: Diagnostics;
   source: SourceInfo;
+  /** For a recording that came in several files: how many frames each one holds. */
+  partFrames?: number[];
 }
 
 export interface RenderOptions {
@@ -82,7 +84,11 @@ export async function measure(input: string, region: Region = {}, onProgress?: P
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
   const examiner = new RecordingExaminer(sampleRate);
   let frames = 0;
-  for await (const chunk of decode(input, region)) {
+  // A whole recording in parts is read part by part, counting each.
+  const whole = region.start === undefined && region.end === undefined;
+  const partFrames: number[] = [];
+  const source = isJoined(input) && whole ? decodeParts(input, partFrames) : decode(input, region);
+  for await (const chunk of source) {
     meter.push(chunk);
     examiner.push(chunk);
     frames += chunk.length / CHANNELS;
@@ -95,8 +101,9 @@ export async function measure(input: string, region: Region = {}, onProgress?: P
       codec: info.codec,
       channels: info.channels,
       bitrateKbps: info.bitrateKbps,
-      extension: extname(input).slice(1).toLowerCase(),
+      extension: extname(isJoined(input) ? joinedFiles(input)[0] : input).slice(1).toLowerCase(),
     },
+    ...(partFrames.length > 0 ? { partFrames } : {}),
   };
 }
 

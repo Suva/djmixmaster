@@ -8,10 +8,14 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
-import { CHANNELS, decode, ffmpeg, probe } from '../audio-io.ts';
+import {
+  CHANNELS, decode, ffmpeg, inputArgs, isJoined, JOINED_EXTENSION, joinedFiles, joinedList, joinedListHasLengths, joinedName, probe,
+} from '../audio-io.ts';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
+import type { Examination } from '../master.ts';
 import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import { nameForParts, orderParts } from './parts.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
 import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
 
@@ -79,7 +83,7 @@ async function serveMedia(request: Request): Promise<Response> {
  */
 function serveStream(request: Request): Response {
   const from = Math.max(0, Number(new URL(request.url).searchParams.get('t')) || 0);
-  const args = ['-v', 'error', '-nostdin', '-ss', String(from), '-i', media.path, '-map', 'a:0', '-ac', String(CHANNELS), '-f', 'f32le', '-'];
+  const args = ['-v', 'error', '-nostdin', '-ss', String(from), ...inputArgs(media.path), '-map', 'a:0', '-ac', String(CHANNELS), '-f', 'f32le', '-'];
   const decoder = spawn(ffmpeg(), args, { stdio: ['ignore', 'pipe', 'ignore'] });
   const header = streamingWavHeader(media.sampleRate, CHANNELS);
   const audio = Readable.from(
@@ -130,8 +134,59 @@ function runJob(job: Job): Promise<unknown> {
   });
 }
 
-/** A recording dropped on the app's icon or chosen with "Open With" before the window was ready. */
-let openedFromFinder: string | null = null;
+/** Recordings dropped on the app's icon or chosen with "Open With" before the window was ready. */
+let openedFromFinder: string[] = [];
+/** Files handed over from outside while the window is up arrive one by one; they are gathered and opened together. */
+let handedOver: string[] = [];
+let handOverTimer: ReturnType<typeof setTimeout> | undefined;
+
+// ---------------------------------------------------------------------------
+// Recordings in several files. A recorder whose file system holds no file
+// over 2 or 4 GB splits a long recording; the parts are opened as one. The
+// app keeps a list of them in its data folder (see audio-io.ts), and that
+// list stands for the recording everywhere a path does: in the window, in
+// the stored analyses and mixes, in the recent list.
+
+/** The parts of a recording, or just the recording when it is one file. */
+const partsOf = (path: string): string[] => (isJoined(path) ? joinedFiles(path) : [path]);
+
+/** Whether a recording can be opened: the file is there, and so is every part. */
+function available(path: string): boolean {
+  try {
+    return existsSync(path) && partsOf(path).every((part) => existsSync(part));
+  } catch {
+    return false;
+  }
+}
+
+/** The name to show for a recording. */
+const displayName = (path: string): string => (isJoined(path) ? joinedName(path) : null) ?? basename(path);
+
+/**
+ * Turns the files chosen into one recording to open. One file is itself;
+ * several are put in the order they were recorded in and listed, and must be
+ * alike enough to be read as one stream.
+ */
+async function recordingOf(chosen: string[]): Promise<{ path: string; name: string }> {
+  const unique = [...new Set(chosen.map((path) => resolve(path)))];
+  const files = orderParts(await Promise.all(unique.map(async (path) => ({ path, modified: (await stat(path)).mtimeMs }))));
+  if (files.length === 1) return { path: files[0], name: displayName(files[0]) };
+  const infos = await Promise.all(files.map((file) => probe(file)));
+  infos.forEach((info, index) => {
+    const unlike =
+      info.sampleRate !== infos[0].sampleRate ? `${info.sampleRate / 1000} kHz, not ${infos[0].sampleRate / 1000} kHz`
+      : info.codec !== infos[0].codec ? `${info.codec}, not ${infos[0].codec}`
+      : info.channels !== infos[0].channels ? `${info.channels}, not ${infos[0].channels}`
+      : null;
+    if (unlike) throw new Error(`${basename(files[index])} does not match ${basename(files[0])} (${unlike}), so they cannot be joined`);
+  });
+  const name = nameForParts(files.map((file) => basename(file)));
+  const list = stored('recordings', files.join('\n'), JOINED_EXTENSION.slice(1));
+  await writeStored(list, joinedList(files, name));
+  return { path: list, name };
+}
+
+ipcMain.handle('recording-of', (_event, chosen: string[]) => recordingOf(chosen));
 
 const lastRecordingFile = () => join(app.getPath('userData'), 'last-recording.json');
 
@@ -142,7 +197,7 @@ const lastRecordingFile = () => join(app.getPath('userData'), 'last-recording.js
  */
 async function lastRecording(): Promise<string | null> {
   const last = (await readJson(lastRecordingFile())) as { path?: unknown } | null;
-  if (typeof last?.path !== 'string' || !existsSync(last.path)) return null;
+  if (typeof last?.path !== 'string' || !available(last.path)) return null;
   // Forgotten until it has opened again, so a recording that brings the app
   // down while opening is not tried on every start.
   await rm(lastRecordingFile(), { force: true });
@@ -167,30 +222,40 @@ function saveRecent() {
   );
 }
 
-async function initialFile(): Promise<string | null> {
-  if (openedFromFinder) return openedFromFinder;
-  const argument = process.argv.slice(app.isPackaged ? 1 : 2).find((arg) => !arg.startsWith('-'));
-  if (argument && existsSync(argument)) return resolve(argument);
+async function initialFile(): Promise<string[] | null> {
+  if (openedFromFinder.length > 0) return openedFromFinder;
+  // Several files named on the command line are parts of one recording.
+  const named = process.argv.slice(app.isPackaged ? 1 : 2).filter((arg) => !arg.startsWith('-') && existsSync(arg));
+  if (named.length > 0) return named.map((arg) => resolve(arg));
   const last = await lastRecording();
   // A scripted check of the empty window has no recording to wait for.
   if (!last && SCREENSHOT) setTimeout(runCheck, 300);
-  return last;
+  return last ? [last] : null;
 }
 
 app.on('open-file', (event, path) => {
   event.preventDefault();
-  if (window) window.webContents.send('open-file', path);
-  else openedFromFinder = path;
+  if (!window) {
+    openedFromFinder.push(path);
+    return;
+  }
+  handedOver.push(path);
+  clearTimeout(handOverTimer);
+  handOverTimer = setTimeout(() => {
+    window?.webContents.send('open-files', handedOver);
+    handedOver = [];
+  }, 200);
 });
 
 ipcMain.handle('initial-file', initialFile);
 
 ipcMain.handle('pick-file', async () => {
   const result = await dialog.showOpenDialog(window!, {
-    properties: ['openFile'],
+    // Several files are the parts of one recording.
+    properties: ['openFile', 'multiSelections'],
     filters: [{ name: 'Audio', extensions: AUDIO_EXTENSIONS }],
   });
-  return result.canceled ? null : result.filePaths[0];
+  return result.canceled ? null : result.filePaths;
 });
 
 ipcMain.handle('pick-output', async (_event, suggested: string) => {
@@ -299,6 +364,11 @@ const FINGERPRINT_SAMPLE_BYTES = 64 * 1024;
 const fingerprints = new Map<string, string>();
 
 async function fingerprint(path: string): Promise<string> {
+  // A recording in parts is known by its parts, wherever its list is kept.
+  if (isJoined(path)) {
+    const parts = await Promise.all(joinedFiles(path).map((part) => fingerprint(part)));
+    return createHash('sha1').update(parts.join('|')).digest('hex');
+  }
   const info = await stat(path);
   const known = `${path}|${info.size}|${info.mtimeMs}`;
   const before = fingerprints.get(known);
@@ -320,17 +390,39 @@ async function fingerprint(path: string): Promise<string> {
   return found;
 }
 
+/**
+ * Writes the length of each part into the list of a recording in parts, once
+ * the analysis has counted them, so that jumping about in it is quick.
+ */
+async function noteLengths(list: string, measured: Examination) {
+  if (!isJoined(list) || !measured.partFrames || joinedListHasLengths(list)) return;
+  const name = joinedName(list) ?? basename(list);
+  const seconds = measured.partFrames.map((frames) => frames / measured.sampleRate);
+  await writeStored(list, joinedList(joinedFiles(list), name, seconds));
+}
+
 ipcMain.handle('measure', async (_event, input: string) => {
+  const examination = await examine(input);
+  await noteLengths(input, examination).catch((error) => console.error('Could not note the lengths of the parts:', error));
+  return examination;
+});
+
+/** The recording's analysis: stored from an earlier time, or made now. */
+async function examine(input: string): Promise<Examination> {
   // Keyed on the content and the modified time: a moved or renamed file is
   // found again, a changed one is analysed afresh. Analyses stored before
   // recordings had fingerprints are under the file's path, and are moved over.
   const info = await stat(input);
-  const file = stored('analyses', `${ANALYSIS_VERSION}|${await fingerprint(input)}|${info.mtimeMs}`, 'bin');
+  // For a recording in parts, the last time any part changed.
+  const modified = Math.max(...(await Promise.all(partsOf(input).map(async (part) => (await stat(part)).mtimeMs))));
+  const file = stored('analyses', `${ANALYSIS_VERSION}|${await fingerprint(input)}|${modified}`, 'bin');
   const byPath = stored('analyses', `${ANALYSIS_VERSION}|${input}|${info.size}|${info.mtimeMs}`, 'bin');
   for (const candidate of [file, byPath]) {
     try {
       const data = await readFile(candidate);
-      const cached = deserialize(data);
+      const cached = deserialize(data) as Examination;
+      // A recording in parts analysed before the parts were counted is analysed again, once.
+      if (isJoined(input) && !cached.partFrames) continue;
       if (candidate === byPath) {
         await writeStored(file, data);
         await rm(byPath, { force: true });
@@ -342,7 +434,7 @@ ipcMain.handle('measure', async (_event, input: string) => {
       // Not analysed before, or the stored copy is unreadable.
     }
   }
-  const measured = await runJob({ kind: 'measure', input });
+  const measured = (await runJob({ kind: 'measure', input })) as Examination;
   try {
     await writeStored(file, serialize(measured));
     await pruneAnalyses(join(file, '..'));
@@ -350,7 +442,7 @@ ipcMain.handle('measure', async (_event, input: string) => {
     console.error('Could not store the analysis:', error);
   }
   return measured;
-});
+}
 
 /** Where a recording's mixes are kept by its content, for finding them when it has moved. */
 const sessionByContent = async (path: string) => stored('sessions', `content|${await fingerprint(path)}`, 'json');
@@ -511,8 +603,8 @@ ipcMain.on('closed', () => {
  */
 function presentRecent(): RecentRecording[] {
   return recent
-    .filter((path) => existsSync(path))
-    .map((path) => ({ path, name: basename(path), folder: dirname(path).replace(homedir(), '~') }));
+    .filter((path) => available(path))
+    .map((path) => ({ path, name: displayName(path), folder: dirname(partsOf(path)[0]).replace(homedir(), '~') }));
 }
 
 /** The list has changed: the menu and the start screen both show it. */
@@ -531,7 +623,7 @@ function recentMenu(): MenuItemConstructorOptions[] {
     label: shared(name) ? `${name} — ${folder}` : name,
     click: () => {
       // Gone since the menu was built: drop it from view rather than complain.
-      if (existsSync(path)) window?.webContents.send('open-file', path);
+      if (available(path)) window?.webContents.send('open-files', [path]);
       else recentChanged();
     },
   }));
