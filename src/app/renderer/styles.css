@@ -54,7 +54,7 @@ header {
 #checkup-facts { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; margin: 0 0 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 #checkup-facts dt { color: var(--muted); }
 #checkup-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
-#export-status { color: var(--muted); }
+#export-status { flex: 1; min-width: 0; text-align: right; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #update-note { color: var(--muted); white-space: nowrap; }
 #update-note[hidden] { display: none; }
 #update-note a { color: var(--accent); cursor: pointer; text-decoration: underline; }
@@ -268,6 +268,8 @@ button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; f
 #overview { margin-bottom: 10px; }
 #readout { padding-top: 6px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
 
+/* With no recording open the settings have nothing to act on. */
+aside[inert] > * { opacity: 0.4; }
 aside {
   width: 280px;
   flex: none;

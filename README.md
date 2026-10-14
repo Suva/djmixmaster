@@ -162,6 +162,7 @@ everything below together with the mouse and trackpad gestures.
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
 | Backspace or Delete | Delete the selected mix, or the hand adjustment under the pointer |
 | Cmd/Ctrl+O | Open a recording |
+| ? or F1 | Show the gestures and shortcuts |
 | Shift+Cmd/Ctrl+W | Close the recording |
 | Esc | Cancel an analysis or export in progress |
 

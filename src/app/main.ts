@@ -489,7 +489,7 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
-        { label: 'Gestures and Shortcuts', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
+        { label: 'Gestures and Shortcuts', accelerator: 'F1', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
         { type: 'separator' },
         { label: 'Check for Updates…', click: checkForUpdatesNow },
         {

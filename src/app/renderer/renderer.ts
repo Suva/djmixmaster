@@ -1140,6 +1140,9 @@ window.addEventListener('keydown', (event) => {
     // Otherwise a focused button would also act on the same key press.
     if (event.target instanceof HTMLButtonElement) event.target.blur();
     togglePlay();
+  } else if (event.key === '?') {
+    // F1 does the same, through the Help menu.
+    showHelp();
   } else if (event.code === 'KeyA' && !event.metaKey && !event.ctrlKey) {
     setHearLevelled(!hearLevelled);
   } else if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
@@ -1377,6 +1380,7 @@ async function open(path: string) {
     $('file-name').textContent = name;
     $('file-name').classList.add('loaded');
     $('empty').hidden = true;
+    $('settings').inert = false;
     $('views').hidden = false;
     const restored = restore(await api.recall(path), measured.peaks.length);
     select(mixes[restored.selected]);
@@ -1442,6 +1446,11 @@ function closeRecording() {
   $('export-status').textContent = '';
   $('views').hidden = true;
   $('empty').hidden = false;
+  // The settings shown were that recording's; they mean nothing now.
+  $('settings').inert = true;
+  $('settings-for').textContent = '';
+  $('target-value').textContent = '';
+  $('stat-adjustments').textContent = '–';
   setStats(null);
   setBusy(null);
   api.closed();
@@ -1702,6 +1711,7 @@ const HELP: [string, [string, string][]][] = [
     [`${COMMAND}O`, 'Open a recording'],
     [`Shift+${COMMAND}W`, 'Close the recording'],
     ['Esc', 'Cancel an analysis or an export'],
+    ['? or F1', 'Show this sheet'],
     ['Double-click a mix\'s tab', 'Rename it'],
     ['Rest the pointer on a control', 'See what it does'],
   ]],

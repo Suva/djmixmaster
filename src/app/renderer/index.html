@@ -15,14 +15,14 @@
     </div>
     <span id="file-name">No recording open</span>
     <button id="checkup" hidden></button>
-    <span class="spacer"></span>
-    <span id="update-note" hidden></span>
-    <button id="help" class="icon round" title="Gestures and shortcuts" aria-label="Gestures and shortcuts">?</button>
+    <!-- Messages take up the slack in the middle, so they never push a button about. -->
     <span id="export-status"></span>
+    <span id="update-note" hidden></span>
     <span id="export-all-group" hidden>
       <button id="export-all" disabled>Export all…</button>
     </span>
     <button id="export" class="primary" disabled>Export mix…</button>
+    <button id="help" class="icon round" title="Gestures and shortcuts (? or F1)" aria-label="Gestures and shortcuts">?</button>
   </header>
   <div id="progress" hidden>
     <div id="progress-bar"></div>
@@ -116,7 +116,7 @@
       </div>
     </section>
 
-    <aside>
+    <aside id="settings" inert>
       <p id="settings-for"></p>
       <h2>Levelling</h2>
       <div class="control">
