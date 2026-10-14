@@ -130,12 +130,13 @@ Signing options (Store, certificate, or staying unsigned) were researched;
 for wide distribution the Microsoft Store with an MSIX package avoids buying
 a certificate.
 
-### Linux build — small, needs a tester
+### Try the Linux build — small, needs a tester
 
-- Add a Linux job to `.github/workflows/release.yml` and an AppImage target.
-- `ffmpeg-static` provides the binary on the build machine, as it does for
-  the other two.
-- Someone has to open the result.
+Releases include an AppImage. GitHub starts it once on a short recording
+before publishing, which shows it opens and finds its ffmpeg, but nobody has
+used it on a desktop. Worth a check: playback and sound output, the file
+dialogs, dropping files on the window, and whether it starts on Ubuntu 24.04
+without extra steps. It runs without Chromium's sandbox (see `main.ts`).
 
 ### An LGPL build of ffmpeg — medium
 

@@ -147,7 +147,8 @@ output of an agent's change until a person does.
 ## Where things are stored
 
 The app's data folder is `~/Library/Application Support/DJ Mix Master` on
-macOS, the same for `npm start` and the packaged app.
+macOS (`%APPDATA%\DJ Mix Master` on Windows, `~/.config/DJ Mix Master` on
+Linux), the same for `npm start` and the packaged app.
 
 | Inside it | What |
 |---|---|
@@ -215,10 +216,12 @@ Do not write test data there.
   release workflow leaves them out (`DJMASTER_SKIP_WINDOW_TESTS`) until that
   trial has shown them to be dependable there.
 - **Releases are built by GitHub.** Pushing a tag such as `v0.2.0` runs
-  `.github/workflows/release.yml`, which tests and packages on macOS and
-  Windows and publishes both installers. The version comes from the tag.
-  Neither installer is signed for distribution. The Windows app has been used
-  on a real machine, but changes are developed and checked on macOS.
+  `.github/workflows/release.yml`, which tests and packages on macOS,
+  Windows and Linux and publishes the three installers. The version comes
+  from the tag. None is signed for distribution. The Windows app has been
+  used on a real machine; the Linux AppImage is only started once by the
+  workflow, on a short recording, before it is published. Changes are
+  developed and checked on macOS.
 
 ## Releasing a version
 

@@ -22,6 +22,12 @@ import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic
 // The same name, and so the same data folder, whether run from the project or as the packaged app.
 app.setName('DJ Mix Master');
 
+// An AppImage cannot carry Chromium's sandbox helper in the form it needs, and
+// recent Ubuntu also blocks the other way the sandbox starts, so without this
+// the app would not open there. The window only ever shows the app's own
+// pages, served from inside it, never anything from the internet.
+if (process.platform === 'linux' && process.env.APPIMAGE) app.commandLine.appendSwitch('no-sandbox');
+
 // The packaged app carries its own ffmpeg; workers inherit this when they start.
 const bundledFfmpeg = join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
 if (app.isPackaged && existsSync(bundledFfmpeg)) process.env.DJMASTER_FFMPEG = bundledFfmpeg;

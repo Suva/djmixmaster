@@ -6,6 +6,7 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A Linux version**, as an AppImage that runs on most 64-bit distributions.
 - **Recordings that come in several files** open as one. Recorders often
   split a long recording at 2 or 4 GB; select all the parts, or drop them on
   the window together. Parts the recorder numbered are joined in the order of

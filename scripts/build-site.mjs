@@ -26,6 +26,7 @@ const release = newestRelease();
 const asset = (extension) => release?.assets.find((a) => a.name.endsWith(extension));
 const mac = asset('.dmg');
 const windows = asset('.exe');
+const linux = asset('.AppImage');
 
 let version = 'See the releases page for the current version.';
 if (release) {
@@ -40,6 +41,8 @@ const values = {
   MAC_DETAIL: mac ? `Apple Silicon · ${megabytes(mac.size)}` : 'Apple Silicon',
   WINDOWS_URL: windows?.browser_download_url ?? releasesUrl,
   WINDOWS_DETAIL: windows ? `64-bit · ${megabytes(windows.size)}` : '64-bit',
+  LINUX_URL: linux?.browser_download_url ?? releasesUrl,
+  LINUX_DETAIL: linux ? `AppImage · ${megabytes(linux.size)}` : 'AppImage',
   RELEASES_URL: release?.html_url ?? releasesUrl,
   REPOSITORY_URL: `https://github.com/${repository}`,
 };

@@ -1,4 +1,4 @@
-# Builds the installers and publishes them as a release when a version tag
+# Builds the installers for macOS, Windows and Linux and publishes them as a release when a version tag
 # such as v0.2.0 is pushed. It can also be started by hand from the Actions
 # tab, which builds the installers without publishing anything.
 name: Release
@@ -26,6 +26,10 @@ jobs:
             os: windows-latest
             ffmpeg: node_modules/ffmpeg-static/ffmpeg.exe
             installer: release/*.exe
+          - name: Linux
+            os: ubuntu-latest
+            ffmpeg: node_modules/ffmpeg-static/ffmpeg
+            installer: release/*.AppImage
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -61,6 +65,21 @@ jobs:
 
       - run: npm run package -- --publish never
 
+      # Nobody here runs Linux, so the AppImage is started once, on a short
+      # recording, to see that it opens, finds its own ffmpeg and draws.
+      - name: Start the AppImage
+        if: matrix.name == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb
+          node_modules/ffmpeg-static/ffmpeg -v error -f lavfi -i "sine=frequency=440:duration=60" -ac 2 "$RUNNER_TEMP/Smoke test.wav"
+          chmod +x release/*.AppImage
+          app=$(ls release/*.AppImage)
+          output=$(APPIMAGE_EXTRACT_AND_RUN=1 DJMASTER_SHOT="$RUNNER_TEMP/window.png" DJMASTER_SHOT_DATA="$RUNNER_TEMP/data" \
+            DJMASTER_SHOT_SCRIPT="document.getElementById('file-name').textContent" \
+            timeout 180 xvfb-run -a "$app" "$RUNNER_TEMP/Smoke test.wav" 2>&1) || true
+          echo "$output"
+          echo "$output" | grep -q '\[script\] Smoke test.wav'
+
       - uses: actions/upload-artifact@v7
         with:
           name: installer-${{ matrix.name }}
@@ -79,7 +98,7 @@ jobs:
           merge-multiple: true
       # A tag made on GitHub's "new release" page already has its release; one
       # pushed from a terminal does not. Either way the installers end up on it.
-      - name: Put both installers on the release
+      - name: Put the installers on the release
         run: |
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" installers/* --repo "$GITHUB_REPOSITORY" --clobber

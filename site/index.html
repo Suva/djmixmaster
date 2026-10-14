@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DJ Mix Master</title>
-  <meta name="description" content="Masters recorded DJ mixes: evens out the loudness from track to track without pumping the breakdowns. Free and open source, for macOS and Windows.">
+  <meta name="description" content="Masters recorded DJ mixes: evens out the loudness from track to track without pumping the breakdowns. Free and open source, for macOS, Windows and Linux.">
   <link rel="icon" href="icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -25,6 +25,7 @@
         <div class="downloads">
           <a class="button" href="{{MAC_URL}}">Download for Mac<small>{{MAC_DETAIL}}</small></a>
           <a class="button" href="{{WINDOWS_URL}}">Download for Windows<small>{{WINDOWS_DETAIL}}</small></a>
+          <a class="button" href="{{LINUX_URL}}">Download for Linux<small>{{LINUX_DETAIL}}</small></a>
         </div>
         <p class="version">{{VERSION_LINE}} Free and open source. <a href="changes.html">What's new</a></p>
       </section>
@@ -60,7 +61,7 @@
       </div>
 
       <h2>Opening it the first time</h2>
-      <p class="note">The installers are not signed with Apple or Microsoft, so both systems ask you to confirm. This is needed once.</p>
+      <p class="note">The installers are not signed with Apple or Microsoft, so those systems ask you to confirm. This is needed once.</p>
       <div class="steps">
         <div>
           <h3>Mac</h3>
@@ -79,6 +80,15 @@
             <li>Click “Run anyway”.</li>
           </ol>
           <p>Needs 64-bit Windows 10 or later.</p>
+        </div>
+        <div>
+          <h3>Linux</h3>
+          <ol>
+            <li>Make the downloaded file executable: <code>chmod +x DJ*.AppImage</code>, or under Properties → Permissions in a file manager.</li>
+            <li>Run it.</li>
+            <li>If nothing happens, install FUSE 2, which AppImages need. On Ubuntu 24.04: <code>sudo apt install libfuse2t64</code>.</li>
+          </ol>
+          <p>Needs 64-bit Linux on an Intel or AMD processor. Newer than the other two, and less tried.</p>
         </div>
       </div>
 

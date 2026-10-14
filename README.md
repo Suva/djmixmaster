@@ -23,6 +23,7 @@ Nothing else needs to be installed; the app carries everything it uses.
 |---|---|---|
 | macOS | `DJ.Mix.Master-…-arm64.dmg` | A Mac with Apple Silicon (M1 or later), macOS 13 or later |
 | Windows | `DJ.Mix.Master.Setup.….exe` | 64-bit Windows 10 or later |
+| Linux | `DJ.Mix.Master-….AppImage` | 64-bit Linux on an Intel or AMD processor |
 
 The installers are not signed, so both systems warn about them the first time.
 
@@ -35,7 +36,12 @@ The installers are not signed, so both systems warn about them the first time.
 - **Windows**: run the setup file. When "Windows protected your PC" appears,
   click "More info" and then "Run anyway".
 
-There is no build for Intel Macs or Linux yet. On those, the tool can be run
+- **Linux**: make the file executable (in a terminal, `chmod +x DJ*.AppImage`,
+  or under Properties → Permissions in a file manager) and run it. If nothing
+  happens, the system lacks FUSE 2, which AppImages need: on Ubuntu 24.04 that
+  is `sudo apt install libfuse2t64`, on older Ubuntu `libfuse2`.
+
+There is no build for Intel Macs yet. On those, the tool can be run
 [from source](#running-from-source).
 
 ## Getting started

@@ -110,6 +110,40 @@
           "to": "bin/ffmpeg.README"
         }
       ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Audio",
+      "icon": "build/icon.png",
+      "synopsis": "Levels the loudness of DJ mixes track by track",
+      "mimeTypes": [
+        "audio/mpeg",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/flac",
+        "audio/mp4",
+        "audio/aac",
+        "audio/aiff",
+        "audio/x-aiff",
+        "audio/ogg",
+        "audio/opus"
+      ],
+      "extraResources": [
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg",
+          "to": "bin/ffmpeg"
+        },
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.LICENSE",
+          "to": "bin/ffmpeg.LICENSE"
+        },
+        {
+          "from": "node_modules/ffmpeg-static/ffmpeg.README",
+          "to": "bin/ffmpeg.README"
+        }
+      ]
     }
   }
 }
