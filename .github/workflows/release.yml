@@ -50,7 +50,8 @@ jobs:
           if [ "$tagged" != "$recorded" ]; then
             echo "::warning::package.json says $recorded but the tag is $tagged. Building as $tagged; use 'npm version' to release so the two agree."
           fi
-          npm version --no-git-tag-version --allow-same-version "$tagged"
+          # --ignore-scripts: the changelog was dated when the release was made.
+          npm version --no-git-tag-version --allow-same-version --ignore-scripts "$tagged"
 
       - run: npm run typecheck
 

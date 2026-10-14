@@ -6,6 +6,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
 const changelog = readFileSync('CHANGELOG.md', 'utf8');
+// Run a second time for the same version, there is nothing left to do.
+if (changelog.includes(`\n## ${version} — `)) process.exit(0);
 const unreleased = /^## Not released yet\n([\s\S]*?)(?=^## |(?![\s\S]))/m.exec(changelog);
 if (!unreleased || !unreleased[1].trim()) {
   console.error('CHANGELOG.md has nothing under "## Not released yet". Write down what this release changes first.');
