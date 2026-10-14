@@ -23,6 +23,7 @@ const api: Api = {
   onMenu: (listener) => ipcRenderer.on('menu', (_event, command: MenuCommand) => listener(command)),
   onOpenFile: (listener) => ipcRenderer.on('open-file', (_event, path: string) => listener(path)),
   painted: (path: string) => ipcRenderer.send('painted', path),
+  closed: () => ipcRenderer.send('closed'),
 };
 
 contextBridge.exposeInMainWorld('api', api);

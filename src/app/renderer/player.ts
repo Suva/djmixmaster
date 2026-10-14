@@ -66,6 +66,11 @@ export class Player {
     this.onPause();
   }
 
+  /** Lets go of the recording, when it is closed. */
+  unload() {
+    this.load({ url: '', streamed: true });
+  }
+
   seek(seconds: number) {
     if (!this.#source.streamed) {
       this.#audio.currentTime = seconds;

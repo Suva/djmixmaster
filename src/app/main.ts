@@ -3,8 +3,8 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { extname, join, resolve } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
@@ -147,6 +147,24 @@ async function lastRecording(): Promise<string | null> {
   // down while opening is not tried on every start.
   await rm(lastRecordingFile(), { force: true });
   return last.path;
+}
+
+const recentFile = () => join(app.getPath('userData'), 'recent-recordings.json');
+const RECENT_KEPT = 10;
+/** Recordings opened lately, newest first, for File > Open Recent. */
+let recent: string[] = [];
+/** Whether the window has a recording open, for File > Close Recording. */
+let recordingOpen = false;
+
+async function loadRecent() {
+  const saved = await readJson(recentFile());
+  recent = Array.isArray(saved) ? saved.filter((path) => typeof path === 'string').slice(0, RECENT_KEPT) : [];
+}
+
+function saveRecent() {
+  writeStored(recentFile(), JSON.stringify(recent)).catch((error) =>
+    console.error('Could not save the list of recent recordings:', error),
+  );
 }
 
 async function initialFile(): Promise<string | null> {
@@ -294,8 +312,17 @@ ipcMain.on('painted', async (_event, path: string) => {
   writeStored(lastRecordingFile(), JSON.stringify({ path })).catch((error) =>
     console.error('Could not note the recording for next time:', error),
   );
+  recent = [path, ...recent.filter((other) => other !== path)].slice(0, RECENT_KEPT);
+  saveRecent();
+  // Also puts it in the Dock menu and the taskbar's jump list. Not during a
+  // scripted check, whose recordings have no place in the user's own lists.
+  if (!SCREENSHOT) app.addRecentDocument(path);
+  recordingOpen = true;
+  buildMenu();
   if (!SCREENSHOT || !window) return;
   // Optionally drive the window first, to capture a state other than "just opened".
+  // Menus cannot be clicked from a script, so a check names the command instead.
+  if (process.env.DJMASTER_SHOT_MENU) window.webContents.send('menu', process.env.DJMASTER_SHOT_MENU);
   if (process.env.DJMASTER_SHOT_SCRIPT) {
     console.log('[script]', await window.webContents.executeJavaScript(process.env.DJMASTER_SHOT_SCRIPT, true));
   }
@@ -368,6 +395,45 @@ async function checkForUpdatesNow() {
   }
 }
 
+// A recording closed by hand is not brought back at the next start.
+ipcMain.on('closed', () => {
+  rm(lastRecordingFile(), { force: true }).catch(() => {});
+  recordingOpen = false;
+  buildMenu();
+});
+
+/**
+ * File > Open Recent. Recordings that are not there right now are left out
+ * but not forgotten: one on a drive that is unplugged comes back with it.
+ */
+function recentMenu(): MenuItemConstructorOptions[] {
+  const present = recent.filter((path) => existsSync(path));
+  const names = present.map((path) => basename(path));
+  const items = present.map((path, index): MenuItemConstructorOptions => ({
+    // Two recordings of the same name are told apart by their folders.
+    label: names.indexOf(names[index]) !== names.lastIndexOf(names[index]) ? `${names[index]} — ${dirname(path).replace(homedir(), '~')}` : names[index],
+    click: () => {
+      // Gone since the menu was built: drop it from view rather than complain.
+      if (existsSync(path)) window?.webContents.send('open-file', path);
+      else buildMenu();
+    },
+  }));
+  return [
+    ...items,
+    ...(items.length > 0 ? [{ type: 'separator' } as MenuItemConstructorOptions] : []),
+    {
+      label: 'Clear Menu',
+      enabled: recent.length > 0,
+      click: () => {
+        recent = [];
+        saveRecent();
+        if (!SCREENSHOT) app.clearRecentDocuments();
+        buildMenu();
+      },
+    },
+  ];
+}
+
 ipcMain.on('open-download-page', () => shell.openExternal(DOWNLOAD_PAGE));
 ipcMain.on('skip-version', (_event, version: string) => skipVersion(String(version)));
 
@@ -379,7 +445,16 @@ function buildMenu() {
   });
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' } as MenuItemConstructorOptions] : []),
-    { label: 'File', submenu: [command('Open Recording…', 'CmdOrCtrl+O', 'open'), { type: 'separator' }, { role: 'close' }] },
+    {
+      label: 'File',
+      submenu: [
+        command('Open Recording…', 'CmdOrCtrl+O', 'open'),
+        { label: 'Open Recent', submenu: recentMenu() },
+        { type: 'separator' },
+        { ...command('Close Recording', 'Shift+CmdOrCtrl+W', 'close'), enabled: recordingOpen },
+        { role: 'close' },
+      ],
+    },
     {
       label: 'Edit',
       submenu: [
@@ -418,6 +493,7 @@ app.whenReady().then(async () => {
   protocol.handle(SCHEME, serve);
   // Reading a small local file; the network is not touched before the window is up.
   checksAutomatically = (await loadUpdateSettings()).automatic;
+  await loadRecent();
   buildMenu();
   createWindow();
   window?.webContents.once('did-finish-load', () => {

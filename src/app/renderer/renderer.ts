@@ -1382,6 +1382,33 @@ async function open(path: string) {
   }
 }
 
+/** Back to the empty window. The work on the recording is saved, as always. */
+function closeRecording() {
+  if (!recording || busy) return;
+  if (saveTimer !== undefined) saveNow();
+  for (const dialog of document.querySelectorAll<HTMLDialogElement>('dialog[open]')) dialog.close();
+  player.unload();
+  levelMeter.release();
+  recording = null;
+  mixes = [];
+  detail = null;
+  drag = null;
+  grab = null;
+  undoSteps = [];
+  redoSteps = [];
+  settled = null;
+  $('file-name').textContent = 'No recording open';
+  $('file-name').classList.remove('loaded');
+  $('checkup').hidden = true;
+  $('export-all-group').hidden = true;
+  $('export-status').textContent = '';
+  $('views').hidden = true;
+  $('empty').hidden = false;
+  setStats(null);
+  setBusy(null);
+  api.closed();
+}
+
 $('open').addEventListener('click', async () => {
   const path = await api.pickFile();
   if (path) open(path);
@@ -1628,6 +1655,7 @@ const HELP: [string, [string, string][]][] = [
   ['Everything else', [
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
     [`${COMMAND}O`, 'Open a recording'],
+    [`Shift+${COMMAND}W`, 'Close the recording'],
     ['Esc', 'Cancel an analysis or an export'],
     ['Double-click a mix\'s tab', 'Rename it'],
     ['Rest the pointer on a control', 'See what it does'],
@@ -1666,6 +1694,10 @@ $('help-close').addEventListener('click', () => helpDialog.close());
 api.onMenu(async (command) => {
   if (command === 'help') {
     showHelp();
+    return;
+  }
+  if (command === 'close') {
+    closeRecording();
     return;
   }
   if (command === 'open') {

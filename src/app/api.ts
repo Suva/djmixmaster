@@ -38,7 +38,7 @@ export interface MediaSource {
   streamed: boolean;
 }
 
-export type MenuCommand = 'open' | 'undo' | 'redo' | 'help';
+export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help';
 
 /** What the window may ask the main process to do. */
 export interface Api {
@@ -73,6 +73,8 @@ export interface Api {
   onOpenFile(listener: (path: string) => void): void;
   /** Tells the main process the window has drawn this recording; it is the one to reopen next time. */
   painted(path: string): void;
+  /** Tells the main process the recording has been closed, so it is not reopened next time. */
+  closed(): void;
 }
 
 export type Job = { kind: 'measure'; input: string } | ({ kind: 'render' } & RenderRequest);

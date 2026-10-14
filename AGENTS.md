@@ -98,6 +98,7 @@ the app into a mode for that:
 |---|---|
 | `DJMASTER_SHOT=<file.png>` | After the first recording is drawn, save a picture of the window and quit |
 | `DJMASTER_SHOT_SCRIPT=<js>` | Run this JavaScript in the window first; its result is printed as `[script] ...` |
+| `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `help`) to the window before the script runs |
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
@@ -139,6 +140,7 @@ macOS, the same for `npm start` and the packaged app.
 | `sessions/` | The mixes, settings and hand adjustments per recording, keyed on its path |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
+| `recent-recordings.json` | The ten recordings opened most recently, for File > Open Recent |
 | `updates.json` | Whether to check for updates, when it was last done, and what was found |
 
 Do not write test data there.

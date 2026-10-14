@@ -131,7 +131,9 @@ dropouts in white. The report describes; it does not repair yet.
 - **Undo and redo** cover every change to the mixes.
 - **Your work is remembered**: mixes, settings and adjustments are saved per
   recording and restored when you open it again. The app starts with the
-  recording you had open last, if it is still where it was.
+  recording you had open last, if it is still where it was; earlier ones are
+  under File > Open Recent. File > Close Recording puts the recording away,
+  and the app then starts empty next time.
 
 ### The settings
 
@@ -159,6 +161,7 @@ everything below together with the mouse and trackpad gestures.
 | End | Jump to 10 seconds before the end of the mix |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
 | Cmd/Ctrl+O | Open a recording |
+| Shift+Cmd/Ctrl+W | Close the recording |
 | Esc | Cancel an analysis or export in progress |
 
 ### Exporting
