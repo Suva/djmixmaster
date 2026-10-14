@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, type M
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -289,16 +289,58 @@ async function pruneAnalyses(folder: string) {
   await Promise.all(files.slice(ANALYSES_KEPT).map((file) => rm(file.path, { force: true })));
 }
 
-ipcMain.handle('measure', async (_event, input: string) => {
-  // A changed file gets a different key and is analysed afresh.
-  const info = await stat(input);
-  const file = stored('analyses', `${ANALYSIS_VERSION}|${input}|${info.size}|${info.mtimeMs}`, 'bin');
+// A recording is known by what is in it, not only by where it is, so that
+// its analysis and its mixes are found again after it has been moved or
+// renamed. Reading all of a file that is hours long would take far too long;
+// its size and a few samples of its content tell recordings apart as well.
+const FINGERPRINT_SAMPLES = 16;
+const FINGERPRINT_SAMPLE_BYTES = 64 * 1024;
+/** Fingerprints already worked out, by path, size and modified time. */
+const fingerprints = new Map<string, string>();
+
+async function fingerprint(path: string): Promise<string> {
+  const info = await stat(path);
+  const known = `${path}|${info.size}|${info.mtimeMs}`;
+  const before = fingerprints.get(known);
+  if (before) return before;
+  const hash = createHash('sha1').update(String(info.size));
+  const file = await open(path, 'r');
   try {
-    const cached = deserialize(await readFile(file));
-    await utimes(file, new Date(), new Date()); // counts as used, for pruning
-    return cached;
-  } catch {
-    // Not analysed before, or the stored copy is unreadable.
+    const sample = Buffer.alloc(Math.min(FINGERPRINT_SAMPLE_BYTES, info.size));
+    const last = info.size - sample.length;
+    for (let i = 0; i < FINGERPRINT_SAMPLES && sample.length > 0; i++) {
+      const { bytesRead } = await file.read(sample, 0, sample.length, Math.floor((last * i) / (FINGERPRINT_SAMPLES - 1)));
+      hash.update(sample.subarray(0, bytesRead));
+    }
+  } finally {
+    await file.close();
+  }
+  const found = hash.digest('hex');
+  fingerprints.set(known, found);
+  return found;
+}
+
+ipcMain.handle('measure', async (_event, input: string) => {
+  // Keyed on the content and the modified time: a moved or renamed file is
+  // found again, a changed one is analysed afresh. Analyses stored before
+  // recordings had fingerprints are under the file's path, and are moved over.
+  const info = await stat(input);
+  const file = stored('analyses', `${ANALYSIS_VERSION}|${await fingerprint(input)}|${info.mtimeMs}`, 'bin');
+  const byPath = stored('analyses', `${ANALYSIS_VERSION}|${input}|${info.size}|${info.mtimeMs}`, 'bin');
+  for (const candidate of [file, byPath]) {
+    try {
+      const data = await readFile(candidate);
+      const cached = deserialize(data);
+      if (candidate === byPath) {
+        await writeStored(file, data);
+        await rm(byPath, { force: true });
+      } else {
+        await utimes(file, new Date(), new Date()); // counts as used, for pruning
+      }
+      return cached;
+    } catch {
+      // Not analysed before, or the stored copy is unreadable.
+    }
   }
   const measured = await runJob({ kind: 'measure', input });
   try {
@@ -310,10 +352,23 @@ ipcMain.handle('measure', async (_event, input: string) => {
   return measured;
 });
 
-ipcMain.handle('recall', async (_event, path: string): Promise<Remembered> => ({
-  session: await readJson(stored('sessions', path, 'json')),
-  defaults: await readJson(defaultsFile()),
-}));
+/** Where a recording's mixes are kept by its content, for finding them when it has moved. */
+const sessionByContent = async (path: string) => stored('sessions', `content|${await fingerprint(path)}`, 'json');
+
+ipcMain.handle('recall', async (_event, path: string): Promise<Remembered> => {
+  // By where the recording is, and failing that by what is in it.
+  const byPath = await readJson(stored('sessions', path, 'json'));
+  const byContent = await sessionByContent(path).catch(() => null);
+  // Mixes saved before recordings had fingerprints get their second copy now,
+  // so that opening a recording once is enough for it to be found after a move.
+  if (byPath && byContent && !existsSync(byContent)) {
+    writeStored(byContent, JSON.stringify(byPath)).catch(() => {});
+  }
+  return {
+    session: byPath ?? (byContent ? await readJson(byContent) : null),
+    defaults: await readJson(defaultsFile()),
+  };
+});
 
 /** Saves follow one another, so an older one can never land on top of a newer one. */
 let saving: Promise<unknown> = Promise.resolve();
@@ -321,6 +376,8 @@ ipcMain.on('remember', (_event, path: string, remembered: Remembered) => {
   saving = saving
     .then(() => writeStored(stored('sessions', path, 'json'), JSON.stringify(remembered.session)))
     .then(() => writeStored(defaultsFile(), JSON.stringify(remembered.defaults)))
+    // Last, and allowed to fail: the recording may be gone by the time its mixes are saved.
+    .then(async () => writeStored(await sessionByContent(path), JSON.stringify(remembered.session)))
     .catch((error) => console.error('Could not save the session:', error));
 });
 

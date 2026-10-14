@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ffmpeg, probe } from '../src/audio-io.ts';
@@ -211,6 +211,37 @@ test('work is remembered, and the last recording comes back by itself', { skip }
   assert.match(back.cut, /6\.0 dB/);
   assert.equal(back.message, 'Picked up where you left off.');
   assert.ok(!back.undo, 'undo does not reach into an earlier session');
+});
+
+test('a recording that has been moved and renamed keeps its mixes and its analysis', { skip }, async () => {
+  const data = await fresh();
+  const folder = join(work, 'moved');
+  await mkdir(join(folder, 'elsewhere'), { recursive: true });
+  const original = join(folder, 'Friday.wav');
+  const moved = join(folder, 'elsewhere', 'Friday, renamed.wav');
+  await copyFile(mix, original);
+
+  await runApp({ recording: original, data }, async (page) => {
+    page.type('mix-name', 'Warm-up');
+    page.key('Enter');
+    for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(100);
+    page.click('split-here');
+    await page.settle();
+  });
+  const analyses = (await readdir(join(data, 'analyses'))).length;
+
+  await rename(original, moved);
+  const back = await runApp({ recording: moved, data }, (page) => ({
+    name: page.text('file-name'),
+    tabs: page.tabs(),
+    message: page.text('export-status'),
+  }));
+  assert.equal(back.name, 'Friday, renamed.wav');
+  assert.equal(back.tabs.length, 2);
+  assert.match(back.tabs[0], /Warm-up/);
+  assert.equal(back.message, 'Picked up where you left off.');
+  assert.equal((await readdir(join(data, 'analyses'))).length, analyses, 'it was not analysed a second time');
 });
 
 test('a last recording that is gone gives an empty start, without a word', { skip }, async () => {

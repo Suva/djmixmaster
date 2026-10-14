@@ -270,6 +270,7 @@ Not tasks so much as things to remember. Details are in the README.
 - Clipping cannot be undone.
 - A quiet passage longer than the breakdown length is treated as a quieter
   track and raised, up to the boost limit.
-- Moving or renaming a recording loses its saved mixes, which are keyed on
-  the file's path.
+- A recording that was edited or converted to another format is a new
+  recording: its mixes and analysis are found by path or by a fingerprint of
+  the file's content, and neither survives that.
 - Undo history is per session and is not saved.

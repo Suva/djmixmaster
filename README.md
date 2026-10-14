@@ -137,7 +137,8 @@ dropouts in white. The report describes; it does not repair yet.
   the corner to remove the fade.
 - **Undo and redo** cover every change to the mixes.
 - **Your work is remembered**: mixes, settings and adjustments are saved per
-  recording and restored when you open it again. The app starts with the
+  recording and restored when you open it again, also after the file has
+  been moved or renamed. The app starts with the
   recording you had open last, if it is still where it was; earlier ones are
   listed on the start screen and under File > Open Recent. File > Close Recording puts the recording away,
   and the app then starts empty next time.
@@ -207,7 +208,8 @@ preview exactly in step.
   limit.
 - **Handovers without a gap are not found.** "Split at gaps" sees silences
   only. Where one DJ mixed out of another, the split is yours to place.
-- **Moving or renaming a recording** loses the mixes saved for it.
+- **A recording that was edited or converted** is a new recording to the app:
+  its saved mixes stay with the old file. Moving or renaming it is fine.
 - **Less tested on Windows.** It is developed on macOS. The Windows build has
   been used on a real machine but gets less testing.
 

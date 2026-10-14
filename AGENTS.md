@@ -150,12 +150,16 @@ macOS, the same for `npm start` and the packaged app.
 
 | Inside it | What |
 |---|---|
-| `analyses/` | One measurement per recording, keyed on path, size, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
-| `sessions/` | The mixes, settings and hand adjustments per recording, keyed on its path |
+| `analyses/` | One measurement per recording, keyed on its fingerprint, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
+| `sessions/` | The mixes, settings and hand adjustments per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
 | `recent-recordings.json` | The ten recordings opened most recently, for File > Open Recent |
 | `updates.json` | Whether to check for updates, when it was last done, and what was found |
+
+A recording's fingerprint (`fingerprint` in `main.ts`) is its size and a hash
+of sixteen small samples of its content. It is the same after a move or a
+rename and takes milliseconds whatever the size of the file.
 
 Do not write test data there.
 
