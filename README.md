@@ -288,7 +288,7 @@ GitHub build both installers and publish them as a release (see
 ### Development
 
 ```bash
-npm test          # unit tests, including an end-to-end run on a synthetic mix
+npm test          # build, then unit tests and tests that drive the real window
 npm run typecheck
 ```
 

@@ -250,11 +250,22 @@ Tried and taken out again: a bordered box around each half, with the mix's
 name leading the lower one. It made the window feel cramped. Something
 lighter is wanted: a thin line, more space at the join, or a quiet heading.
 
-### A window test suite
+### More of the window under test
 
-The window is checked with one-off scripts (see AGENTS.md). Keeping a few of
-them as a repeatable suite would catch regressions in interaction, which is
-where most bugs have been.
+`test/window.test.ts` drives the real app through opening, settings,
+splitting, undo, the keys, playback, closing, the recent list and "Export
+all". Still unchecked there:
+
+- Dragging: marking a mix on the overview, moving its edges, fades, hand
+  adjustments, and that a click with a pixel of movement is not a drag.
+- Exporting a single mix, which goes through a system dialog. The check mode
+  would need a way to answer it, as it has for the folder of "Export all".
+- The streamed playback path, with a variable-bitrate MP3.
+- Running on GitHub for real. A trial job in `test.yml` runs them on macOS
+  and Windows without failing the workflow. Once it has passed a few times,
+  drop its `continue-on-error`, and take `DJMASTER_SKIP_WINDOW_TESTS` out of
+  `release.yml` so a release is tested the same way. Linux would need a
+  display (`xvfb-run`) and probably `--no-sandbox`.
 
 ### Not planned
 

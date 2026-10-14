@@ -33,3 +33,33 @@ jobs:
       - run: npm test
         env:
           DJMASTER_FFMPEG: ${{ github.workspace }}/node_modules/ffmpeg-static/ffmpeg
+
+  # A trial: the tests that start the real app, on the two systems it ships
+  # for. They have only ever run on a developer's Mac, so a failure here does
+  # not fail the workflow yet; look at this job's own result.
+  window:
+    name: Window tests on ${{ matrix.name }} (trial)
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            ffmpeg: node_modules/ffmpeg-static/ffmpeg
+          - name: Windows
+            os: windows-latest
+            ffmpeg: node_modules/ffmpeg-static/ffmpeg.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node --test test/window.test.ts
+        timeout-minutes: 10
+        env:
+          DJMASTER_FFMPEG: ${{ github.workspace }}/${{ matrix.ffmpeg }}

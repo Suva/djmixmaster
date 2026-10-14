@@ -171,7 +171,10 @@ async function initialFile(): Promise<string | null> {
   if (openedFromFinder) return openedFromFinder;
   const argument = process.argv.slice(app.isPackaged ? 1 : 2).find((arg) => !arg.startsWith('-'));
   if (argument && existsSync(argument)) return resolve(argument);
-  return lastRecording();
+  const last = await lastRecording();
+  // A scripted check of the empty window has no recording to wait for.
+  if (!last && SCREENSHOT) setTimeout(runCheck, 300);
+  return last;
 }
 
 app.on('open-file', (event, path) => {
@@ -309,6 +312,25 @@ ipcMain.on('cancel', () => running?.terminate());
 ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 
 let checkStarted = false;
+/**
+ * The scripted check: drives the window as the environment says, saves a
+ * picture of it and quits. It runs once, when the first recording is on
+ * screen or the window has come up empty; its script may open others.
+ */
+async function runCheck() {
+  if (!SCREENSHOT || !window || checkStarted) return;
+  checkStarted = true;
+  // Menus cannot be clicked from a script, so a check names the command instead.
+  if (process.env.DJMASTER_SHOT_MENU) window.webContents.send('menu', process.env.DJMASTER_SHOT_MENU);
+  if (process.env.DJMASTER_SHOT_SCRIPT) {
+    console.log('[script]', await window.webContents.executeJavaScript(process.env.DJMASTER_SHOT_SCRIPT, true));
+  }
+  await new Promise((done) => setTimeout(done, 300));
+  const image = await window.webContents.capturePage();
+  await writeFile(SCREENSHOT, image.toPNG());
+  app.quit();
+}
+
 ipcMain.on('painted', async (_event, path: string) => {
   writeStored(lastRecordingFile(), JSON.stringify({ path })).catch((error) =>
     console.error('Could not note the recording for next time:', error),
@@ -320,19 +342,7 @@ ipcMain.on('painted', async (_event, path: string) => {
   if (!SCREENSHOT) app.addRecentDocument(path);
   recordingOpen = true;
   buildMenu();
-  // The check runs once, on the first recording; its script may open others.
-  if (!SCREENSHOT || !window || checkStarted) return;
-  checkStarted = true;
-  // Optionally drive the window first, to capture a state other than "just opened".
-  // Menus cannot be clicked from a script, so a check names the command instead.
-  if (process.env.DJMASTER_SHOT_MENU) window.webContents.send('menu', process.env.DJMASTER_SHOT_MENU);
-  if (process.env.DJMASTER_SHOT_SCRIPT) {
-    console.log('[script]', await window.webContents.executeJavaScript(process.env.DJMASTER_SHOT_SCRIPT, true));
-  }
-  await new Promise((done) => setTimeout(done, 300));
-  const image = await window.webContents.capturePage();
-  await writeFile(SCREENSHOT, image.toPNG());
-  app.quit();
+  runCheck();
 });
 
 function createWindow() {

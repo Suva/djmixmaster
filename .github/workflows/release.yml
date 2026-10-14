@@ -51,9 +51,13 @@ jobs:
       - run: npm run typecheck
 
       # The tests need ffmpeg; use the copy that gets bundled into the app.
+      # The tests that drive the window are left out here until they have
+      # proved themselves on these machines (see the trial job in test.yml);
+      # a release must not fail over a test that has never run where it runs.
       - run: npm test
         env:
           DJMASTER_FFMPEG: ${{ github.workspace }}/${{ matrix.ffmpeg }}
+          DJMASTER_SKIP_WINDOW_TESTS: 1
 
       - run: npm run package -- --publish never
 

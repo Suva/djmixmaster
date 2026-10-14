@@ -23,7 +23,7 @@
     "build": "node scripts/build.mjs",
     "package": "node scripts/build.mjs && electron-builder",
     "master": "node src/cli.ts",
-    "test": "node --test test/*.test.ts",
+    "test": "node scripts/build.mjs && node --test test/*.test.ts",
     "typecheck": "tsc"
   },
   "devDependencies": {

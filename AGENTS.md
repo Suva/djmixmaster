@@ -10,7 +10,7 @@ code is put together and how to change it safely. Open work is in
 ```bash
 npm install          # once
 npm start            # build and run the app from the project
-npm test             # unit tests, plus an end-to-end run on a synthetic mix
+npm test             # build, then unit tests and tests that drive the real window
 npm run typecheck    # tsc, no output
 npm run package      # build an installer for this system into release/
 node src/cli.ts --help
@@ -90,9 +90,14 @@ and curves in the code are block indexes unless a name says seconds.
 
 ## Checking changes to the app
 
-The unit tests cover the core. The window has no test suite; it is checked by
-driving the real app with a script. Setting these environment variables puts
-the app into a mode for that:
+`test/master.test.ts` covers the core. `test/window.test.ts` covers the
+window: each test starts the real app, runs a function inside its window and
+checks what comes back (`test/window-app.ts` does the starting). A change to
+how the window behaves should come with a test there. They take about half a
+minute, and are skipped where Electron is not installed.
+
+Both the tests and one-off checks rest on a mode of the app that these
+environment variables switch on:
 
 | Variable | Effect |
 |---|---|
@@ -116,9 +121,11 @@ by id, dispatch mouse and keyboard events, and call `window.api` directly.
 
 - **Always set `DJMASTER_SHOT_DATA`.** Without it the check uses a shared
   temporary folder and earlier runs leak into later ones.
-- **A recording must be given on the command line**, unless the data folder
-  remembers one from an earlier run. Otherwise the window never reports that
-  it has drawn and the app does not quit.
+- **The script runs once**, when the first recording is on screen, or when the
+  window has come up empty because no recording was given and none is
+  remembered.
+- **A test's function is sent to the window as text.** It can use its
+  arguments and what a web page has, but nothing from the test file around it.
 - **Native dialogs cannot be scripted.** Call `window.api.render(...)` or use
   `DJMASTER_SHOT_FOLDER` instead of clicking Export.
 - **Wait for changes to settle.** Edits are saved, and become undo steps,
@@ -170,7 +177,11 @@ Do not write test data there.
 - **Audio files are ignored by git**, as are `dist/` and `release/`. Test
   recordings in the project folder stay local.
 - **Tests run on GitHub** for every push to `main` and every pull request
-  (`.github/workflows/test.yml`), on Linux with the bundled ffmpeg.
+  (`.github/workflows/test.yml`), on Linux with the bundled ffmpeg. Electron
+  is not installed there, so the window tests are skipped. A second, trial
+  job runs them on macOS and Windows without failing the workflow, and the
+  release workflow leaves them out (`DJMASTER_SKIP_WINDOW_TESTS`) until that
+  trial has shown them to be dependable there.
 - **Releases are built by GitHub.** Pushing a tag such as `v0.2.0` runs
   `.github/workflows/release.yml`, which tests and packages on macOS and
   Windows and publishes both installers. The version comes from the tag.
