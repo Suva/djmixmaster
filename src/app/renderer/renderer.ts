@@ -1814,6 +1814,7 @@ function closeRecording() {
   undoSteps = [];
   redoSteps = [];
   settled = null;
+  videoView.refresh();
   $('file-name').textContent = 'No recording open';
   $('file-name').classList.remove('loaded');
   $('checkup').hidden = true;
