@@ -4,6 +4,14 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- **Videos for YouTube.** A Video view, beside the mastering view, shows the
+  selected mix as a video: a template that moves to the music (its beats, its
+  spectrum, how much energy it has), with an artist name, a colour and a logo
+  to fill in. Exporting as MP4 video makes the file, in 1080p. Three templates
+  come with it.
+
 ## 0.7.0 — 14 October 2026
 
 - **A Linux version**, as an AppImage that runs on most 64-bit distributions.

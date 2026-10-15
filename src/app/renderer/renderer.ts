@@ -6,10 +6,11 @@ import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
-import type { Api, FineWave, VisualsChoice } from '../api.ts';
+import type { Api, FineWave, VideoMixInfo, VisualsChoice } from '../api.ts';
 import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
 import { VideoView } from './video-view.ts';
+import { templateOf } from './video-frame.ts';
 import { Player } from './player.ts';
 import { initTooltips } from './tooltip.ts';
 
@@ -99,24 +100,26 @@ const levelMeter = new LevelMeter($<HTMLCanvasElement>('level-meter'));
 
 // The Video view: the selected mix's video in place of the curves, its
 // template in place of the levelling settings. See video-view.ts.
+/** A mix as its video sees it: name, place, length, and the template chosen for it. */
+function videoMixOf(m: Mix): VideoMixInfo {
+  const at = edges(m);
+  return {
+    path: recording!.path,
+    recordingName: recording!.name.replace(/\.[^.]+$/, ''),
+    name: m.name,
+    number: mixes.indexOf(m) + 1,
+    count: mixes.length,
+    start: at.start * HOP_SECONDS,
+    end: at.end * HOP_SECONDS,
+    artist: m.artist ?? '',
+    album,
+    visuals: m.visuals,
+  };
+}
+
 const videoView = new VideoView({
   api,
-  mix: () => {
-    if (!recording) return null;
-    const at = edges(mix);
-    return {
-      path: recording.path,
-      recordingName: recording.name.replace(/\.[^.]+$/, ''),
-      name: mix.name,
-      number: mixes.indexOf(mix) + 1,
-      count: mixes.length,
-      start: at.start * HOP_SECONDS,
-      end: at.end * HOP_SECONDS,
-      artist: mix.artist ?? '',
-      album,
-      visuals: mix.visuals,
-    };
-  },
+  mix: () => (recording ? videoMixOf(mix) : null),
   playhead: () => player.time,
   seek: (seconds) => seek(clamp(seconds, edges(mix).start * HOP_SECONDS, edges(mix).end * HOP_SECONDS)),
   levels: (points) => {
@@ -1901,7 +1904,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
   const savedDefaults = remembered.defaults as (Partial<Defaults> & { export?: Partial<ExportSettings> }) | null;
   const saved = savedDefaults?.export ?? {};
   exportSettings = {
-    format: (['wav', 'flac', 'mp3', 'm4a'] as const).find((format) => format === saved.format) ?? DEFAULT_EXPORT_SETTINGS.format,
+    format: (['wav', 'flac', 'mp3', 'm4a', 'mp4'] as const).find((format) => format === saved.format) ?? DEFAULT_EXPORT_SETTINGS.format,
     bitDepth: saved.bitDepth === 24 ? 24 : 16,
     mp3Kbps: BITRATES.mp3.find((kbps) => kbps === saved.mp3Kbps) ?? DEFAULT_EXPORT_SETTINGS.mp3Kbps,
     aacKbps: BITRATES.m4a.find((kbps) => kbps === saved.aacKbps) ?? DEFAULT_EXPORT_SETTINGS.aacKbps,
@@ -2172,7 +2175,10 @@ function exportName(m: Mix): string {
 // ---------------------------------------------------------------------------
 // Export settings and the dialog that asks for them
 
-type ExportFormat = 'wav' | 'flac' | 'mp3' | 'm4a';
+type ExportFormat = 'wav' | 'flac' | 'mp3' | 'm4a' | 'mp4';
+
+/** A video export's picture: 1080p at 30 frames a second, at the bitrate YouTube asks for. */
+const VIDEO = { width: 1920, height: 1080, fps: 30, kbps: 8000 };
 
 interface ExportSettings {
   format: ExportFormat;
@@ -2188,7 +2194,7 @@ interface ExportSettings {
 const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
   format: 'wav', bitDepth: 16, mp3Kbps: 320, aacKbps: 256, sampleRate: null, lossyHeadroom: true,
 };
-const BITRATES: Record<'mp3' | 'm4a', number[]> = { mp3: [320, 256, 192, 128], m4a: [320, 256, 192, 128] };
+const BITRATES: Record<'mp3' | 'm4a' | 'mp4', number[]> = { mp3: [320, 256, 192, 128], m4a: [320, 256, 192, 128], mp4: [320, 256, 192, 128] };
 const SAMPLE_RATES = [44100, 48000];
 /** Above this a WAV has to be written in an extended form that not every player reads. */
 const WAV_LIMIT_BYTES = 4 * 1024 ** 3;
@@ -2206,6 +2212,7 @@ function estimatedBytes(m: Mix, settings: ExportSettings): number {
   const seconds = (edges(m).end - edges(m).start) * HOP_SECONDS;
   if (settings.format === 'mp3') return (seconds * settings.mp3Kbps * 1000) / 8;
   if (settings.format === 'm4a') return (seconds * settings.aacKbps * 1000) / 8;
+  if (settings.format === 'mp4') return (seconds * (settings.aacKbps + VIDEO.kbps) * 1000) / 8;
   const rate = settings.sampleRate ?? recording!.measured.sampleRate;
   const pcm = seconds * rate * 2 * (settings.bitDepth / 8);
   // FLAC typically packs dense dance music to around two thirds.
@@ -2231,7 +2238,7 @@ function showExportSettings() {
   $('export-headroom-field').hidden = lossless;
   $<HTMLInputElement>('export-headroom').checked = settings.lossyHeadroom;
   if (!lossless) {
-    const format = settings.format as 'mp3' | 'm4a';
+    const format = settings.format as 'mp3' | 'm4a' | 'mp4';
     const chosen = format === 'mp3' ? settings.mp3Kbps : settings.aacKbps;
     $('export-bitrate').replaceChildren(
       ...BITRATES[format].map((kbps) => new Option(`${kbps} kbps`, String(kbps), false, kbps === chosen)),
@@ -2250,6 +2257,10 @@ function showExportSettings() {
   let note = exportingMixes.length > 1 ? `About ${size(total)} in ${exportingMixes.length} files.` : `About ${size(total)}.`;
   if (settings.format === 'wav' && sizes.some((bytes) => bytes > WAV_LIMIT_BYTES)) {
     note += ' Over 4 GB, a WAV is written in an extended form that some players and DJ gear cannot read. FLAC avoids this.';
+  } else if (settings.format === 'mp4') {
+    const named = exportingMixes.map((m) => templateOf(m.visuals).name);
+    const which = new Set(named).size === 1 ? `the ${named[0]} template` : 'each mix\'s template';
+    note += ` A 1920 × 1080 picture of ${which}, chosen in the Video view, with the sound in AAC. Drawing the picture takes a while.`;
   } else if (lossless && settings.bitDepth === 16) {
     note += ' 16-bit is dithered, so quiet passages and fades stay clean.';
   }
@@ -2371,7 +2382,7 @@ function encodeOptions(m: Mix, track?: string): EncodeOptions {
     track,
     sampleRate: sampleRate ?? undefined,
     bitDepth: format === 'wav' || format === 'flac' ? bitDepth : undefined,
-    bitrateKbps: format === 'mp3' ? mp3Kbps : format === 'm4a' ? aacKbps : undefined,
+    bitrateKbps: format === 'mp3' ? mp3Kbps : format === 'm4a' || format === 'mp4' ? aacKbps : undefined,
   };
 }
 
@@ -2390,6 +2401,7 @@ function renderMix(m: Mix, output: string, track?: string) {
     headroomDb: isLossy(output) && exportSettings.lossyHeadroom ? LOSSY_HEADROOM_DB : 0,
     fadeInSeconds: fades(m).in * HOP_SECONDS,
     fadeOutSeconds: fades(m).out * HOP_SECONDS,
+    ...(exportSettings.format === 'mp4' ? { video: { ...VIDEO, mix: videoMixOf(m) } } : {}),
   });
 }
 

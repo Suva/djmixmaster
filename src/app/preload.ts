@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import type { Api, MenuCommand } from './api.ts';
+import type { Api, MenuCommand, VideoRequest } from './api.ts';
 
 const api: Api = {
   pickFiles: () => ipcRenderer.invoke('pick-file'),
@@ -26,6 +26,10 @@ const api: Api = {
   onOpenFiles: (listener) => ipcRenderer.on('open-files', (_event, paths: string[]) => listener(paths)),
   painted: (path: string) => ipcRenderer.send('painted', path),
   closed: () => ipcRenderer.send('closed'),
+  onVideoJob: (listener) => ipcRenderer.on('video-job', (_event, job: VideoRequest) => listener(job)),
+  videoChunk: (bytes) => ipcRenderer.invoke('video-chunk', bytes),
+  videoProgress: (fraction) => ipcRenderer.send('video-progress', fraction),
+  videoDone: (failure) => ipcRenderer.send('video-done', failure),
   pickImage: () => ipcRenderer.invoke('pick-image'),
   readImage: (path) => ipcRenderer.invoke('read-image', path),
   features: (path) => ipcRenderer.invoke('features', path),

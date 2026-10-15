@@ -382,6 +382,72 @@ test('the strip under the picture shows the mix and moves the playhead', { skip 
   assert.ok(Math.abs(seen.playhead - MIX_SECONDS * 0.75) <= 1, `dragged to ${seen.playhead}`);
 });
 
+test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothing behind', { skip }, async () => {
+  const folder = join(work, 'videos');
+  await mkdir(folder);
+  // Two mixes of ten seconds each, given a template and a name in the Video view.
+  const message = await runApp({ recording: mix, data: await fresh(), exportFolder: folder, timeoutMs: 120_000 }, async (page) => {
+    page.type('region-end', '0:00:20');
+    await page.wait(100);
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight');
+    await page.wait(100);
+    page.click('split-here');
+    await page.settle();
+    page.click('view-video');
+    const template = page.element<HTMLSelectElement>('template');
+    template.value = 'ring';
+    template.dispatchEvent(new Event('change'));
+    page.type('field-name', 'Suva');
+    await page.settle();
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+    page.click('export-go');
+    await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 100_000);
+    return page.text('export-status');
+  });
+  assert.match(message, /^Exported 2 mixes\./);
+  const files = (await readdir(folder)).sort();
+  assert.deepEqual(files, ['Test mix - 01 Mix 1.mp4', 'Test mix - 02 Mix 2.mp4']);
+  for (const file of files) {
+    // ffmpeg describes a file it is given nothing to do with.
+    let described = '';
+    try {
+      execFileSync(ffmpeg(), ['-hide_banner', '-i', join(folder, file)], { stdio: 'pipe' });
+    } catch (error) {
+      described = String((error as { stderr: Buffer }).stderr);
+    }
+    assert.match(described, /Duration: 00:00:10\.00/, `${file} is ten seconds long`);
+    assert.match(described, /Video: h264.*1920x1080.*30 fps/, `${file} has its picture`);
+    assert.match(described, /Audio: aac/, `${file} has its sound`);
+    assert.match(described, /title\s*: Test mix - Mix/, `${file} keeps its tags`);
+  }
+
+  // A longer one, stopped part way: no file is left.
+  const stopped = join(work, 'stopped');
+  await mkdir(stopped);
+  const said = await runApp({ recording: mix, data: await fresh(), exportFolder: stopped, timeoutMs: 120_000 }, async (page) => {
+    page.key('Enter');
+    for (let i = 0; i < 8; i++) page.key('ArrowRight', { shift: true });
+    await page.wait(100);
+    page.click('split-here');
+    await page.settle();
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+    page.click('export-go');
+    // Into the picture, past the sound.
+    await page.until(() => parseFloat(page.element('progress-bar').style.width) > 30, 'the picture to be under way', 60_000);
+    page.key('Escape', { key: 'Escape' });
+    await page.until(() => /cancelled/.test(page.text('export-status')), 'the export to stop');
+    await page.wait(500);
+    return page.text('export-status');
+  });
+  assert.match(said, /cancelled/);
+  assert.deepEqual(await readdir(stopped), [], 'nothing is left of the cancelled video');
+});
+
 test('a field of the video can be typed in while the mix plays, and undone', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
     page.click('view-video');

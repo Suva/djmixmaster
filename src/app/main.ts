@@ -45,7 +45,7 @@ if (SCREENSHOT) app.setPath('userData', process.env.DJMASTER_SHOT_DATA ?? join(t
  */
 const SCHEME = 'djm';
 const ORIGIN = `${SCHEME}://app`;
-const APP_FILES = ['index.html', 'styles.css', 'renderer.js', 'limiter-worklet.js'];
+const APP_FILES = ['index.html', 'styles.css', 'renderer.js', 'limiter-worklet.js', 'exporter.html', 'exporter.js'];
 const MEDIA_TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.m4a': 'audio/mp4',
   '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.aif': 'audio/aiff', '.aiff': 'audio/aiff',
@@ -122,14 +122,17 @@ let running: Worker | null = null;
 /** What a job fails with when it is stopped before finishing. */
 const CANCELLED = 'Cancelled';
 
-/** Runs a job in a worker; starting another job abandons the one in flight. */
-function runJob(job: Job): Promise<unknown> {
+/**
+ * Runs a job in a worker; starting another job abandons the one in flight.
+ * Its progress goes to the window, through `progress` if given.
+ */
+function runJob(job: Job, progress = (fraction: number) => window?.webContents.send('progress', fraction)): Promise<unknown> {
   running?.terminate();
   const worker = new Worker(join(__dirname, 'worker.cjs'), { workerData: job });
   running = worker;
   return new Promise((resolvePromise, reject) => {
     worker.on('message', (message: JobMessage) => {
-      if (message.type === 'progress') window?.webContents.send('progress', message.fraction);
+      if (message.type === 'progress') progress(message.fraction);
       else if (message.type === 'done') resolvePromise(message.result);
       else reject(new Error(message.message));
     });
@@ -529,6 +532,7 @@ ipcMain.handle('render', async (_event, request: RenderRequest) => {
   if (resolve(request.output) === resolve(request.input)) {
     throw new Error('Choose a different name: this would overwrite the recording itself');
   }
+  if (request.video) return renderVideo(request);
   try {
     return await runJob({ kind: 'render', ...request });
   } catch (error) {
@@ -541,7 +545,95 @@ ipcMain.handle('render', async (_event, request: RenderRequest) => {
   }
 });
 
-ipcMain.on('cancel', () => running?.terminate());
+ipcMain.on('cancel', () => {
+  running?.terminate();
+  videoExport?.finish(CANCELLED);
+});
+
+// ---------------------------------------------------------------------------
+// Video exports. The sound is exported first, as for any other format, to a
+// file of its own. Then a hidden window draws every frame with the Video
+// view's code and encodes it (exporter.ts); the encoded picture comes here in
+// batches and goes straight into ffmpeg, which packs it with the sound into
+// the MP4 without encoding either again. The sound takes a tenth of the time.
+
+const SOUND_SHARE = 0.1;
+
+interface VideoExport {
+  /** Where the picture goes: ffmpeg's input. */
+  write(bytes: Uint8Array): Promise<void>;
+  /** Ends the export: finished when `failure` is null, given up otherwise. */
+  finish(failure: string | null): void;
+}
+let videoExport: VideoExport | null = null;
+
+ipcMain.handle('video-chunk', (_event, bytes: Uint8Array) => videoExport?.write(bytes));
+ipcMain.on('video-progress', (_event, fraction: number) => window?.webContents.send('progress', SOUND_SHARE + (1 - SOUND_SHARE) * fraction));
+ipcMain.on('video-done', (_event, failure: string | null) => videoExport?.finish(failure));
+
+async function renderVideo(request: RenderRequest): Promise<unknown> {
+  const video = request.video!;
+  const sound = join(app.getPath('temp'), `djmaster-${process.pid}-${Date.now()}.m4a`);
+  try {
+    const result = await runJob(
+      { kind: 'render', ...request, video: undefined, output: sound },
+      (fraction) => window?.webContents.send('progress', SOUND_SHARE * fraction),
+    );
+    await new Promise<void>((done, fail) => {
+      const packer = spawn(ffmpeg(), [
+        '-y', '-v', 'error',
+        // A raw H.264 stream carries no timing: -r before it gives each frame its time.
+        // (-framerate, the option documented for raw input, is ignored when copying.)
+        '-f', 'h264', '-r', String(video.fps), '-i', 'pipe:0',
+        '-i', sound,
+        '-map', '0:v', '-map', '1:a', '-c', 'copy',
+        // The tags (title, artist, album) were written into the sound; they carry over.
+        '-map_metadata', '1',
+        // The index at the front, so that players and YouTube can start before the whole file is read.
+        '-movflags', '+faststart',
+        request.output,
+      ], { stdio: ['pipe', 'ignore', 'pipe'] });
+      let complaint = '';
+      packer.stderr.on('data', (data) => (complaint += data));
+      packer.stdin.on('error', () => {}); // ffmpeg gone; its exit says why.
+      const drawer = new BrowserWindow({
+        show: false,
+        webPreferences: { preload: join(__dirname, 'preload.cjs'), backgroundThrottling: false },
+      });
+      if (SCREENSHOT) drawer.webContents.on('console-message', (event) => console.log(`[exporter] ${event.message}`));
+      let finished = false;
+      const finish = (failure: string | null) => {
+        if (finished) return;
+        finished = true;
+        videoExport = null;
+        drawer.destroy();
+        if (failure) {
+          packer.kill();
+          fail(new Error(failure));
+          return;
+        }
+        packer.on('close', (code) => (code === 0 ? done() : fail(new Error(`Packing the video failed: ${complaint.trim() || `exit code ${code}`}`))));
+        packer.stdin.end();
+      };
+      videoExport = {
+        write: (bytes) => new Promise((written) => (packer.stdin.write(bytes) ? written() : packer.stdin.once('drain', written))),
+        finish,
+      };
+      packer.on('error', (error) => finish(error.message));
+      packer.on('close', (code) => {
+        if (!finished) finish(`Packing the video failed: ${complaint.trim() || `exit code ${code}`}`);
+      });
+      drawer.webContents.once('did-finish-load', () => drawer.webContents.send('video-job', video));
+      drawer.loadURL(`${ORIGIN}/exporter.html`);
+    });
+    return result;
+  } catch (error) {
+    await rm(request.output, { force: true, maxRetries: 20, retryDelay: 250 }).catch(() => {});
+    throw error;
+  } finally {
+    await rm(sound, { force: true, maxRetries: 20, retryDelay: 250 }).catch(() => {});
+  }
+}
 
 ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 

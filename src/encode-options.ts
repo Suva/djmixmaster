@@ -27,7 +27,7 @@ export const DEFAULT_AAC_KBPS = 256;
  */
 export const LOSSY_HEADROOM_DB = 1;
 
-/** Whether a file of this name is written in a format that loses information. */
+/** Whether a file of this name is written in a format that loses information. A video's sound is AAC. */
 export function isLossy(output: string): boolean {
-  return /\.(mp3|m4a)$/i.test(output);
+  return /\.(mp3|m4a|mp4)$/i.test(output);
 }

@@ -8,24 +8,10 @@ import type { Api, VisualsChoice } from '../api.ts';
 import type { Features } from '../../features.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
-import { checkTemplate, FONTS, prepare, TEXT_VARIABLES, type Field, type PreparedLayer, type Template, type TextValues } from '../../visuals/template.ts';
-import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
+import { FONTS, prepare, type Field, type PreparedLayer, type Template } from '../../visuals/template.ts';
+import { DEFAULT_TEMPLATE, drawVideoFrame, TEMPLATES as templates, templateOf, type VideoMix } from './video-frame.ts';
 
-/** What the view needs to know about the selected mix. */
-export interface VideoMix {
-  /** The recording, for its music values, and its name without extension for `%recordingName%`. */
-  path: string;
-  recordingName: string;
-  name: string;
-  number: number;
-  count: number;
-  /** The mix's edges in the recording, in seconds. */
-  start: number;
-  end: number;
-  artist: string;
-  album: string;
-  visuals: VisualsChoice | undefined;
-}
+export type { VideoMix } from './video-frame.ts';
 
 export interface VideoViewOptions {
   api: Api;
@@ -44,18 +30,6 @@ export interface VideoViewOptions {
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-
-/** The built-in templates, checked once. */
-const templates = new Map<string, Template>(
-  BUILT_IN_TEMPLATES.map((builtIn) => [builtIn.id, checkTemplate(builtIn.template, MUSIC_NAMES, TEXT_VARIABLES).template]),
-);
-const DEFAULT_TEMPLATE = BUILT_IN_TEMPLATES[0].id;
-
-const clock = (seconds: number) => {
-  const s = Math.max(0, Math.floor(seconds));
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${Math.floor(s / 60)}:${pad(s % 60)}`;
-};
 
 export class VideoView {
   readonly #options: VideoViewOptions;
@@ -155,7 +129,7 @@ export class VideoView {
   }
 
   #template(): Template {
-    return templates.get(this.#choice.template) ?? templates.get(DEFAULT_TEMPLATE)!;
+    return templateOf(this.#choice);
   }
 
   #prepare() {
@@ -282,32 +256,6 @@ export class VideoView {
     return control;
   }
 
-  /** The variables a text can show, for the moment `seconds` into the mix. */
-  #textValues(mix: VideoMix, seconds: number, tempo: number): TextValues {
-    const length = mix.end - mix.start;
-    return {
-      mixName: mix.name,
-      mixNumber: mix.number,
-      mixCount: mix.count,
-      mixLength: clock(length),
-      elapsed: clock(seconds),
-      remaining: clock(length - seconds),
-      artist: mix.artist,
-      title: mix.name,
-      album: mix.album,
-      recordingName: mix.recordingName,
-      date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
-      // Track markers do not exist yet; these stay empty until they do.
-      currentTrack: '',
-      currentArtist: '',
-      currentTitle: '',
-      trackNumber: '',
-      trackCount: '',
-      nextTrack: '',
-      tempo: Math.round(tempo),
-    };
-  }
-
   #draw() {
     if (!this.#visible) return;
     this.#frame = requestAnimationFrame(() => this.#draw());
@@ -348,17 +296,7 @@ export class VideoView {
     }
     this.#lastPlayhead = playhead;
     const seconds = Math.max(0, Math.min(length, playhead - mix.start));
-    const music = reader ? reader.at(seconds, dt) : { time: seconds, dt, length, progress: seconds / Math.max(1, length) };
-    this.#drawer.draw(this.#layers, {
-      seconds,
-      dt,
-      length,
-      music,
-      spectrum: reader ? reader.spectrum(seconds) : new Float32Array(24),
-      levelHistory: (span, points) => (reader ? reader.levelHistory(seconds, span, points) : new Float32Array(points)),
-      text: this.#textValues(mix, seconds, typeof music.tempo === 'number' ? music.tempo : 0),
-      images: this.#images,
-    });
+    drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images);
     // For scripted checks: whether the picture is drawn from the music yet.
     canvas.dataset.music = String(!!reader);
     this.#drawStrip(mix, seconds);
