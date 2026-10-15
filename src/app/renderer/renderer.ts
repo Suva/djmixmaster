@@ -7,7 +7,7 @@ import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
 import type { Api, FineWave, VideoMixInfo, VisualsChoice } from '../api.ts';
-import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
+import { clock, detailLanes, displayGain, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
 import { VideoView } from './video-view.ts';
 import { templateOf } from './video-frame.ts';
@@ -123,17 +123,19 @@ const videoView = new VideoView({
   playhead: () => player.time,
   seek: (seconds) => seek(clamp(seconds, edges(mix).start * HOP_SECONDS, edges(mix).end * HOP_SECONDS)),
   levels: (points) => {
-    // The loudest moment in each step of the mix, as the recording timeline draws it.
+    // The loudest moment in each step of the mix, as the recording timeline
+    // draws it, made larger when the mix was recorded quietly.
     const out = new Float32Array(points);
     if (!recording) return out;
     const { start, end } = mix.region;
     const peaks = recording.measured.peaks;
+    const gain = displayGain(peaks.subarray(start, end));
     for (let p = 0; p < points; p++) {
       const from = Math.floor(start + ((end - start) * p) / points);
       const to = Math.max(from + 1, Math.floor(start + ((end - start) * (p + 1)) / points));
       let peak = 0;
       for (let b = from; b < to && b < peaks.length; b++) peak = Math.max(peak, peaks[b]);
-      out[p] = Math.min(1, peak);
+      out[p] = Math.min(1, peak * gain);
     }
     return out;
   },
@@ -454,9 +456,14 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
   };
 }
 
+/** How much larger each recording's timeline is drawn, worked out once: it means sorting every block. */
+const overviewGains = new WeakMap<Float32Array, number>();
+
 function overviewData(r: Recording) {
   const marks = (id: string) => r.checkup.findings.find((finding) => finding.id === id)?.marks ?? [];
-  return { peaks: r.measured.peaks, body: r.body, gaps: r.gaps, clipping: marks('clipping'), dropouts: marks('dropouts') };
+  let gain = overviewGains.get(r.measured.peaks);
+  if (gain === undefined) overviewGains.set(r.measured.peaks, (gain = displayGain(r.measured.peaks)));
+  return { peaks: r.measured.peaks, body: r.body, gain, gaps: r.gaps, clipping: marks('clipping'), dropouts: marks('dropouts') };
 }
 
 // ---------------------------------------------------------------------------

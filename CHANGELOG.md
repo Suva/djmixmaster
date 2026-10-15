@@ -17,6 +17,10 @@ are under "Not released yet" and appear there once they are.
 - The time beside the transport now counts **into the mix, over its length**.
   The Start and End fields are gone: the mix's edges are set on the timeline,
   with I and O, or by splitting.
+- **Quiet recordings are easier to see.** The recording's timeline, and the
+  mix's strip under the video, draw a quietly recorded wave as large as a loud
+  one. The mix's own waveform still shows the true level, against the
+  levelled result.
 
 ## 0.7.0 — 14 October 2026
 

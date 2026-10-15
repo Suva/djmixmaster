@@ -36,6 +36,25 @@ export function clock(seconds: number): string {
 
 const clampTo = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
 
+/** The most a quiet recording is drawn larger than it is: 24 dB, so near silence stays near silence. */
+const MAX_DISPLAY_GAIN = 16;
+
+/**
+ * How much larger to draw a wave so that a quiet recording fills its lane as a
+ * loud one does. Its loud moments are put at full height: not its single
+ * loudest, which may be a lone click, but the level only one block in a
+ * hundred goes above. A recording that already reaches full scale is drawn as
+ * it is; nothing is ever drawn smaller. This is for drawing only, and only
+ * where the true level is not the point: the detail view keeps it, as there
+ * the original is set against the levelled result and the 0 dB line.
+ */
+export function displayGain(peaks: ArrayLike<number>): number {
+  const sounding = Float32Array.from(peaks).filter((peak) => peak > 1e-4).sort();
+  if (sounding.length === 0) return 1;
+  const loud = sounding[Math.min(sounding.length - 1, Math.floor(sounding.length * 0.99))];
+  return clampTo(1 / loud, 1, MAX_DISPLAY_GAIN);
+}
+
 /** Sizes the backing store to the element and returns a context scaled to CSS pixels. */
 function fit(canvas: HTMLCanvasElement) {
   const ratio = window.devicePixelRatio || 1;
@@ -98,6 +117,8 @@ export interface OverviewData {
   peaks: Float32Array;
   /** Average level per block, which keeps showing structure when the peaks are all at full scale. */
   body: Float32Array;
+  /** How much larger than it is to draw the wave (`displayGain`), so that a quiet recording can be seen. */
+  gain: number;
   /** Silences between sets, in blocks. */
   gaps: Region[];
   /** Where the check-up found clipping, and possible dropouts. */
@@ -136,8 +157,8 @@ export function drawOverview(
   for (let x = 0; x < width; x++) {
     const color = owner[x] < 0 ? COLOR.before : owner[x] === selected ? COLOR.after : COLOR.otherMix;
     // Peaks faintly, the body of the sound solid on top.
-    const outer = Math.max(0.5, Math.min(1, peaks[x]) * (mid - 2));
-    const inner = Math.max(0.5, Math.min(1, body[x] * BODY_SCALE) * (mid - 2));
+    const outer = Math.max(0.5, Math.min(1, peaks[x] * data.gain) * (mid - 2));
+    const inner = Math.max(0.5, Math.min(1, body[x] * data.gain * BODY_SCALE) * (mid - 2));
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.35;
     ctx.fillRect(x, mid - outer, 1, outer * 2);
