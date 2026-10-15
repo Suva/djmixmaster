@@ -13,6 +13,11 @@ are under "Not released yet" and appear there once they are.
   Exporting as MP4 video makes the file, in 1080p. Four templates
   come with it, one of them over a photo of your own, and fourteen fonts for the text, from clean to techno to
   neon; any font installed on the computer can be used as well.
+- **The tracks in a mix.** M marks where a track starts; markers are named and
+  dragged on the mix timeline. A track list exported from DJ software (such as
+  a rekordbox history) can be imported and spread over the mix to drag into
+  place. The list copies ready for a YouTube description, the tracks become
+  chapters in MP3, AAC and MP4 files, and the video shows what is playing.
 - **An Artist field** beside the mix's name, for the exported file's tags and
   for the video.
 - The time beside the transport now counts **into the mix, over its length**.

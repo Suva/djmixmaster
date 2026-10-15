@@ -178,16 +178,41 @@ everything below together with the mouse and trackpad gestures.
 | ← → | Move the playhead 5 seconds (30 with Shift, 1 with Option or Alt) |
 | I, O | Put the start, or the end, of the mix at the playhead |
 | Cmd/Ctrl+E | Split the mix at the playhead |
+| M | Mark a track starting at the playhead |
 | J, K, L | Run the playhead backwards, stop, run it forwards. Each further press of J or L doubles the speed, up to 8 times. Forwards plays sound up to 4 times the speed; backwards is silent |
 | Return | Jump to the start of the mix |
 | End | Jump to 10 seconds before the end of the mix |
 | Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z | Undo, redo |
-| Backspace or Delete | Delete the selected mix, or the hand adjustment under the pointer. The only mix goes back to covering the whole recording |
+| Backspace or Delete | Delete the hand adjustment under the pointer, or else the track marker last clicked, or else the selected mix. The only mix goes back to covering the whole recording |
 | Cmd/Ctrl+O | Open a recording |
 | ? or F1 | Show the gestures and shortcuts |
 | Shift+Cmd/Ctrl+W | Close the recording |
 | Tab | Switch between the Mastering and the Video view |
 | Esc | Cancel an analysis or export in progress |
+
+### The tracks in a mix
+
+Press **M** while the mix plays to mark where a track starts. Each marker shows
+on the mix timeline with the track's name at the foot of the waveform: drag it
+to move it, double-click the name to type one in (as *Artist - Title*), click
+it to play from there, and Backspace removes the one last clicked.
+
+The **Tracks** button beside the mix's artist lists them all, with their times
+and names to edit, and can:
+
+- **Import** a list from DJ software: a history or playlist exported as M3U8 or
+  as text (rekordbox's, for one), or any list of names. Such a history says
+  what was played, in order, but not when, so the tracks are spread evenly over
+  the mix as a start, shown dashed until each has been dragged to where it
+  really begins. A list with times, such as `12:30 Artist - Title` on each
+  line, puts them at those times.
+- **Paste** such a list from the clipboard.
+- **Copy for YouTube**: the list with times, for the video's description,
+  where YouTube turns it into chapters. It says if YouTube will not take it
+  (it wants three tracks at least, each ten seconds or more).
+
+The tracks become chapters in MP3, AAC and MP4 exports, which many players
+show, and a video can show the track playing.
 
 ### A video for YouTube
 

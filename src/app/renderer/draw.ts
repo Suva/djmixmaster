@@ -124,6 +124,8 @@ export interface OverviewData {
   /** Where the check-up found clipping, and possible dropouts. */
   clipping: Region[];
   dropouts: Region[];
+  /** Where tracks start, in blocks. */
+  tracks: number[];
 }
 
 /**
@@ -185,6 +187,15 @@ export function drawOverview(
     }
   });
 
+  // Where tracks start: short ticks hanging from the top, under the mixes' names.
+  ctx.fillStyle = COLOR.label;
+  ctx.globalAlpha = 0.55;
+  for (const block of data.tracks) {
+    if (block < shown.start || block > shown.end) continue;
+    ctx.fillRect(Math.round(toX(block)), 15, 1, 6);
+  }
+  ctx.globalAlpha = 1;
+
   // Silences between sets, drawn wide enough to see even when they are seconds in hours.
   ctx.fillStyle = COLOR.gain;
   for (const gap of data.gaps) {
@@ -217,6 +228,28 @@ export function drawOverview(
 
   timeAxis(ctx, shown.start * HOP_SECONDS, shown.end * HOP_SECONDS, 0, width, height - AXIS / 2);
 }
+
+/** A track marker in the detail view, on the same scale as the view. */
+export interface DetailMarker {
+  block: number;
+  label: string;
+  selected: boolean;
+  /** Put there by spreading an imported list, not by hand. */
+  guessed: boolean;
+}
+
+/** Where a marker's name was drawn, so that it can be pointed at. In CSS pixels of the canvas. */
+export interface MarkerBox {
+  index: number;
+  x: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** How tall the name tab of a track marker is, at the foot of the waveform lane. */
+export const MARKER_TAB_HEIGHT = 16;
 
 /** Everything the detail view shows, one value per block of the region. */
 export interface Detail {
@@ -303,12 +336,14 @@ export function drawDetail(
   activeFade: 'in' | 'out' | null,
   /** The original as a wave across exactly this view, fine enough to show a beat; null when not zoomed in that far. */
   fine: { low: Float32Array; high: Float32Array } | null,
-) {
+  /** The tracks in the mix. */
+  markers: DetailMarker[] = [],
+): MarkerBox[] {
   const { ctx, width, height } = fit(canvas);
   const plot = width - GUTTER;
   const total = detail.gainDb.length;
   const n = view.end - view.start;
-  if (plot < 10 || total === 0 || n <= 0) return;
+  if (plot < 10 || total === 0 || n <= 0) return [];
   // The view need not start or end on a block: close up it moves by the
   // millisecond, or scrolling and zooming would go in jumps of a tenth of a second.
   /** A curve reduced to one value per pixel across the view. */
@@ -550,6 +585,41 @@ export function drawDetail(
   const startSeconds = (detail.startBlock + view.start) * HOP_SECONDS;
   timeAxis(ctx, startSeconds, startSeconds + n * HOP_SECONDS, GUTTER, width, height - AXIS / 2);
 
+  // Track markers: a line down through the lanes, and the track's name in a
+  // tab at the foot of the waveform, as far as the next marker leaves room.
+  const boxes: MarkerBox[] = [];
+  const markerX = (block: number) => GUTTER + ((block - view.start) / n) * plot;
+  const tabTop = waveLane.top + waveLane.height - MARKER_TAB_HEIGHT;
+  markers.forEach((marker, index) => {
+    const x = Math.round(markerX(marker.block));
+    if (x < GUTTER - 1 || x > width) return;
+    const colour = marker.selected ? COLOR.hover : COLOR.label;
+    ctx.fillStyle = colour;
+    ctx.globalAlpha = marker.selected ? 0.9 : 0.4;
+    if (marker.guessed) {
+      // Dashed: a guess, waiting to be moved to where the track really starts.
+      for (let y = 0; y < usable; y += 6) ctx.fillRect(x, y, 1, 3);
+    } else {
+      ctx.fillRect(x, 0, 1, usable);
+    }
+    const next = markers[index + 1];
+    const room = Math.min(width, next ? markerX(next.block) : width) - x - 3;
+    let label = marker.label;
+    while (label.length > 1 && ctx.measureText(label).width + 10 > room) label = `${label.slice(0, -2).trimEnd()}…`;
+    const tab = room >= 14 ? Math.min(room, ctx.measureText(label).width + 10) : 6;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = marker.selected ? 'rgba(230, 232, 236, 0.92)' : 'rgba(16, 18, 22, 0.82)';
+    ctx.fillRect(x, tabTop, tab, MARKER_TAB_HEIGHT);
+    ctx.fillStyle = colour;
+    ctx.fillRect(x, tabTop, 1, MARKER_TAB_HEIGHT);
+    if (room >= 14) {
+      ctx.fillStyle = marker.selected ? '#14161a' : marker.guessed ? COLOR.text : COLOR.label;
+      ctx.textAlign = 'left';
+      ctx.fillText(label, x + 5, tabTop + MARKER_TAB_HEIGHT / 2 + 0.5);
+    }
+    boxes.push({ index, x, left: x - 4, right: x + Math.max(tab, 4), top: tabTop, bottom: tabTop + MARKER_TAB_HEIGHT });
+  });
+
   if (playhead !== null && playhead >= view.start && playhead <= view.end) {
     ctx.fillStyle = COLOR.hover;
     ctx.fillRect(Math.round(GUTTER + ((playhead - view.start) / n) * plot), 0, 1.5, usable);
@@ -560,4 +630,5 @@ export function drawDetail(
     ctx.fillRect(Math.round(hoverX), 0, 1, usable);
     ctx.globalAlpha = 1;
   }
+  return boxes;
 }

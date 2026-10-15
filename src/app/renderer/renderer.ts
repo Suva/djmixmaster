@@ -7,11 +7,12 @@ import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
 import type { Api, FineWave, VideoMixInfo, VisualsChoice } from '../api.ts';
-import { clock, detailLanes, displayGain, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
+import { clock, detailLanes, displayGain, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type MarkerBox, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
 import { VideoView } from './video-view.ts';
 import { templateOf } from './video-frame.ts';
 import { Player } from './player.ts';
+import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
 
 declare global {
@@ -86,6 +87,14 @@ let mix: Mix = {
 let mixesCreated = 0;
 /** Album name written into every export of this recording, typically the event. */
 let album = '';
+/**
+ * Where each track played starts, in order. They belong to the recording, not
+ * to a mix, so moving a mix's edges or splitting it never moves one; each mix
+ * has the ones inside it.
+ */
+let tracks: Track[] = [];
+/** The track marker last clicked, which Backspace removes. */
+let selectedTrack: Track | null = null;
 /** Part of the selected mix the detail view shows, in blocks of the recording. */
 let view: Region = { start: 0, end: 0 };
 /** Part of the recording the overview shows, in blocks. */
@@ -114,6 +123,7 @@ function videoMixOf(m: Mix): VideoMixInfo {
     artist: m.artist ?? '',
     album,
     visuals: m.visuals,
+    tracks: mixTracks(m),
     fadeIn: fades(m).in * HOP_SECONDS,
     fadeOut: fades(m).out * HOP_SECONDS,
   };
@@ -277,11 +287,20 @@ function scheduleDraw() {
     };
     const active = grab && 'adjustment' in grab ? grab.adjustment : grab?.made ?? hoveredAdjustment;
     const fine = fineWave(mix.region.start + shown.start, mix.region.start + shown.end);
-    drawDetail(
+    const inMix = tracksIn(mix);
+    markerBoxes = drawDetail(
       detailCanvas, detail, shown, hoverX, playhead - mix.region.start, hoverY,
       active ? mix.adjustments.indexOf(active) : null, fadeDrag ?? hoveredFade,
       fine,
+      inMix.map((track, index) => ({
+        block: track.at / HOP_SECONDS - mix.region.start,
+        label: shownName(track, index),
+        selected: track === selectedTrack,
+        guessed: track.guessed === true,
+      })),
     );
+    // For scripted checks: the tracks of the mix as drawn.
+    detailCanvas.dataset.tracks = JSON.stringify(inMix.map((track) => [Math.round(track.at * 10) / 10, track.name, track.guessed === true]));
     // For scripted checks, which cannot see what the canvas shows.
     detailCanvas.dataset.wave = fine ? 'fine' : 'blocks';
     showFigures();
@@ -465,7 +484,10 @@ function overviewData(r: Recording) {
   const marks = (id: string) => r.checkup.findings.find((finding) => finding.id === id)?.marks ?? [];
   let gain = overviewGains.get(r.measured.peaks);
   if (gain === undefined) overviewGains.set(r.measured.peaks, (gain = displayGain(r.measured.peaks)));
-  return { peaks: r.measured.peaks, body: r.body, gain, gaps: r.gaps, clipping: marks('clipping'), dropouts: marks('dropouts') };
+  return {
+    peaks: r.measured.peaks, body: r.body, gain, gaps: r.gaps, clipping: marks('clipping'), dropouts: marks('dropouts'),
+    tracks: tracks.map((track) => track.at / HOP_SECONDS),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -589,6 +611,7 @@ function showMix() {
   if (document.activeElement !== nameInput) nameInput.value = mix.name;
   const artistInput = $<HTMLInputElement>('mix-artist');
   if (document.activeElement !== artistInput) artistInput.value = mix.artist ?? '';
+  showTrackCount();
 
   const tabs = $('mix-tabs');
   tabs.replaceChildren(
@@ -1052,6 +1075,321 @@ detailCanvas.addEventListener('click', (event) => {
 });
 
 // ---------------------------------------------------------------------------
+// Tracks: a marker where each track played starts, with its name. M puts one
+// at the playhead; they are dragged, named and removed on the mix timeline,
+// and listed, imported and copied in the Tracks dialog.
+
+/** Where the markers' names were last drawn, for pointing at them. */
+let markerBoxes: MarkerBox[] = [];
+let trackDrag: Track | null = null;
+/** How far, in seconds, the pointer was from the marker it took hold of, which it keeps while dragging. */
+let trackDragOffset = 0;
+
+/** The time under the pointer in the detail view, in seconds of the recording. */
+function detailSeconds(event: MouseEvent): number {
+  const rect = detailCanvas.getBoundingClientRect();
+  const fraction = clamp((event.clientX - rect.left - GUTTER) / (rect.width - GUTTER), 0, 1);
+  return (view.start + fraction * (view.end - view.start)) * HOP_SECONDS;
+}
+
+/** The mix's edges in seconds. */
+function mixSeconds(m: Mix): { start: number; end: number } {
+  const { start, end } = edges(m);
+  return { start: start * HOP_SECONDS, end: end * HOP_SECONDS };
+}
+
+/** The tracks that start inside a mix. */
+function tracksIn(m: Mix): Track[] {
+  const { start, end } = mixSeconds(m);
+  return tracks.filter((track) => track.at >= start && track.at < end);
+}
+
+/** The tracks of a mix, timed from its start, as its video and its exports see them. */
+function mixTracks(m: Mix): MixTrack[] {
+  const { start } = mixSeconds(m);
+  return tracksIn(m).map((track) => ({ at: track.at - start, name: track.name }));
+}
+
+function tracksChanged() {
+  tracks.sort((a, b) => a.at - b.at);
+  if (selectedTrack && !tracks.includes(selectedTrack)) selectedTrack = null;
+  showTrackCount();
+  if (tracksDialog.open) showTrackList();
+  scheduleSave();
+  scheduleDraw();
+}
+
+function showTrackCount() {
+  const count = recording ? tracksIn(mix).length : 0;
+  $('tracks-button').textContent = count ? `${count} track${count === 1 ? '' : 's'}` : 'Tracks';
+}
+
+/** Marks a track starting at the playhead; on an existing marker, selects that one instead. */
+function addTrack() {
+  if (!recording) return;
+  const { start, end } = mixSeconds(mix);
+  const at = Math.round(clamp(player.time, start, end - 0.1) * 1000) / 1000;
+  const near = tracksIn(mix).find((track) => Math.abs(track.at - at) < 1);
+  if (near) {
+    selectedTrack = near;
+  } else {
+    selectedTrack = { at, name: '' };
+    tracks.push(selectedTrack);
+  }
+  tracksChanged();
+  $('readout').textContent = `Track ${tracksIn(mix).indexOf(selectedTrack) + 1} starts at ${listTime(at - start)}. Double-click its name to type one.`;
+}
+
+function removeTrack(track: Track) {
+  tracks = tracks.filter((t) => t !== track);
+  tracksChanged();
+}
+
+/** The marker under the pointer in the detail view: on its name, or on its line in the waveform lane. */
+function markerAt(event: MouseEvent): Track | null {
+  const rect = detailCanvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const inMix = tracksIn(mix);
+  const onTab = markerBoxes.find((box) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom);
+  if (onTab) return inMix[onTab.index] ?? null;
+  if (y > detailLanes(rect.height).wave.height) return null;
+  const onLine = markerBoxes.find((box) => Math.abs(x - box.x) <= 3);
+  return onLine ? inMix[onLine.index] ?? null : null;
+}
+
+function describeTrack(track: Track): string {
+  const index = tracksIn(mix).indexOf(track);
+  const where = listTime(track.at - mixSeconds(mix).start);
+  return `${shownName(track, index)} at ${where}${track.guessed ? ', a guess' : ''}: drag to move, double-click to name, Backspace removes`;
+}
+
+detailCanvas.addEventListener('mousedown', (event) => {
+  if (!recording || busy || fadeDrag) return;
+  const track = markerAt(event);
+  if (!track) return;
+  trackDrag = track;
+  trackDragOffset = detailSeconds(event) - track.at;
+  selectedTrack = track;
+  event.preventDefault();
+  scheduleDraw();
+});
+
+window.addEventListener('mousemove', (event) => {
+  if (!trackDrag) return;
+  if (!grabMoved && Math.abs(event.clientX - grabX) < DRAG_START_PX) return;
+  grabMoved = true;
+  const { start, end } = mixSeconds(mix);
+  const at = detailSeconds(event) - trackDragOffset;
+  trackDrag.at = Math.round(clamp(at, start, end - 0.1) * 1000) / 1000;
+  // Put where it belongs by hand: no longer a guess.
+  delete trackDrag.guessed;
+  $('readout').textContent = describeTrack(trackDrag);
+  tracksChanged();
+});
+
+window.addEventListener('mouseup', () => {
+  trackDrag = null;
+});
+
+detailCanvas.addEventListener('mousemove', (event) => {
+  if (grab || fadeDrag || hoveredFade) return;
+  const track = trackDrag ?? markerAt(event);
+  if (!track) return;
+  detailCanvas.style.cursor = 'ew-resize';
+  $('readout').textContent = describeTrack(track);
+});
+
+detailCanvas.addEventListener('click', (event) => {
+  if (grabMoved) return;
+  // A click on a marker plays from where its track starts; anywhere else lets go of it.
+  const track = markerAt(event);
+  if (track) seek(track.at);
+  else if (selectedTrack) {
+    selectedTrack = null;
+    scheduleDraw();
+  }
+});
+
+detailCanvas.addEventListener('dblclick', (event) => {
+  const track = markerAt(event);
+  if (track) nameTrack(track);
+});
+
+/** Opens a field over a marker's name to type it in. */
+function nameTrack(track: Track) {
+  const index = tracksIn(mix).indexOf(track);
+  const box = markerBoxes.find((b) => b.index === index);
+  if (!box) return;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.id = 'track-name-edit';
+  input.spellcheck = false;
+  input.value = track.name;
+  input.placeholder = 'Artist - Title';
+  input.style.left = `${box.x}px`;
+  input.style.top = `${box.top - 3}px`;
+  $('detail-area').append(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (keep: boolean) => {
+    if (done) return;
+    done = true;
+    if (keep && input.value.trim() !== track.name) {
+      track.name = input.value.trim();
+      tracksChanged();
+    }
+    input.remove();
+  };
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') finish(true);
+    else if (event.key === 'Escape') finish(false);
+    event.stopPropagation();
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+// The Tracks dialog: every track of the mix in a list, with what can be done with them all.
+
+const tracksDialog = $<HTMLDialogElement>('tracks-dialog');
+
+function showTrackList() {
+  const { start, end } = mixSeconds(mix);
+  const inMix = tracksIn(mix);
+  $('tracks-title').textContent = `Tracks in ${mix.name}`;
+  const rows = inMix.map((track, index) => {
+    const row = document.createElement('div');
+    row.className = track.guessed ? 'track-row guessed' : 'track-row';
+    const number = document.createElement('span');
+    number.className = 'track-number';
+    number.textContent = String(index + 1);
+    const time = document.createElement('input');
+    time.type = 'text';
+    time.className = 'track-time';
+    time.value = listTime(index === 0 ? 0 : track.at - start);
+    time.title = index === 0
+      ? 'The first track counts from the start of the mix, wherever its marker is'
+      : track.guessed ? 'A guess: where the list was spread evenly. Type the time, or drag the marker on the mix.' : 'Where the track starts, from the start of the mix';
+    time.addEventListener('change', () => {
+      const seconds = parseTime(time.value);
+      if (seconds === null || start + seconds >= end) {
+        time.value = listTime(track.at - start);
+        return;
+      }
+      track.at = Math.round((start + seconds) * 1000) / 1000;
+      delete track.guessed;
+      tracksChanged();
+    });
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.className = 'track-name';
+    name.value = track.name;
+    name.placeholder = `Track ${index + 1}`;
+    name.spellcheck = false;
+    name.addEventListener('input', () => {
+      track.name = name.value;
+      showTrackCount();
+      scheduleSave();
+      scheduleDraw();
+    });
+    const remove = document.createElement('button');
+    remove.className = 'icon';
+    remove.title = 'Remove this track';
+    remove.setAttribute('aria-label', 'Remove this track');
+    remove.textContent = '×';
+    remove.addEventListener('click', () => removeTrack(track));
+    row.append(number, time, name, remove);
+    return row;
+  });
+  const list = $('tracks-list');
+  list.replaceChildren(...rows);
+  if (rows.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'tracks-empty';
+    empty.textContent = 'No tracks yet. Press M while the mix plays to mark where each track starts, or import the list from your DJ software.';
+    list.append(empty);
+  }
+  const guessed = inMix.filter((track) => track.guessed).length;
+  const { problems } = youtubeList(mixTracks(mix), end - start);
+  const notes = [
+    ...(guessed ? [`${guessed === 1 ? 'One place is a guess' : `${guessed} places are guesses`}: drag ${guessed === 1 ? 'its marker' : 'their markers'} on the mix to where the track starts.`] : []),
+    ...(inMix.length ? problems : []),
+  ];
+  $('tracks-note').textContent = notes.join(' ');
+  $<HTMLButtonElement>('tracks-copy').disabled = inMix.length === 0;
+  $<HTMLButtonElement>('tracks-spread').disabled = inMix.length < 2;
+  $<HTMLButtonElement>('tracks-clear').disabled = inMix.length === 0;
+}
+
+/**
+ * Puts a list into the mix. With a time for every track, the markers go where
+ * it says, in place of those there were. Without, the names fill the markers
+ * already placed, in order; any more are spread evenly over the rest of the
+ * mix, as guesses to drag into place.
+ */
+function importTracks(listed: ListedTrack[]): string {
+  if (listed.length === 0) return 'No tracks found in that.';
+  const { start, end } = mixSeconds(mix);
+  const inMix = tracksIn(mix);
+  if (listed.every((track) => track.at !== null)) {
+    const fitting = listed.filter((track) => start + track.at! < end);
+    tracks = tracks.filter((track) => !inMix.includes(track));
+    tracks.push(...fitting.map((track) => ({ at: Math.round((start + track.at!) * 1000) / 1000, name: track.name })));
+    tracksChanged();
+    const left = listed.length - fitting.length;
+    return `${fitting.length} tracks placed at their times.${left ? ` ${left} start after the end of the mix and were left out.` : ''}`;
+  }
+  listed.slice(0, inMix.length).forEach((track, i) => (inMix[i].name = track.name));
+  const extra = listed.slice(inMix.length);
+  const from = inMix.length ? inMix[inMix.length - 1].at : start;
+  const gaps = spreadEvenly(extra.length + (inMix.length ? 1 : 0), end - from);
+  extra.forEach((track, i) => tracks.push({ at: Math.round((from + gaps[i + (inMix.length ? 1 : 0)]) * 1000) / 1000, name: track.name, guessed: true }));
+  tracksChanged();
+  return extra.length
+    ? `${listed.length} tracks read. The list says nothing of when each was played, so ${extra.length === listed.length ? 'they are' : 'the new ones are'} spread evenly for now: drag each marker to where its track starts.`
+    : `${listed.length} names given to the markers there were, in order.`;
+}
+
+$('tracks-button').addEventListener('click', () => {
+  if (!recording) return;
+  showTrackList();
+  $('tracks-status').textContent = '';
+  tracksDialog.showModal();
+});
+$('tracks-close').addEventListener('click', () => tracksDialog.close());
+$('tracks-import').addEventListener('click', async () => {
+  try {
+    const text = await api.openTracklist();
+    if (text !== null) $('tracks-status').textContent = importTracks(parseTracklist(text));
+  } catch (error) {
+    $('tracks-status').textContent = `Could not read that list: ${message(error)}`;
+  }
+});
+$('tracks-paste').addEventListener('click', async () => {
+  $('tracks-status').textContent = importTracks(parseTracklist(await api.readClipboard()));
+});
+$('tracks-spread').addEventListener('click', () => {
+  const { start, end } = mixSeconds(mix);
+  const inMix = tracksIn(mix);
+  spreadEvenly(inMix.length, end - start).forEach((at, i) => Object.assign(inMix[i], { at: Math.round((start + at) * 1000) / 1000, guessed: true }));
+  tracksChanged();
+  $('tracks-status').textContent = 'Spread evenly over the mix. Drag each marker to where its track starts.';
+});
+$('tracks-clear').addEventListener('click', () => {
+  const inMix = tracksIn(mix);
+  tracks = tracks.filter((track) => !inMix.includes(track));
+  tracksChanged();
+  $('tracks-status').textContent = 'All the tracks of this mix are removed. Undo brings them back.';
+});
+$('tracks-copy').addEventListener('click', () => {
+  const { start, end } = mixSeconds(mix);
+  const { text, problems } = youtubeList(mixTracks(mix), end - start);
+  api.writeClipboard(text);
+  $('tracks-status').textContent = `Copied, ready for the video's description.${problems.length ? ` ${problems.join(' ')}` : ''}`;
+});
+
+// ---------------------------------------------------------------------------
 // Manual adjustments: stretches of the gain lane raised or lowered by hand
 
 const MIN_ADJUSTMENT_BLOCKS = Math.round(5 / HOP_SECONDS);
@@ -1488,7 +1826,7 @@ $('hear-levelled').addEventListener('click', () => setHearLevelled(true));
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
   // While a dialog is up, the keys belong to it.
-  if (exportDialog.open || checkupDialog.open || helpDialog.open) return;
+  if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open) return;
   if (event.code === 'Space') {
     event.preventDefault();
     // Otherwise a focused button would also act on the same key press.
@@ -1521,10 +1859,13 @@ window.addEventListener('keydown', (event) => {
     splitAtPlayhead();
   } else if ((event.code === 'KeyI' || event.code === 'KeyO') && !event.metaKey && !event.ctrlKey) {
     markEdge(event.code === 'KeyI' ? 'start' : 'end');
+  } else if (event.code === 'KeyM' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    addTrack();
   } else if (event.code === 'Backspace' || event.code === 'Delete') {
     event.preventDefault();
-    // The stretch under the pointer, if there is one; otherwise the mix.
+    // The stretch under the pointer, if there is one; then the track marker last clicked; otherwise the mix.
     if (hoveredAdjustment) removeAdjustment(hoveredAdjustment);
+    else if (selectedTrack) removeTrack(selectedTrack);
     else deleteMix();
   } else if (event.code === 'Home' || event.code === 'Enter') {
     event.preventDefault();
@@ -1810,6 +2151,8 @@ function closeRecording() {
   recording = null;
   finePieces.clear();
   mixes = [];
+  tracks = [];
+  selectedTrack = null;
   detail = null;
   drag = null;
   grab = null;
@@ -1853,6 +2196,7 @@ interface Session {
   mixesCreated: number;
   mixes: Mix[];
   album?: string;
+  tracks?: Track[];
 }
 
 interface Defaults {
@@ -1874,6 +2218,7 @@ function saveNow() {
     mixesCreated,
     mixes,
     album,
+    tracks,
   };
   const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb, ...(mix.loudness ? { loudness: mix.loudness } : {}) };
   api.remember(recording.path, { session, defaults: { ...defaults, export: exportSettings } });
@@ -1947,6 +2292,10 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
       ...(visualsChoice(m.visuals) ? { visuals: visualsChoice(m.visuals)! } : {}),
     }));
     album = typeof session!.album === 'string' ? session!.album : '';
+    tracks = (Array.isArray(session!.tracks) ? session!.tracks : [])
+      .filter((t) => isNumber(t?.at) && t.at >= 0 && t.at <= total * HOP_SECONDS && typeof t.name === 'string')
+      .map((t) => ({ at: Math.round(t.at * 1000) / 1000, name: t.name, ...(t.guessed === true ? { guessed: true } : {}) }))
+      .sort((a, b) => a.at - b.at);
     mixesCreated = Math.max(mixes.length, isNumber(session!.mixesCreated) ? session!.mixesCreated : 0);
     const selected = isNumber(session!.selected) ? clamp(session!.selected, 0, mixes.length - 1) : 0;
     return { selected, fromLastTime: true };
@@ -1954,6 +2303,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
 
   mixes = [{ name: 'Mix 1', region: { start: 0, end: total }, ...defaults, adjustments: [] }];
   album = '';
+  tracks = [];
   mixesCreated = 1;
   return { selected: 0, fromLastTime: false };
 }
@@ -1966,8 +2316,9 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
 // drag or slider movement undoes in one go.
 
 interface Step {
-  /** The mixes as JSON, which is also what tells two states apart. */
+  /** The mixes and the tracks as JSON, which is also what tells two states apart. */
   mixes: string;
+  tracks: string;
   selected: number;
   mixesCreated: number;
 }
@@ -1979,14 +2330,14 @@ let redoSteps: Step[] = [];
 let settled: Step | null = null;
 
 function snapshot(): Step {
-  return { mixes: JSON.stringify(mixes), selected: Math.max(0, mixes.indexOf(mix)), mixesCreated };
+  return { mixes: JSON.stringify(mixes), tracks: JSON.stringify(tracks), selected: Math.max(0, mixes.indexOf(mix)), mixesCreated };
 }
 
 /** Records the changes since the last settled state, if any, as one undo step. */
 function settleHistory() {
   if (!settled) return;
   const now = snapshot();
-  if (now.mixes === settled.mixes) {
+  if (now.mixes === settled.mixes && now.tracks === settled.tracks) {
     // Selecting another mix is not a change worth a step, but is remembered.
     settled = now;
     return;
@@ -2006,6 +2357,8 @@ function showHistory() {
 function applyStep(step: Step) {
   $('export-status').textContent = '';
   mixes = JSON.parse(step.mixes);
+  tracks = JSON.parse(step.tracks);
+  selectedTrack = null;
   mixesCreated = step.mixesCreated;
   settled = step;
   grab = null;
@@ -2087,6 +2440,8 @@ const HELP: [string, [string, string][]][] = [
     ['Drag a marked stretch up or down', 'Raise or lower it'],
     ['Drag a stretch\'s edge', 'Make it longer or shorter'],
     ['Double-click a stretch', 'Remove it (or point at it and press Backspace)'],
+    ['Drag a track marker', 'Move where the track starts'],
+    ['Double-click a track\'s name', 'Type it in, as Artist - Title'],
   ]],
   ['Playback', [
     ['Space', 'Play or pause'],
@@ -2095,13 +2450,14 @@ const HELP: [string, [string, string][]][] = [
     [`Shift+← →, ${OPTION}+← →`, '30 seconds, 1 second'],
     ['I, O', 'Start, or end, the mix at the playhead'],
     [`${COMMAND}E`, 'Split the mix at the playhead'],
+    ['M', 'Mark a track starting at the playhead'],
     ['J, K, L', 'Run backwards, stop, run forwards; press J or L again to go faster'],
     ['Return', 'Jump to the start of the mix'],
     ['End', 'Jump to just before its end'],
   ]],
   ['Everything else', [
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
-    ['Backspace', 'Delete the selected mix; the only mix goes back to the whole recording'],
+    ['Backspace', 'Delete the track marker last clicked, or else the selected mix; the only mix goes back to the whole recording'],
     ['Tab', 'Switch between the Mastering and the Video view'],
     [`${COMMAND}O`, 'Open a recording'],
     [`Shift+${COMMAND}W`, 'Close the recording'],
@@ -2390,6 +2746,8 @@ function encodeOptions(m: Mix, track?: string): EncodeOptions {
     sampleRate: sampleRate ?? undefined,
     bitDepth: format === 'wav' || format === 'flac' ? bitDepth : undefined,
     bitrateKbps: format === 'mp3' ? mp3Kbps : format === 'm4a' || format === 'mp4' ? aacKbps : undefined,
+    // Players that know chapters show the tracks; formats that cannot carry them ignore this.
+    chapters: mixTracks(m).length ? chaptersOf(mixTracks(m), mixSeconds(m).end - mixSeconds(m).start) : undefined,
   };
 }
 
