@@ -140,8 +140,22 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
         { type: 'gradient', name: 'Background', params: { kind: 'linear', angle: 90, colour1: '#0b0c10', colour2: 'darken(colour1, 0.7)' } },
         {
           type: 'waveform',
+          name: 'Wave behind',
+          // Larger and darker, and over less time than the wave in front, so it moves past faster.
+          params: {
+            style: 'mirrored', seconds: 6, y: 50, width: 100, height: '62 + 10 * smooth(bass, 0.04, 0.8)',
+            colour: 'alpha(oklch(0.36, 0.7 * chroma(colour1), hueOf(colour1)), 0.5)',
+          },
+        },
+        {
+          type: 'waveform',
           name: 'Wave',
-          params: { style: 'mirrored', seconds: 8, y: 50, width: 92, height: '34 + 6 * smooth(bass, 0.02, 0.4)', colour: 'alpha(colour1, 0.9)' },
+          params: { style: 'mirrored', seconds: 8, y: 50, width: 100, height: '34 + 6 * smooth(bass, 0.02, 0.4)', colour: 'alpha(colour1, 0.9)' },
+        },
+        {
+          type: 'waveform',
+          name: 'Wave',
+          params: { style: 'mirrored', seconds: 8, y: 50, width: 100, height: '5 + 10 * smooth(bass, 0.02, 0.4)', colour: 'alpha(lighten(colour1, 0.01), 1)' },
         },
         {
           type: 'spectrum',
