@@ -259,10 +259,14 @@ npm keeps in step). `npm version` updates both, commits, and creates the
 matching tag; pushing the tag makes GitHub build and publish the installers.
 
 ```bash
+node scripts/screenshot.mjs vp-test.wav   # a new picture for the website; commit it
 npm version minor -m "Release %s"   # or: patch, major, or an exact number
 git push --follow-tags
 ```
 
+- Always take a new screenshot first (see "The website" below), so that the
+  website and the README show the window as it is in this release. Commit it
+  before running `npm version`.
 - The working folder has to be clean first.
 - `npm version` turns "Not released yet" in `CHANGELOG.md` into a heading for
   the new version (`scripts/release-changelog.mjs`), and stops if there is
@@ -281,15 +285,18 @@ release and whenever `site/` or `CHANGELOG.md` changes. Run the script locally t
 page (it needs the GitHub CLI signed in).
 
 `site/screenshot.png` is also the picture in the README. It is taken with the
-app's check mode at twice the size:
+app's check mode at twice the size, by one command, from a recording of about
+an hour (`vp-test.wav` among the local test recordings):
 
 ```bash
-DJMASTER_SHOT=site/screenshot.png DJMASTER_SHOT_SCALE=2 DJMASTER_SHOT_DATA=/tmp/djm-shot \
-DJMASTER_SHOT_SCRIPT="<script that sets up a good-looking state>" \
-npx electron . "Saturday night.wav"
+node scripts/screenshot.mjs vp-test.wav
 ```
 
-The file name of the recording shows in the picture, so use a neutral one.
+The recording is shown as "Saturday night.wav", and the artist and track
+names in the picture are made up, so nothing real ends up on the website.
+`scripts/screenshot/setup.js` sets up what is shown; when the window gains
+something worth showing, add it there. Look at the picture before committing
+it: a script that went wrong still takes one.
 
 ## Working agreements
 

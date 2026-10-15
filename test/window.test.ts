@@ -596,7 +596,7 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
   // A longer one, stopped part way: no file is left.
   const stopped = join(work, 'stopped');
   await mkdir(stopped);
-  const said = await runApp({ recording: mix, data: await fresh(), exportFolder: stopped, timeoutMs: 120_000 }, async (page) => {
+  const said = await runApp({ recording: mix, data: await fresh(), exportFolder: stopped, timeoutMs: 180_000 }, async (page) => {
     page.key('Enter');
     for (let i = 0; i < 8; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
@@ -606,8 +606,9 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
     document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
     page.click('export-go');
-    // Into the picture, past the sound.
-    await page.until(() => parseFloat(page.element('progress-bar').style.width) > 30, 'the picture to be under way', 60_000);
+    // Into the picture, past the sound, which is the first tenth. Only just: a machine
+    // without a graphics card, as GitHub's Windows one, draws the picture slowly.
+    await page.until(() => parseFloat(page.element('progress-bar').style.width) > 12, 'the picture to be under way', 120_000);
     page.key('Escape', { key: 'Escape' });
     await page.until(() => /cancelled/.test(page.text('export-status')), 'the export to stop');
     await page.wait(500);
