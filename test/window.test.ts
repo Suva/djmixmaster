@@ -366,7 +366,7 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
       fields: [...page.element('video-fields').querySelectorAll('label')].map((label) => label.textContent),
     };
   });
-  assert.deepEqual(again, { template: 'ring', fields: ['Colour', 'Logo'] }, 'kept with the mix and back on the next start');
+  assert.deepEqual(again, { template: 'ring', fields: ['Colour', 'Font', 'Logo'] }, 'kept with the mix and back on the next start');
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {

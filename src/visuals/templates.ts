@@ -27,6 +27,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       name: 'Glitter',
       fields: [
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#b43cff' },
+        { key: 'font', label: 'Font', kind: 'font', default: 'Unbounded' },
         logo,
         { key: 'sparkle', label: 'Sparkle', kind: 'number', default: 1, min: 0, max: 3 },
       ],
@@ -61,7 +62,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           type: 'text',
           name: 'Artist',
           params: {
-            text: '%artist%', y: 72, size: 7, weight: 800, letterSpacing: 4, case: 'upper',
+            text: '%artist%', font: '%font%', y: 72, size: 7, weight: 800, letterSpacing: 4, case: 'upper',
             colour: '#ffffff', shadowColour: 'alpha(lighten(colour1, 0.2), 0.8)', shadowBlur: 2,
           },
         },
@@ -82,6 +83,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       name: 'Spectrum ring',
       fields: [
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#3ddc97' },
+        { key: 'font', label: 'Font', kind: 'font', default: 'Orbitron' },
         logo,
       ],
       layers: [
@@ -106,7 +108,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
         {
           type: 'text',
           name: 'Artist',
-          params: { text: '%artist%', y: 81, size: 6, weight: 700, colour: '#ffffff' },
+          params: { text: '%artist%', font: '%font%', y: 81, size: 6, weight: 700, colour: '#ffffff' },
         },
         {
           type: 'text',
@@ -125,6 +127,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       name: 'Waveform',
       fields: [
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#ff6a3d' },
+        { key: 'font', label: 'Font', kind: 'font', default: 'Bebas Neue' },
       ],
       layers: [
         { type: 'gradient', name: 'Background', params: { kind: 'linear', angle: 90, colour1: '#0b0c10', colour2: 'darken(colour1, 0.7)' } },
@@ -144,7 +147,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
         {
           type: 'text',
           name: 'Artist',
-          params: { text: '%artist%', x: 4, y: 7, anchor: 'top left', align: 'left', size: 5, weight: 800, colour: '#ffffff' },
+          params: { text: '%artist%', font: '%font%', x: 4, y: 7, anchor: 'top left', align: 'left', size: 6, weight: 800, colour: '#ffffff' },
         },
         {
           type: 'text',

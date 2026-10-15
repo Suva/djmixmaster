@@ -1,7 +1,7 @@
 // Bundles the desktop app into dist/: three Node-side entry points for
 // Electron (main, preload, worker) and the browser bundles for the window and its audio worklet.
 import { build } from 'esbuild';
-import { copyFile, mkdir } from 'node:fs/promises';
+import { copyFile, mkdir, readdir } from 'node:fs/promises';
 
 await mkdir('dist', { recursive: true });
 
@@ -27,4 +27,10 @@ await build({
 
 for (const file of ['index.html', 'styles.css', 'exporter.html']) {
   await copyFile(`src/app/renderer/${file}`, `dist/${file}`);
+}
+
+// The fonts for videos, with their licences, which have to travel with them.
+await mkdir('dist/fonts', { recursive: true });
+for (const file of await readdir('assets/fonts').catch(() => [])) {
+  if (/\.(ttf|txt)$/.test(file)) await copyFile(`assets/fonts/${file}`, `dist/fonts/${file}`);
 }
