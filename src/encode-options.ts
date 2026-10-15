@@ -15,6 +15,8 @@ export interface EncodeOptions {
   album?: string;
   /** Position in the album, as a number or as "3/8". */
   track?: string;
+  /** The tracks played, as chapters, in seconds from the start. Only MP3 and AAC files can carry them. */
+  chapters?: { start: number; end: number; title: string }[];
 }
 
 export const DEFAULT_BIT_DEPTH = 16;

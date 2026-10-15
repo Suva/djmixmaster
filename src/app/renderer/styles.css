@@ -355,3 +355,22 @@ h2 {
 .font-sample { font-size: 18px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; color: var(--text); }
 .font-name { font-size: 11px; color: var(--muted); }
 
+
+/* Tracks: the dialog's list, and the field that opens over a marker's name on the mix. */
+#tracks-dialog { width: 720px; }
+#tracks-list { display: flex; flex-direction: column; gap: 4px; max-height: 52vh; overflow-y: auto; margin-bottom: 4px; }
+.track-row { display: flex; align-items: center; gap: 8px; }
+.track-number { width: 22px; flex: none; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular-nums; }
+.track-row.guessed .track-time { color: var(--muted); font-style: italic; }
+.track-row button.icon { flex: none; width: 26px; height: 26px; padding: 0; font-size: 15px; line-height: 1; }
+.tracks-empty { margin: 8px 0; color: var(--muted); }
+#tracks-dialog .note { min-height: 0; margin: 8px 0 14px; color: var(--muted); }
+#tracks-dialog .dialog-buttons { flex-wrap: wrap; }
+#tracks-status { min-height: 16px; margin: 10px 0 0; color: var(--muted); }
+#track-name-edit {
+  position: absolute; z-index: 5; width: 240px;
+  font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text); background: var(--panel); border: 1px solid var(--accent); border-radius: 4px; padding: 3px 6px;
+  user-select: text;
+}

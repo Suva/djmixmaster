@@ -40,6 +40,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/gain-curve.ts` | Full-energy envelope, gain curve, hand adjustments |
 | `src/level.ts` | Combines the above; automatic target with headroom; bass correction |
 | `src/gaps.ts` | Finds silences between sets |
+| `src/tracks.ts` | The tracks in a mix: reading track lists, chapters, the list for YouTube |
 | `src/features.ts` | What the visuals of a video move to: spectrum, level and beats |
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
@@ -80,7 +81,7 @@ and curves in the code are block indexes unless a name says seconds.
   dependency, and the app is bundled by esbuild. Adding a runtime dependency
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
-  `level.ts`, `gaps.ts`, `features.ts`, `visuals/*.ts` (`draw.ts` needs a canvas, so it is for windows only), `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
+  `level.ts`, `gaps.ts`, `tracks.ts`, `features.ts`, `visuals/*.ts` (`draw.ts` needs a canvas, so it is for windows only), `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
   `diagnostics.ts`, `checkup.ts` and `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
@@ -127,6 +128,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
+| `DJMASTER_SHOT_TRACKLIST=<file>` | Answer the dialog for a track list to import with this file |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
 
 ```bash
@@ -166,7 +168,7 @@ Linux), the same for `npm start` and the packaged app.
 | Inside it | What |
 |---|---|
 | `analyses/` | One measurement per recording, keyed on its fingerprint, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
-| `sessions/` | The mixes, settings and hand adjustments per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
+| `sessions/` | The mixes, settings, hand adjustments and track markers per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |

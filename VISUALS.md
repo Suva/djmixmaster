@@ -175,9 +175,10 @@ underlines it. Number values in text (tempo, say) are shown rounded.
 | `%tempo%` | Beats per minute at that moment |
 | `%anyField%` | A field the template itself asks for, under the name its designer gave it |
 
-The track variables need track markers, which belong with the cue-sheet task
-in TASKS.md: placed by hand, or imported from a rekordbox history. Without
-markers they are empty, and a layer can be set to hide itself when its text is.
+The track variables come from the mix's track markers (see the README, "The
+tracks in a mix"). Before the first marker it is the first track that plays.
+Without markers, or for a track not named, they are empty, and a layer can be
+set to hide itself when its text is.
 
 Number parameters use the same names without the percent signs, as in an
 expression: `tempo`, `progress`.
@@ -364,8 +365,7 @@ values into the ones a frame gets. None draws anything yet.
   before. The view draws only while shown.
 - Not yet: a template file to load or save, the
   editor, the waveform as a true oscilloscope (it shows the level, not the
-  wave), the glow's threshold (approximated), and track markers for
-  `%currentTrack%`, which stays empty.
+  wave), and the glow's threshold (approximated).
 
 ## The MP4 export, as built
 

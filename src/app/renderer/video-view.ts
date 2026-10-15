@@ -364,6 +364,9 @@ export class VideoView {
       ctx.fillStyle = x < played ? '#3ddc97' : '#4a505c';
       ctx.fillRect(x, (height - h) / 2, Math.max(1, column - ratio), h);
     }
+    // Where each track starts.
+    ctx.fillStyle = 'rgba(230, 232, 236, 0.55)';
+    for (const track of mix.tracks) ctx.fillRect(Math.round((track.at / Math.max(1e-9, mix.end - mix.start)) * width), 0, Math.max(1, ratio), 6 * ratio);
     ctx.fillStyle = '#e6e8ec';
     ctx.fillRect(Math.round(played), 0, Math.max(1, ratio * 1.5), height);
     // For scripted checks.

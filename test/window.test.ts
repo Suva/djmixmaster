@@ -443,6 +443,86 @@ test('the picture fades in from black with the mix', { skip }, async () => {
   assert.ok(seen.halfway > seen.start && seen.halfway < seen.middle * 0.8, `dimmer halfway through the fade: ${JSON.stringify(seen)}`);
 });
 
+test('tracks are marked with M, named, moved and removed on the mix, undone, and kept', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    const detail = page.element('detail');
+    const tracks = () => JSON.parse(detail.dataset.tracks ?? '[]') as [number, string, boolean][];
+    page.key('Enter');
+    for (let i = 0; i < 6; i++) page.key('ArrowRight');
+    page.key('KeyM');
+    for (let i = 0; i < 6; i++) page.key('ArrowRight');
+    page.key('KeyM');
+    await page.wait(200);
+    const marked = { tracks: tracks(), button: page.text('tracks-button') };
+
+    // The second marker's name tab, at the foot of the waveform lane, with the whole mix in view.
+    const box = detail.getBoundingClientRect();
+    const length = Number(page.element('play-time').dataset.length!.split(':').reduce((sum, part) => sum * 60 + Number(part), 0));
+    const x = box.left + 48 + (60 / length) * (box.width - 48) + 6;
+    const y = box.top + Math.round((box.height - 18) * 0.38) - 8;
+    detail.dispatchEvent(new MouseEvent('dblclick', { clientX: x, clientY: y, bubbles: true }));
+    const field = page.element<HTMLInputElement>('track-name-edit');
+    field.value = 'Six Ou Sept - Big Brother is Raving You';
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await page.wait(100);
+    const named = tracks()[1][1];
+
+    // Dragged 30 seconds later.
+    detail.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: x + 20, clientY: y, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: x + (30 / length) * (box.width - 48), clientY: y, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    detail.dispatchEvent(new MouseEvent('click', { clientX: x, clientY: y, bubbles: true }));
+    await page.settle();
+    const moved = tracks()[1][0];
+
+    // The marker last clicked goes with Backspace, and comes back with undo.
+    page.key('Backspace');
+    await page.settle();
+    const removed = tracks().length;
+    page.click('undo');
+    await page.wait(200);
+    const back = tracks().length;
+    const mixes = page.tabs().length;
+    await page.settle();
+    return { marked, named, moved, removed, back, mixes };
+  });
+  assert.deepEqual(seen.marked, { tracks: [[30, '', false], [60, '', false]], button: '2 tracks' });
+  assert.equal(seen.named, 'Six Ou Sept - Big Brother is Raving You');
+  assert.ok(Math.abs(seen.moved - 90) < 1, `moved to ${seen.moved}`);
+  assert.equal(seen.removed, 1, 'Backspace removed the track, not the mix');
+  assert.equal(seen.back, 2);
+  assert.equal(seen.mixes, 1);
+
+  const again = await runApp({ recording: mix, data }, (page) => page.element('detail').dataset.tracks);
+  assert.equal(again, JSON.stringify([[30, '', false], [seen.moved, 'Six Ou Sept - Big Brother is Raving You', false]]), 'kept for the next time');
+});
+
+test('a track list from DJ software is spread over the mix, to be dragged into place', { skip }, async () => {
+  // As Rekordbox writes its history as text: UTF-16 with a byte-order mark, a column per field.
+  const list = join(work, 'History.txt');
+  const rows = ['#\tArtwork\tArtist\tTrack Title\tBPM', '1\t\tSix Ou Sept\tBig Brother is Raving You\t170.00', '2\t\tChôKô\tPower Portal\t170.00', '3\t\tEnko\tVariscan\t155.00'];
+  await writeFile(list, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(rows.join('\r\n'), 'utf16le')]));
+  const seen = await runApp({ recording: mix, data: await fresh(), tracklist: list }, async (page) => {
+    page.click('tracks-button');
+    page.click('tracks-import');
+    await page.until(() => page.text('tracks-status') !== '', 'the list to be read');
+    const names = [...document.querySelectorAll<HTMLInputElement>('.track-name')].map((input) => input.value);
+    const times = [...document.querySelectorAll<HTMLInputElement>('.track-time')].map((input) => input.value);
+    page.click('tracks-close');
+    await page.wait(100);
+    return { names, times, status: page.text('tracks-status'), button: page.text('tracks-button'), drawn: page.element('detail').dataset.tracks };
+  });
+  const third = MIX_SECONDS / 3;
+  const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  assert.deepEqual(seen.names, ['Six Ou Sept - Big Brother is Raving You', 'ChôKô - Power Portal', 'Enko - Variscan']);
+  assert.deepEqual(seen.times, ['0:00', clock(third), clock(2 * third)]);
+  assert.match(seen.status, /^3 tracks read\. .*spread evenly/);
+  assert.equal(seen.button, '3 tracks');
+  assert.ok(JSON.parse(seen.drawn!).every((track: [number, string, boolean]) => track[2]), 'all marked as guesses');
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');
@@ -469,6 +549,11 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
     await page.wait(100);
     page.key('KeyO');
     await page.wait(100);
+    // Two tracks in the first mix, which become its chapters.
+    page.key('Enter');
+    page.key('KeyM');
+    page.key('ArrowRight');
+    page.key('KeyM');
     page.key('Enter');
     for (let i = 0; i < 2; i++) page.key('ArrowRight');
     await page.wait(100);
@@ -500,6 +585,10 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
     }
     assert.match(described, /Duration: 00:00:10\.00/, `${file} is ten seconds long`);
     assert.match(described, /Video: h264.*1920x1080.*30 fps/, `${file} has its picture`);
+    if (file.includes('Mix 1')) {
+      assert.match(described, /Chapter #0:0: start 0\.0+, end 5\.0+[\s\S]*title\s*: Track 1/, 'the first track is a chapter');
+      assert.match(described, /Chapter #0:1: start 5\.0+, end 10\.0+[\s\S]*title\s*: Track 2/, 'and so is the second');
+    }
     assert.match(described, /Audio: aac/, `${file} has its sound`);
     assert.match(described, /title\s*: Test mix - Mix/, `${file} keeps its tags`);
   }

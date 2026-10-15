@@ -70,13 +70,14 @@ favourite setup is also worth keeping for the next recording.
 
 ### Cue sheets on export — medium
 
-Exports carry title, artist, album and track number, but nothing about the
-tracks inside a mix.
+MP3, AAC and MP4 exports carry the mix's track markers as chapters; WAV and
+FLAC cannot hold chapters, so nothing of the tracks reaches them.
 
-- Optionally write a `.cue` file next to each export.
-- A cue sheet needs track boundaries. The steps in the gain curve hint at
-  them but are not reliable on their own; start with markers placed by hand
-  and consider suggestions later.
+- Optionally write a `.cue` file next to each export, from the same markers
+  (`chaptersOf` in `src/tracks.ts`).
+- Placing markers by hand is the only way for now. The steps in the gain
+  curve, or changes of tempo, could suggest places, but are not reliable on
+  their own.
 
 Done when a player that reads cue sheets shows the tracks of an exported mix.
 
@@ -205,13 +206,6 @@ Remove a microphone announcement, a train wreck or a technical stop, and
 join the two sides with a crossfade. More work than it sounds: every
 position after the cut shifts, which touches the analysis, the saved
 session, hand adjustments and the preview.
-
-### Track lists from rekordbox
-
-Import a rekordbox history, show its tracks as markers on the timeline to
-drag into place, and export a text list or a cue sheet. A history export
-gives the order and the names but most likely not when each track started.
-Waiting on a look at a real export. Related to "Cue sheets on export".
 
 ### Suggest handovers without a gap
 

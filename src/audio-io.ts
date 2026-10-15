@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, readFileSync } from 'node:fs';
-import { setPriority } from 'node:os';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { setPriority, tmpdir } from 'node:os';
 import { delimiter, extname, join } from 'node:path';
 import {
   DEFAULT_AAC_KBPS, DEFAULT_BIT_DEPTH, DEFAULT_MP3_KBPS, type EncodeOptions,
@@ -228,16 +228,40 @@ function tagArgs(output: string, options: EncodeOptions): string[] {
   return args;
 }
 
+/** Formats whose files can carry chapters: ID3 chapter frames, and those of MP4. FLAC and WAV cannot. */
+const CHAPTER_FORMATS = ['.mp3', '.m4a'];
+
+/**
+ * Writes chapters as ffmpeg's metadata file, for it to read as a second
+ * input. Returns its path, or null when there are none to write.
+ */
+function chapterFile(output: string, options: EncodeOptions): string | null {
+  const chapters = options.chapters ?? [];
+  if (chapters.length === 0 || !CHAPTER_FORMATS.includes(extname(output).toLowerCase())) return null;
+  // Characters that mean something in the file are escaped with a backslash.
+  const escape = (text: string) => text.replace(/[=;#\\\n]/g, (c) => `\\${c}`);
+  const ms = (seconds: number) => Math.max(0, Math.round(seconds * 1000));
+  const text = [';FFMETADATA1', ...chapters.flatMap((chapter) => [
+    '[CHAPTER]', 'TIMEBASE=1/1000', `START=${ms(chapter.start)}`, `END=${ms(Math.max(chapter.end, chapter.start + 0.001))}`, `title=${escape(chapter.title)}`,
+  ])].join('\n');
+  const path = join(tmpdir(), `djm-chapters-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+  writeFileSync(path, `${text}\n`);
+  return path;
+}
+
 /** Encodes interleaved stereo float32 at `sampleRate` to a file, picking the codec from the extension. */
 export function encode(output: string, sampleRate: number, options: EncodeOptions = {}): Encoder {
+  const chapters = chapterFile(output, options);
   const args = [
     '-v', 'error', '-y',
     '-f', 'f32le', '-ar', String(sampleRate), '-ac', String(CHANNELS), '-i', '-',
+    ...(chapters ? ['-f', 'ffmetadata', '-i', chapters, '-map', '0:a', '-map_chapters', '1'] : []),
     ...codecArgs(output, sampleRate, options),
     ...tagArgs(output, options),
     output,
   ];
   const child = spawn(ffmpeg(), args, { stdio: ['pipe', 'ignore', 'pipe'] });
+  if (chapters) child.on('close', () => rmSync(chapters, { force: true }));
   let err = '';
   child.stderr.on('data', (d) => (err += d));
   // A dying encoder surfaces through its exit code; don't crash on the broken pipe first.

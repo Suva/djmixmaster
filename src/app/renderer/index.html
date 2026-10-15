@@ -59,6 +59,7 @@
         <div class="region-bar">
           <label>Name <input id="mix-name" type="text" spellcheck="false"></label>
           <label title="Who played this mix. Goes into the exported file's tags, and a video can show it.">Artist <input id="mix-artist" type="text" spellcheck="false" placeholder="Who played it"></label>
+          <button id="tracks-button" title="The tracks played in this mix: their names, where each starts, a list for YouTube. M marks one at the playhead.">Tracks</button>
           <span class="spacer"></span>
           <button id="split-gaps" class="with-icon" title="Cut this mix apart at the silences inside it, and trim silence from its ends"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h3.5v6H1zM6.25 5h3.5v6h-3.5zM11.5 5H15v6h-3.5z"/></svg>Split at gaps</button>
           <div class="toggle" role="group" aria-label="This mix">
@@ -217,6 +218,21 @@
     </div>
     <div id="readout">&nbsp;</div>
   </footer>
+  <dialog id="tracks-dialog">
+    <h3 id="tracks-title">Tracks</h3>
+    <div id="tracks-list"></div>
+    <p id="tracks-note" class="note"></p>
+    <div class="dialog-buttons">
+      <button id="tracks-import" title="Read a track list from a file: a playlist or a history exported from DJ software (M3U, M3U8 or text), or any list of names">Import list…</button>
+      <button id="tracks-paste" title="Read a track list from the clipboard: names, one per line, with or without times">Paste list</button>
+      <button id="tracks-spread" title="Put the tracks at even distances over the mix, as a start for dragging each into place">Spread evenly</button>
+      <button id="tracks-clear" title="Remove every track of this mix">Remove all</button>
+      <span class="spacer"></span>
+      <button id="tracks-copy" title="Put the list on the clipboard with times, for a YouTube description, where it becomes the video's chapters">Copy for YouTube</button>
+      <button id="tracks-close" class="primary">Done</button>
+    </div>
+    <p id="tracks-status" class="status"></p>
+  </dialog>
   <dialog id="help-dialog">
     <h3>Gestures and shortcuts</h3>
     <div id="help-content"></div>

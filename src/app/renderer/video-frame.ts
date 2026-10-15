@@ -10,6 +10,7 @@ import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
 import { BAND_COUNT } from '../../features.ts';
 import { fadeGain } from '../../fade.ts';
+import { splitName, trackAt } from '../../tracks.ts';
 
 /** What a video needs to know about its mix: its name, place and length, and the template chosen for it. */
 export type VideoMix = VideoMixInfo;
@@ -33,6 +34,8 @@ export function clock(seconds: number): string {
 /** The variables a text can show, for the moment `seconds` into the mix. */
 export function textValues(mix: VideoMix, seconds: number, tempo: number): TextValues {
   const length = mix.end - mix.start;
+  const playing = trackAt(mix.tracks, seconds);
+  const { artist, title } = splitName(playing?.track.name ?? '');
   return {
     mixName: mix.name,
     mixNumber: mix.number,
@@ -45,13 +48,13 @@ export function textValues(mix: VideoMix, seconds: number, tempo: number): TextV
     album: mix.album,
     recordingName: mix.recordingName,
     date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
-    // Track markers do not exist yet; these stay empty until they do.
-    currentTrack: '',
-    currentArtist: '',
-    currentTitle: '',
-    trackNumber: '',
-    trackCount: '',
-    nextTrack: '',
+    // Empty for a mix without tracks marked, or a track not named, so that the text showing it hides.
+    currentTrack: playing?.track.name ?? '',
+    currentArtist: artist,
+    currentTitle: title,
+    trackNumber: playing ? playing.index + 1 : '',
+    trackCount: mix.tracks.length || '',
+    nextTrack: playing?.next?.name ?? '',
     tempo: Math.round(tempo),
   };
 }

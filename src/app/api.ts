@@ -45,6 +45,8 @@ export interface VideoMixInfo {
   artist: string;
   album: string;
   visuals: VisualsChoice | undefined;
+  /** The tracks played in the mix, timed from its start. */
+  tracks: { at: number; name: string }[];
   /** The mix's fades in and out, in seconds, which the picture follows. */
   fadeIn: number;
   fadeOut: number;
@@ -149,6 +151,11 @@ export interface Api {
   pickImage(): Promise<string | null>;
   /** The bytes of a picture file chosen before. */
   readImage(path: string): Promise<Uint8Array>;
+  /** Asks for a track list (a playlist or a table from DJ software, or text) and gives its text, or null if none was chosen. */
+  openTracklist(): Promise<string | null>;
+  /** The text on the clipboard, and putting text there. */
+  readClipboard(): Promise<string>;
+  writeClipboard(text: string): void;
   /** In the hidden page that draws a video export: the picture to make. */
   onVideoJob(listener: (job: VideoRequest) => void): void;
   /** From that page: the next stretch of the encoded picture. Resolves once it is written. */

@@ -108,6 +108,8 @@ export interface Run<Given> {
   exportFolder?: string;
   /** What the dialog for a template's picture answers. */
   image?: string;
+  /** What the dialog for a track list answers. */
+  tracklist?: string;
   /** Handed to the function as its second argument; must survive JSON. */
   given?: Given;
   timeoutMs?: number;
@@ -140,6 +142,7 @@ export function runApp<Result, Given = undefined>(
         ...(run.menu ? { DJMASTER_SHOT_MENU: run.menu } : {}),
         ...(run.exportFolder ? { DJMASTER_SHOT_FOLDER: run.exportFolder } : {}),
         ...(run.image ? { DJMASTER_SHOT_IMAGE: run.image } : {}),
+        ...(run.tracklist ? { DJMASTER_SHOT_TRACKLIST: run.tracklist } : {}),
       },
     });
     let output = '';

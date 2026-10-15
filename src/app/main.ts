@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, shell, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, shell, type MenuItemConstructorOptions } from 'electron';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
@@ -646,6 +646,24 @@ ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 /** Pictures larger than this are not read; a logo or a photo is far smaller. */
 const IMAGE_MOST_BYTES = 40 * 1024 * 1024;
+
+// A track list: from DJ software, which writes UTF-16 as often as UTF-8, or typed.
+ipcMain.handle('open-tracklist', async () => {
+  const chosen = SCREENSHOT && process.env.DJMASTER_SHOT_TRACKLIST
+    ? process.env.DJMASTER_SHOT_TRACKLIST
+    : (await dialog.showOpenDialog(window!, {
+        properties: ['openFile'],
+        filters: [{ name: 'Track lists', extensions: ['txt', 'm3u', 'm3u8', 'csv', 'cue'] }, { name: 'All files', extensions: ['*'] }],
+      })).filePaths[0];
+  if (!chosen) return null;
+  if ((await stat(chosen)).size > 5_000_000) throw new Error('That file is too large to be a track list');
+  const bytes = await readFile(chosen);
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes);
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes);
+  return new TextDecoder('utf-8').decode(bytes);
+});
+ipcMain.handle('read-clipboard', () => clipboard.readText());
+ipcMain.on('write-clipboard', (_event, text: string) => clipboard.writeText(String(text)));
 
 ipcMain.handle('pick-image', async () => {
   if (SCREENSHOT && process.env.DJMASTER_SHOT_IMAGE) return process.env.DJMASTER_SHOT_IMAGE;
