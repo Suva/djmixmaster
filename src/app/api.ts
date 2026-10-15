@@ -56,6 +56,12 @@ export interface FineWave {
   high: Float32Array;
 }
 
+/** The template a mix's video uses, and what was filled in for it. */
+export interface VisualsChoice {
+  template: string;
+  fields: Record<string, string | number>;
+}
+
 export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help';
 
 /** What the window may ask the main process to do. */
@@ -109,6 +115,10 @@ export interface Api {
   recent(): Promise<RecentRecording[]>;
   /** That list has changed. */
   onRecentChanged(listener: () => void): void;
+  /** Asks for a picture file, for a template's image field. */
+  pickImage(): Promise<string | null>;
+  /** The bytes of a picture file chosen before. */
+  readImage(path: string): Promise<Uint8Array>;
   /** Tells the main process the recording has been closed, so it is not reopened next time. */
   closed(): void;
 }

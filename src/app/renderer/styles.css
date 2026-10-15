@@ -271,7 +271,29 @@ button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; f
 .toggle button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
 
 #overview { margin-bottom: 10px; }
-#readout { padding-top: 6px; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
+/* The bar along the bottom: which view, and a line about what is under the pointer or going on. */
+#view-bar { flex: none; display: flex; align-items: center; gap: 14px; padding: 5px 16px; border-top: 1px solid var(--border); }
+#view-bar .toggle button { font-size: 11px; padding: 2px 10px; }
+#readout { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; white-space: pre; }
+
+/* The Video view puts the picture where the curves were and the template where the levelling was. */
+/* The picture is placed and sized from code to fit the area, so that its size
+   never feeds back into the layout and pushes the bar below out of the window. */
+#picture-area { flex: 1; min-width: 0; min-height: 0; display: none; flex-direction: column; gap: 8px; }
+#picture-box { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+#picture { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 6px; background: #000; }
+/* The selected mix on its own, under the picture: where the playhead is in it. */
+#mix-strip { flex: none; display: block; width: 100%; height: 48px; border-radius: 6px; background: var(--lane); cursor: pointer; }
+body.video #picture-area { display: flex; }
+body.video #detail, body.video #adjust-switch, body.video #zoom-mix { display: none; }
+#video-settings { display: none; }
+body.video #video-settings { display: block; }
+body.video #mastering-settings { display: none; }
+#video-settings input[type="color"] { width: 100%; height: 30px; padding: 0 2px; border: 1px solid var(--border); border-radius: 6px; background: #262a33; }
+#video-settings .field-text { width: 100%; font: inherit; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; user-select: text; }
+#video-settings .field-text:focus { outline: 1px solid var(--accent); }
+.image-field { display: flex; align-items: center; gap: 6px; }
+.image-field .file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
 
 /* With no recording open the settings have nothing to act on. */
 aside[inert] > * { opacity: 0.4; }

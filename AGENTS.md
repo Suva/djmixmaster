@@ -45,6 +45,9 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
 | `src/visuals/template.ts` | Templates: layer types and their settings, fields, text variables, checking |
 | `src/visuals/music.ts` | The music values a video frame gets, read from `features.ts`'s output |
+| `src/visuals/draw.ts` | Draws a frame of a template on a 2D canvas, for the preview and the export alike |
+| `src/visuals/templates.ts` | The templates that come with the app |
+| `src/app/renderer/video-view.ts` | The Video view: a mix's template, its fields and a live picture |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
 | `src/checkup.ts` | Turns that data into the findings of the check-up report |
 | `src/fade.ts` | The fade curve shared by drawing, preview and export |
@@ -73,7 +76,7 @@ and curves in the code are block indexes unless a name says seconds.
   dependency, and the app is bundled by esbuild. Adding a runtime dependency
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
-  `level.ts`, `gaps.ts`, `features.ts`, `visuals/*.ts`, `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
+  `level.ts`, `gaps.ts`, `features.ts`, `visuals/*.ts` (`draw.ts` needs a canvas, so it is for windows only), `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
   `diagnostics.ts`, `checkup.ts` and `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
@@ -191,6 +194,12 @@ Do not write test data there.
 - **The window is served from `djm://app/`**, not `file://`, so that audio can
   pass through Web Audio. Only files listed in `APP_FILES` in `main.ts` are
   served; a new file in `dist/` has to be added there.
+- **The window has two views,** Mastering and Video, switched by the bar at
+  the bottom or Tab. The Video view (`video-view.ts`) replaces the curves with
+  the picture and the levelling settings with the template's fields; the
+  recording timeline and the transport stay. A mix's template and fields are
+  kept with it (`Mix.visuals`), so they are saved and undone like any other
+  setting. The view draws only while shown.
 - **A recording can be several files.** Recorders split long recordings at
   2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
   their numbers, or else by when each was written) and listed in

@@ -545,6 +545,27 @@ ipcMain.on('cancel', () => running?.terminate());
 
 ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 
+// ---------------------------------------------------------------------------
+// Pictures for a video's template: a logo, a photo.
+
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+/** Pictures larger than this are not read; a logo or a photo is far smaller. */
+const IMAGE_MOST_BYTES = 40 * 1024 * 1024;
+
+ipcMain.handle('pick-image', async () => {
+  const result = await dialog.showOpenDialog(window!, {
+    properties: ['openFile'],
+    filters: [{ name: 'Pictures', extensions: IMAGE_EXTENSIONS }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+// Only pictures, and only of a sensible size: the window asks by path, and the path comes from a template.
+ipcMain.handle('read-image', async (_event, path: string) => {
+  if (!IMAGE_EXTENSIONS.includes(extname(path).slice(1).toLowerCase())) throw new Error('Not a picture');
+  if ((await stat(path)).size > IMAGE_MOST_BYTES) throw new Error('The picture is too large');
+  return new Uint8Array(await readFile(path));
+});
+
 let checkStarted = false;
 /**
  * The scripted check: drives the window as the environment says, saves a
@@ -728,7 +749,14 @@ function buildMenu() {
         { role: 'selectAll' },
       ],
     },
-    { label: 'View', submenu: [{ role: 'togglefullscreen' }, { type: 'separator' }, { role: 'toggleDevTools' }] },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'togglefullscreen' },
+        { type: 'separator' },
+        { role: 'toggleDevTools' },
+      ],
+    },
     { role: 'windowMenu' },
     {
       role: 'help',

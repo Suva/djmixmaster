@@ -187,6 +187,7 @@ everything below together with the mouse and trackpad gestures.
 | Cmd/Ctrl+O | Open a recording |
 | ? or F1 | Show the gestures and shortcuts |
 | Shift+Cmd/Ctrl+W | Close the recording |
+| Tab | Switch between the Mastering and the Video view |
 | Esc | Cancel an analysis or export in progress |
 
 ### Exporting

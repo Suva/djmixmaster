@@ -39,6 +39,8 @@ export class MusicReader {
   readonly #range = new Map<string, [number, number]>();
   readonly #energy: Float32Array;
   readonly #energyRange: [number, number];
+  /** The bytes of the spectrum that the quiet and the loud end of the mix come to. */
+  readonly #spectrumRange: [number, number];
   /** The first beat at or after the mix's start, from which `beats` counts. */
   readonly #firstBeat: number;
 
@@ -81,6 +83,9 @@ export class MusicReader {
       this.#energy[s] = sum / Math.max(1, count);
     }
     this.#energyRange = this.#rangeOf(this.#energy, firstStep, lastStep);
+    const all = features.bands.slice(firstStep * BAND_COUNT, Math.max(firstStep + 1, lastStep) * BAND_COUNT).sort();
+    const quiet = all[Math.floor(all.length * 0.05)] ?? 0;
+    this.#spectrumRange = [quiet, Math.max(quiet + 20, all[Math.floor(all.length * 0.995)] ?? 255)];
     const firstBeat = features.beats.findIndex((time) => time >= start);
     this.#firstBeat = firstBeat < 0 ? features.beats.length : firstBeat;
   }
@@ -99,6 +104,38 @@ export class MusicReader {
     const next = Math.min(curve.length - 1, i + 1);
     const value = curve[i] + (curve[next] - curve[i]) * Math.max(0, Math.min(1, step - i));
     return Math.max(0, Math.min(1, (value - low) / (high - low)));
+  }
+
+  /**
+   * The spectrum at the moment `seconds` into the mix: each band from 0 to 1,
+   * all on one scale (the range of the whole spectrum within the mix), so
+   * that the shape of the sound shows, bass louder than treble.
+   */
+  spectrum(seconds: number): Float32Array {
+    const features = this.#features;
+    const step = (this.#start + seconds) * features.rate;
+    const i = Math.max(0, Math.min(features.level.length - 1, Math.floor(step)));
+    const next = Math.min(features.level.length - 1, i + 1);
+    const t = Math.max(0, Math.min(1, step - i));
+    const [low, high] = this.#spectrumRange;
+    const out = new Float32Array(BAND_COUNT);
+    for (let b = 0; b < BAND_COUNT; b++) {
+      const byte = features.bands[i * BAND_COUNT + b] + (features.bands[next * BAND_COUNT + b] - features.bands[i * BAND_COUNT + b]) * t;
+      out[b] = Math.max(0, Math.min(1, (byte - low) / (high - low)));
+    }
+    return out;
+  }
+
+  /** The level over the `span` seconds up to the moment `seconds` into the mix, at `points` evenly spaced times, 0 to 1. */
+  levelHistory(seconds: number, span: number, points: number): Float32Array {
+    const out = new Float32Array(points);
+    const level = this.#groups.get('level')!;
+    const range = this.#range.get('level')!;
+    for (let p = 0; p < points; p++) {
+      const at = this.#start + seconds - span + (span * (p + 1)) / points;
+      out[p] = at < this.#start ? 0 : this.#read(level, range, at * this.#features.rate);
+    }
+    return out;
   }
 
   /** The values for the moment `seconds` into the mix. `dt` is the time since the frame before. */

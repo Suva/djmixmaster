@@ -6,9 +6,10 @@ import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
-import type { Api, FineWave } from '../api.ts';
+import type { Api, FineWave, VisualsChoice } from '../api.ts';
 import { clock, detailLanes, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
+import { VideoView } from './video-view.ts';
 import { Player } from './player.ts';
 import { initTooltips } from './tooltip.ts';
 
@@ -66,6 +67,8 @@ interface Mix {
   fadeOut?: number;
   /** A loudness preset in use, by id. It decides the target in place of the one in `options`. */
   loudness?: string;
+  /** The template of the mix's video and what was filled in for it, set in the visuals window. */
+  visuals?: VisualsChoice;
 }
 
 let recording: Recording | null = null;
@@ -93,6 +96,62 @@ let busy = false;
 
 const player = new Player(location.search.includes('silent'));
 const levelMeter = new LevelMeter($<HTMLCanvasElement>('level-meter'));
+
+// The Video view: the selected mix's video in place of the curves, its
+// template in place of the levelling settings. See video-view.ts.
+const videoView = new VideoView({
+  api,
+  mix: () => {
+    if (!recording) return null;
+    const at = edges(mix);
+    return {
+      path: recording.path,
+      recordingName: recording.name.replace(/\.[^.]+$/, ''),
+      name: mix.name,
+      number: mixes.indexOf(mix) + 1,
+      count: mixes.length,
+      start: at.start * HOP_SECONDS,
+      end: at.end * HOP_SECONDS,
+      artist: mix.artist ?? '',
+      album,
+      visuals: mix.visuals,
+    };
+  },
+  playhead: () => player.time,
+  seek: (seconds) => seek(clamp(seconds, edges(mix).start * HOP_SECONDS, edges(mix).end * HOP_SECONDS)),
+  levels: (points) => {
+    // The loudest moment in each step of the mix, as the recording timeline draws it.
+    const out = new Float32Array(points);
+    if (!recording) return out;
+    const { start, end } = mix.region;
+    const peaks = recording.measured.peaks;
+    for (let p = 0; p < points; p++) {
+      const from = Math.floor(start + ((end - start) * p) / points);
+      const to = Math.max(from + 1, Math.floor(start + ((end - start) * (p + 1)) / points));
+      let peak = 0;
+      for (let b = from; b < to && b < peaks.length; b++) peak = Math.max(peak, peaks[b]);
+      out[p] = Math.min(1, peak);
+    }
+    return out;
+  },
+  choose: (choice) => {
+    if (!recording) return;
+    mix.visuals = choice;
+    scheduleSave();
+  },
+  say: (text) => {
+    $('readout').textContent = text || ' ';
+  },
+});
+
+/** Switches between the Mastering and the Video view. */
+function showVideo(on: boolean) {
+  document.body.classList.toggle('video', on);
+  $('view-video').classList.toggle('on', on);
+  $('view-mastering').classList.toggle('on', !on);
+  videoView.show(on);
+  if (!on) scheduleDraw();
+}
 /** How much the limiter last said it was taking off, in dB. */
 let limiterReductionDb = 0;
 /** Whether playback is heard with the levelling applied or as recorded. */
@@ -548,6 +607,7 @@ function showMix() {
   $<HTMLButtonElement>('split-gaps').disabled = !recording || piecesBetweenGaps(mix) === null;
   scheduleSave();
   scheduleDraw();
+  videoView.refresh();
 }
 
 /**
@@ -1430,6 +1490,10 @@ window.addEventListener('keydown', (event) => {
     showHelp();
   } else if (event.code === 'KeyA' && !event.metaKey && !event.ctrlKey) {
     setHearLevelled(!hearLevelled);
+  } else if (event.code === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+    // As in Ableton: Tab goes between the two views.
+    event.preventDefault();
+    showVideo(!videoView.visible);
   } else if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
     // Arrow keys on a slider or a list belong to it.
   } else if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
@@ -1818,6 +1882,14 @@ window.addEventListener('beforeunload', () => {
 });
 
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+/** A template choice read back from disk, or null if it is not one. */
+function visualsChoice(value: unknown): VisualsChoice | null {
+  const given = value as Partial<VisualsChoice> | null;
+  if (!given || typeof given.template !== 'string' || typeof given.fields !== 'object' || given.fields === null) return null;
+  const fields: Record<string, string | number> = {};
+  for (const [key, field] of Object.entries(given.fields)) if (typeof field === 'string' || isNumber(field)) fields[key] = field;
+  return { template: given.template, fields };
+}
 const isPreset = (value: unknown): value is string => LOUDNESS_PRESETS.some((preset) => preset.id === value);
 
 /**
@@ -1862,6 +1934,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
       ...(isNumber(m.trimEnd) && m.trimEnd > 0 && m.trimEnd < 1 ? { trimEnd: fine(m.trimEnd) } : {}),
       ...(isNumber(m.fadeIn) && m.fadeIn > 0 ? { fadeIn: Math.round(m.fadeIn) } : {}),
       ...(isNumber(m.fadeOut) && m.fadeOut > 0 ? { fadeOut: Math.round(m.fadeOut) } : {}),
+      ...(visualsChoice(m.visuals) ? { visuals: visualsChoice(m.visuals)! } : {}),
     }));
     album = typeof session!.album === 'string' ? session!.album : '';
     mixesCreated = Math.max(mixes.length, isNumber(session!.mixesCreated) ? session!.mixesCreated : 0);
@@ -2019,6 +2092,7 @@ const HELP: [string, [string, string][]][] = [
   ['Everything else', [
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
     ['Backspace', 'Delete the selected mix; the only mix goes back to the whole recording'],
+    ['Tab', 'Switch between the Mastering and the Video view'],
     [`${COMMAND}O`, 'Open a recording'],
     [`Shift+${COMMAND}W`, 'Close the recording'],
     ['Esc', 'Cancel an analysis or an export'],
@@ -2416,6 +2490,9 @@ window.addEventListener('drop', (event) => {
 
 new ResizeObserver(scheduleDraw).observe(detailCanvas);
 new ResizeObserver(scheduleDraw).observe(overview);
+
+$('view-mastering').addEventListener('click', () => showVideo(false));
+$('view-video').addEventListener('click', () => showVideo(true));
 
 syncControls();
 initTooltips();

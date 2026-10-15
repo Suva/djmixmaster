@@ -1,0 +1,399 @@
+// The Video view of the main window: the selected mix's video as it will
+// look, with its template and fields in the settings panel. It shares the
+// recording timeline and the transport with the Mastering view; switching
+// between the two (the bar at the bottom, or Tab) swaps the curves for the
+// picture and the levelling settings for the template's fields.
+
+import type { Api, VisualsChoice } from '../api.ts';
+import type { Features } from '../../features.ts';
+import { FrameDrawer } from '../../visuals/draw.ts';
+import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
+import { checkTemplate, FONTS, prepare, TEXT_VARIABLES, type Field, type PreparedLayer, type Template, type TextValues } from '../../visuals/template.ts';
+import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
+
+/** What the view needs to know about the selected mix. */
+export interface VideoMix {
+  /** The recording, for its music values, and its name without extension for `%recordingName%`. */
+  path: string;
+  recordingName: string;
+  name: string;
+  number: number;
+  count: number;
+  /** The mix's edges in the recording, in seconds. */
+  start: number;
+  end: number;
+  artist: string;
+  album: string;
+  visuals: VisualsChoice | undefined;
+}
+
+export interface VideoViewOptions {
+  api: Api;
+  /** The selected mix, or null when nothing is open. */
+  mix(): VideoMix | null;
+  /** The playhead, in seconds into the recording. */
+  playhead(): number;
+  /** Moves the playhead to this many seconds into the recording. */
+  seek(seconds: number): void;
+  /** How loud the selected mix is along its length, in this many steps, 0 to 1, from the analysis. */
+  levels(points: number): Float32Array;
+  /** The mix's template or a field changed here; the main window keeps it with the mix. */
+  choose(choice: VisualsChoice): void;
+  /** A line about what is going on, such as the music values being worked out. */
+  say(text: string): void;
+}
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** The built-in templates, checked once. */
+const templates = new Map<string, Template>(
+  BUILT_IN_TEMPLATES.map((builtIn) => [builtIn.id, checkTemplate(builtIn.template, MUSIC_NAMES, TEXT_VARIABLES).template]),
+);
+const DEFAULT_TEMPLATE = BUILT_IN_TEMPLATES[0].id;
+
+const clock = (seconds: number) => {
+  const s = Math.max(0, Math.floor(seconds));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${Math.floor(s / 60)}:${pad(s % 60)}`;
+};
+
+export class VideoView {
+  readonly #options: VideoViewOptions;
+  readonly #canvas = $<HTMLCanvasElement>('picture');
+  readonly #drawer = new FrameDrawer(this.#canvas);
+  readonly #images = new Map<string, ImageBitmap>();
+  #visible = false;
+  #frame = 0;
+  #lastFrame = performance.now();
+  #lastPlayhead = 0;
+
+  #featuresFor: string | null = null;
+  #features: Features | null = null;
+  #reader: MusicReader | null = null;
+  #readerFor = '';
+
+  /** What the fields on screen were made for, so they are rebuilt only when that changes. */
+  #shownFor = '';
+  #choice: VisualsChoice = { template: DEFAULT_TEMPLATE, fields: {} };
+  #layers: PreparedLayer[] = [];
+
+  constructor(options: VideoViewOptions) {
+    this.#options = options;
+    const select = $<HTMLSelectElement>('template');
+    for (const [id, template] of templates) select.add(new Option(template.name, id));
+    select.addEventListener('change', () => {
+      // Fields of the same name carry over to the new template: the artist's name, the colour.
+      this.#choice = { template: select.value, fields: this.#choice.fields };
+      this.#prepare();
+      this.#showFields();
+      options.choose(this.#choice);
+    });
+    // Clicking or dragging on the strip under the picture moves the playhead within the mix.
+    const strip = $<HTMLCanvasElement>('mix-strip');
+    let dragging = false;
+    const seekTo = (event: MouseEvent) => {
+      const mix = options.mix();
+      if (!mix) return;
+      const box = strip.getBoundingClientRect();
+      const fraction = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width));
+      options.seek(mix.start + fraction * (mix.end - mix.start));
+    };
+    strip.addEventListener('mousedown', (event) => {
+      dragging = true;
+      seekTo(event);
+    });
+    window.addEventListener('mousemove', (event) => dragging && seekTo(event));
+    window.addEventListener('mouseup', () => (dragging = false));
+    options.api.onListening((path, fraction) => {
+      if (this.#visible && path === this.#featuresFor && !this.#features) options.say(`Listening to the recording for the video… ${Math.floor(fraction * 100)}%`);
+    });
+  }
+
+  get visible(): boolean {
+    return this.#visible;
+  }
+
+  show(visible: boolean) {
+    this.#visible = visible;
+    cancelAnimationFrame(this.#frame);
+    if (!visible) return;
+    this.refresh();
+    this.#lastFrame = performance.now();
+    this.#frame = requestAnimationFrame(() => this.#draw());
+  }
+
+  /**
+   * Catches up with the main window: another recording or mix selected, or
+   * the mix's choice changed there (an undo). Fields are rebuilt only then,
+   * never while they are being typed in.
+   */
+  refresh() {
+    const mix = this.#options.mix();
+    const choice = mix?.visuals ?? { template: DEFAULT_TEMPLATE, fields: {} };
+    const key = `${mix?.path}|${mix?.number}|${JSON.stringify(choice)}`;
+    if (mix && mix.path !== this.#featuresFor && this.#visible) this.#loadFeatures(mix.path);
+    if (key === this.#shownFor) return;
+    this.#choice = choice;
+    this.#prepare();
+    this.#showFields();
+  }
+
+  async #loadFeatures(path: string) {
+    this.#featuresFor = path;
+    this.#features = null;
+    this.#reader = null;
+    this.#readerFor = '';
+    this.#options.say('Listening to the recording for the video…');
+    try {
+      const features = await this.#options.api.features(path);
+      if (this.#featuresFor !== path) return;
+      this.#features = features;
+      this.#options.say('');
+    } catch (error) {
+      if (this.#featuresFor === path) this.#options.say(`Could not listen to the recording: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  #template(): Template {
+    return templates.get(this.#choice.template) ?? templates.get(DEFAULT_TEMPLATE)!;
+  }
+
+  #prepare() {
+    this.#layers = prepare(this.#template(), this.#choice.fields, MUSIC_NAMES);
+    this.#drawer.reset();
+    for (const field of this.#template().fields) {
+      const value = this.#choice.fields[field.key];
+      if (field.kind === 'image' && typeof value === 'string' && value) this.#loadImage(value);
+    }
+  }
+
+  #setField(key: string, value: string | number) {
+    this.#choice = { ...this.#choice, fields: { ...this.#choice.fields, [key]: value } };
+    this.#prepare();
+    // Kept with the mix at once; the main window saves it, and makes it an undo step, once typing pauses.
+    const mix = this.#options.mix();
+    this.#shownFor = `${mix?.path}|${mix?.number}|${JSON.stringify(this.#choice)}`;
+    this.#options.choose(this.#choice);
+  }
+
+  async #loadImage(path: string) {
+    if (this.#images.has(path)) return;
+    try {
+      const bytes = await this.#options.api.readImage(path);
+      this.#images.set(path, await createImageBitmap(new Blob([bytes as BlobPart])));
+    } catch (error) {
+      this.#options.say(`Could not load the picture: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  #showFields() {
+    const mix = this.#options.mix();
+    this.#shownFor = `${mix?.path}|${mix?.number}|${JSON.stringify(this.#choice)}`;
+    const template = this.#template();
+    $<HTMLSelectElement>('template').value = templates.has(this.#choice.template) ? this.#choice.template : DEFAULT_TEMPLATE;
+    $('video-fields').replaceChildren(...template.fields.map((field) => this.#control(field)));
+  }
+
+  #control(field: Field): HTMLElement {
+    const control = document.createElement('div');
+    control.className = 'control';
+    const head = document.createElement('div');
+    head.className = 'control-head';
+    const label = document.createElement('label');
+    label.textContent = field.label;
+    head.append(label);
+    control.append(head);
+    const value = this.#choice.fields[field.key] ?? field.default;
+    const id = `field-${field.key}`;
+    label.htmlFor = id;
+
+    if (field.kind === 'colour') {
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.id = id;
+      input.value = String(value).slice(0, 7);
+      const shown = document.createElement('output');
+      shown.textContent = input.value;
+      input.addEventListener('input', () => {
+        shown.textContent = input.value;
+        this.#setField(field.key, input.value);
+      });
+      head.append(shown);
+      control.append(input);
+    } else if (field.kind === 'number') {
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.id = id;
+      input.min = String(field.min ?? 0);
+      input.max = String(field.max ?? 1);
+      input.step = String(((field.max ?? 1) - (field.min ?? 0)) / 100);
+      input.value = String(value);
+      const shown = document.createElement('output');
+      shown.textContent = Number(value).toFixed(2);
+      input.addEventListener('input', () => {
+        shown.textContent = Number(input.value).toFixed(2);
+        this.#setField(field.key, Number(input.value));
+      });
+      head.append(shown);
+      control.append(input);
+    } else if (field.kind === 'image') {
+      const row = document.createElement('div');
+      row.className = 'image-field';
+      const name = document.createElement('span');
+      name.className = 'file';
+      name.textContent = value ? String(value).split(/[\\/]/).pop()! : 'None';
+      const choose = document.createElement('button');
+      choose.type = 'button';
+      choose.id = id;
+      choose.textContent = 'Choose…';
+      choose.addEventListener('click', async () => {
+        const path = await this.#options.api.pickImage();
+        if (!path) return;
+        name.textContent = path.split(/[\\/]/).pop()!;
+        await this.#loadImage(path);
+        this.#setField(field.key, path);
+      });
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.textContent = 'Remove';
+      clear.addEventListener('click', () => {
+        name.textContent = 'None';
+        this.#setField(field.key, '');
+      });
+      row.append(choose, clear, name);
+      control.append(row);
+    } else if (field.kind === 'choice' || field.kind === 'font') {
+      const select = document.createElement('select');
+      select.id = id;
+      for (const option of field.kind === 'font' ? Object.keys(FONTS) : field.choices ?? []) select.add(new Option(option, option));
+      select.value = String(value);
+      select.addEventListener('change', () => this.#setField(field.key, select.value));
+      control.append(select);
+    } else {
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = id;
+      input.className = 'field-text';
+      input.value = String(value);
+      input.spellcheck = false;
+      input.addEventListener('input', () => this.#setField(field.key, input.value));
+      control.append(input);
+    }
+    return control;
+  }
+
+  /** The variables a text can show, for the moment `seconds` into the mix. */
+  #textValues(mix: VideoMix, seconds: number, tempo: number): TextValues {
+    const length = mix.end - mix.start;
+    return {
+      mixName: mix.name,
+      mixNumber: mix.number,
+      mixCount: mix.count,
+      mixLength: clock(length),
+      elapsed: clock(seconds),
+      remaining: clock(length - seconds),
+      artist: mix.artist,
+      title: mix.name,
+      album: mix.album,
+      recordingName: mix.recordingName,
+      date: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }),
+      // Track markers do not exist yet; these stay empty until they do.
+      currentTrack: '',
+      currentArtist: '',
+      currentTitle: '',
+      trackNumber: '',
+      trackCount: '',
+      nextTrack: '',
+      tempo: Math.round(tempo),
+    };
+  }
+
+  #draw() {
+    if (!this.#visible) return;
+    this.#frame = requestAnimationFrame(() => this.#draw());
+    const now = performance.now();
+    const dt = Math.min(0.25, (now - this.#lastFrame) / 1000);
+    this.#lastFrame = now;
+    const mix = this.#options.mix();
+    const canvas = this.#canvas;
+    if (!mix) return;
+
+    // As large as fits the area at 16:9, drawn at the size it is shown (up to
+    // that of the video) so it stays sharp and quick.
+    const area = canvas.parentElement!;
+    const shownWidth = Math.floor(Math.min(area.clientWidth, (area.clientHeight * 16) / 9));
+    const shownHeight = Math.floor((shownWidth * 9) / 16);
+    if (shownWidth <= 0) return;
+    if (canvas.style.width !== `${shownWidth}px`) {
+      canvas.style.width = `${shownWidth}px`;
+      canvas.style.height = `${shownHeight}px`;
+    }
+    const ratio = window.devicePixelRatio || 1;
+    const width = Math.min(1920, Math.round(shownWidth * ratio));
+    const height = Math.round((width * 9) / 16);
+    if (canvas.width !== width || canvas.height !== height) [canvas.width, canvas.height] = [width, height];
+
+    const key = `${mix.path}|${mix.start}|${mix.end}`;
+    if (this.#features && this.#readerFor !== key) {
+      this.#reader = new MusicReader(this.#features, mix.start, mix.end);
+      this.#readerFor = key;
+    }
+    const reader = this.#reader;
+    const length = mix.end - mix.start;
+    const playhead = this.#options.playhead();
+    // A jump of the playhead: what layers remember belongs to the old place.
+    if (Math.abs(playhead - this.#lastPlayhead) > 0.5) {
+      this.#drawer.reset();
+      for (const layer of this.#layers) layer.reset();
+    }
+    this.#lastPlayhead = playhead;
+    const seconds = Math.max(0, Math.min(length, playhead - mix.start));
+    const music = reader ? reader.at(seconds, dt) : { time: seconds, dt, length, progress: seconds / Math.max(1, length) };
+    this.#drawer.draw(this.#layers, {
+      seconds,
+      dt,
+      length,
+      music,
+      spectrum: reader ? reader.spectrum(seconds) : new Float32Array(24),
+      levelHistory: (span, points) => (reader ? reader.levelHistory(seconds, span, points) : new Float32Array(points)),
+      text: this.#textValues(mix, seconds, typeof music.tempo === 'number' ? music.tempo : 0),
+      images: this.#images,
+    });
+    // For scripted checks: whether the picture is drawn from the music yet.
+    canvas.dataset.music = String(!!reader);
+    this.#drawStrip(mix, seconds);
+  }
+
+  /** The level along the mix, worked out once per mix and width. */
+  #stripLevels: Float32Array | null = null;
+  #stripFor = '';
+
+  #drawStrip(mix: VideoMix, seconds: number) {
+    const strip = $<HTMLCanvasElement>('mix-strip');
+    const ratio = window.devicePixelRatio || 1;
+    const width = Math.round(strip.clientWidth * ratio);
+    const height = Math.round(strip.clientHeight * ratio);
+    if (width === 0 || height === 0) return;
+    if (strip.width !== width || strip.height !== height) [strip.width, strip.height] = [width, height];
+    const columns = Math.max(1, Math.floor(width / (2 * ratio)));
+    const key = `${mix.path}|${mix.start}|${mix.end}|${columns}`;
+    if (this.#stripFor !== key) {
+      this.#stripLevels = this.#options.levels(columns);
+      this.#stripFor = key;
+    }
+    const ctx = strip.getContext('2d')!;
+    ctx.clearRect(0, 0, width, height);
+    const played = (seconds / Math.max(1e-9, mix.end - mix.start)) * width;
+    const column = width / columns;
+    for (let i = 0; i < columns; i++) {
+      const x = i * column;
+      const h = Math.max(1, this.#stripLevels![i] * (height - 8 * ratio));
+      ctx.fillStyle = x < played ? '#3ddc97' : '#4a505c';
+      ctx.fillRect(x, (height - h) / 2, Math.max(1, column - ratio), h);
+    }
+    ctx.fillStyle = '#e6e8ec';
+    ctx.fillRect(Math.round(played), 0, Math.max(1, ratio * 1.5), height);
+    // For scripted checks.
+    strip.dataset.seconds = seconds.toFixed(1);
+  }
+}

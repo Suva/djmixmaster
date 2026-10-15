@@ -252,3 +252,14 @@ test('smooth follows a colour as well as a number', () => {
   assert.notEqual(at('#000000', 0.1), '#000000', 'falling takes its time');
 });
 
+
+test('the built-in templates are free of problems', async () => {
+  const { BUILT_IN_TEMPLATES } = await import('../src/visuals/templates.ts');
+  for (const builtIn of BUILT_IN_TEMPLATES) {
+    const { template, problems } = checkTemplate(builtIn.template, music, textNames);
+    assert.deepEqual(problems.map((p) => `${p.where}: ${p.message}`), [], builtIn.id);
+    assert.ok(template.layers.length >= 4, builtIn.id);
+    const layers = prepare(template, {}, music);
+    for (const layer of layers) layer.resolve({ bass: 0.5, beat: 1, energy: 0.5, highs: 0.3, dt: 1 / 30 }, {});
+  }
+});
