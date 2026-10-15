@@ -503,5 +503,18 @@ export function prepare(template: Template, filled: Record<string, string | numb
   });
 }
 
+/** The fonts a template draws with, given what was filled in: to be loaded before drawing. */
+export function fontsOf(template: Template, filled: Record<string, string | number>): string[] {
+  const fonts = new Set<string>();
+  for (const layer of template.layers) {
+    const value = layer.params.font;
+    if (typeof value !== 'string') continue;
+    const whole = WHOLE_VARIABLE.exec(value);
+    const field = whole ? template.fields.find((f) => f.key === whole[1]) : undefined;
+    fonts.add(field ? String(filled[field.key] ?? field.default) : value);
+  }
+  return [...fonts];
+}
+
 /** A resolved colour as a hex code, for drawing with a 2D canvas. */
 export const hexOf = (colour: Colour | null) => (colour ? toHex(colour) : 'transparent');

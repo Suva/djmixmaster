@@ -8,7 +8,9 @@ import type { Api, VisualsChoice } from '../api.ts';
 import type { Features } from '../../features.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
-import { FONTS, prepare, type Field, type PreparedLayer, type Template } from '../../visuals/template.ts';
+import { loadFonts } from '../../visuals/fonts.ts';
+import { fontsOf, prepare, type Field, type PreparedLayer, type Template } from '../../visuals/template.ts';
+import { fontPicker } from './font-picker.ts';
 import { DEFAULT_TEMPLATE, drawVideoFrame, TEMPLATES as templates, templateOf, type VideoMix } from './video-frame.ts';
 
 export type { VideoMix } from './video-frame.ts';
@@ -134,6 +136,8 @@ export class VideoView {
 
   #prepare() {
     this.#layers = prepare(this.#template(), this.#choice.fields, MUSIC_NAMES);
+    // Until a font is in, its text is drawn in a plain face; the next frame after, in the font.
+    loadFonts(fontsOf(this.#template(), this.#choice.fields));
     this.#drawer.reset();
     for (const field of this.#template().fields) {
       const value = this.#choice.fields[field.key];
@@ -236,10 +240,17 @@ export class VideoView {
       });
       row.append(choose, clear, name);
       control.append(row);
-    } else if (field.kind === 'choice' || field.kind === 'font') {
+    } else if (field.kind === 'font') {
+      // The sample is what the font will set: the artist, or failing that the mix's name.
+      const sample = () => {
+        const mix = this.#options.mix();
+        return mix?.artist || mix?.name || 'DJ Mix Master';
+      };
+      control.append(fontPicker(id, String(value), sample, (family) => this.#setField(field.key, family)));
+    } else if (field.kind === 'choice') {
       const select = document.createElement('select');
       select.id = id;
-      for (const option of field.kind === 'font' ? Object.keys(FONTS) : field.choices ?? []) select.add(new Option(option, option));
+      for (const option of field.choices ?? []) select.add(new Option(option, option));
       select.value = String(value);
       select.addEventListener('change', () => this.#setField(field.key, select.value));
       control.append(select);

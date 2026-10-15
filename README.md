@@ -348,3 +348,7 @@ licensed separately under the GPL. It is the build from the
 [ffmpeg-static](https://github.com/eugeneware/ffmpeg-static) project, which
 documents its sources; its licence is in the app's resources folder next to
 the `ffmpeg` binary.
+
+The fonts for videos in `assets/fonts` come from
+[Google Fonts](https://github.com/google/fonts) and are each licensed under the
+SIL Open Font License, whose text is beside each font.

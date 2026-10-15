@@ -8,7 +8,8 @@
 import type { Api, VideoRequest } from '../api.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
-import { prepare } from '../../visuals/template.ts';
+import { loadFonts } from '../../visuals/fonts.ts';
+import { fontsOf, prepare } from '../../visuals/template.ts';
 import { drawVideoFrame, templateOf } from './video-frame.ts';
 
 declare global {
@@ -48,6 +49,8 @@ async function run(job: VideoRequest) {
   const template = templateOf(mix.visuals);
   const fields = mix.visuals?.fields ?? {};
   const layers = prepare(template, fields, MUSIC_NAMES);
+  // Every font in before the first frame: a canvas would draw text in a plain face meanwhile, without a word.
+  await loadFonts(fontsOf(template, fields));
   const images = new Map<string, ImageBitmap>();
   for (const field of template.fields) {
     const value = fields[field.key];

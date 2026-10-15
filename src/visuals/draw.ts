@@ -10,7 +10,8 @@
 import { fromHsl, mixColours, turnHue, type Colour } from './colour.ts';
 import { BAND_COUNT, HIGHEST_HZ, LOWEST_HZ } from '../features.ts';
 import type { Values } from './expression.ts';
-import { FONTS, hexOf, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
+import { fontStack } from './fonts.ts';
+import { hexOf, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -355,7 +356,7 @@ export class FrameDrawer {
     const progress = memory.changing === undefined || change === 'cut' ? 1 : memory.changing;
 
     const size = (num(params, 'size') / 100) * height;
-    ctx.font = `${Math.round(num(params, 'weight'))} ${size}px ${FONTS[str(params, 'font')] ?? FONTS.Sans}`;
+    ctx.font = `${Math.round(num(params, 'weight'))} ${size}px ${fontStack(str(params, 'font'))}`;
     ctx.letterSpacing = `${(num(params, 'letterSpacing') / 100) * size}px`;
     ctx.textBaseline = 'alphabetic';
     const align = str(params, 'align');
