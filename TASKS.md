@@ -156,6 +156,15 @@ from Mixcloud was found either way. A test would settle it: upload the same
 minute at -9 and at -14 as private tracks and compare. Adjust the preset
 descriptions in `renderer.ts` to match what is found.
 
+### Video exports with visuals
+
+YouTube will not take a mix as sound alone. A template of layers (backgrounds,
+images, text, a spectrum, effects) that follow the music, with a few fields
+for the DJ to fill in, would turn a mix into a video. Layer types and their
+parameters are sketched in [VISUALS.md](VISUALS.md). A first version would be
+a few built-in templates and no editor; frames go straight to the encoder,
+never to disk.
+
 ### Corrective EQ, with a suggested correction
 
 A recording taken from a PA mixer can carry the system's EQ: boosted bass,
