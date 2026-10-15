@@ -353,7 +353,7 @@ values into the ones a frame gets. None draws anything yet.
   mix row) and asking for one colour, deriving the rest from it: **Glitter** (a radial glow, particles that thicken
   with the energy and burst on the kick, a logo that pulses), **Spectrum
   ring** (a circular spectrum from the colour to its complement around the
-  logo) and **Waveform** (the level of the last eight seconds as a wave, with
+  logo) and **Waveform** (the level of the last eight seconds as a wave, before a larger, darker one of the last six and with a thin bright core, with
   a spectrum underneath, and the time), and **Photo** (a photo of the user's
   own that drifts slowly and swells a little with the bass, a little dust falling,
   the artist and the mix in a corner and a spectrum along the bottom; asks for
