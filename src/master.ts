@@ -1,4 +1,5 @@
 import { extname } from 'node:path';
+import { FeatureExtractor, type Features } from './features.ts';
 import { CHANNELS, decode, decodeParts, encode, isJoined, joinedFiles, probe, type EncodeOptions, type Region } from './audio-io.ts';
 import type { SourceInfo } from './checkup.ts';
 import { RecordingExaminer, type Diagnostics } from './diagnostics.ts';
@@ -186,4 +187,21 @@ export async function render(
     ...measurement(sampleRate, meter),
     limiterReductionDb: limiter ? -20 * Math.log10(limiter.minGain) : 0,
   };
+}
+
+/**
+ * The values the visuals of a video export move to (see features.ts), from a
+ * pass of their own over the whole recording. Run in the background, at a
+ * lower priority, so it never competes with what someone is waiting for.
+ */
+export async function listen(input: string, onProgress?: Progress): Promise<Features> {
+  const { sampleRate, totalFrames } = await regionFrames(input, {});
+  const extractor = new FeatureExtractor(sampleRate);
+  let frames = 0;
+  for await (const chunk of decode(input, {}, true)) {
+    extractor.push(chunk);
+    frames += chunk.length / CHANNELS;
+    onProgress?.(Math.min(1, frames / totalFrames));
+  }
+  return extractor.finish();
 }

@@ -40,6 +40,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/gain-curve.ts` | Full-energy envelope, gain curve, hand adjustments |
 | `src/level.ts` | Combines the above; automatic target with headroom; bass correction |
 | `src/gaps.ts` | Finds silences between sets |
+| `src/features.ts` | What the visuals of a video move to: spectrum, level and beats |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
 | `src/checkup.ts` | Turns that data into the findings of the check-up report |
 | `src/fade.ts` | The fade curve shared by drawing, preview and export |
@@ -68,7 +69,7 @@ and curves in the code are block indexes unless a name says seconds.
   dependency, and the app is bundled by esbuild. Adding a runtime dependency
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
-  `level.ts`, `gaps.ts`, `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
+  `level.ts`, `gaps.ts`, `features.ts`, `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
   `diagnostics.ts`, `checkup.ts` and `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
@@ -155,6 +156,7 @@ Linux), the same for `npm start` and the packaged app.
 | `analyses/` | One measurement per recording, keyed on its fingerprint, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
 | `sessions/` | The mixes, settings and hand adjustments per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
+| `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
 | `recent-recordings.json` | The ten recordings opened most recently, for File > Open Recent |

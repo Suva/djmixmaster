@@ -1,4 +1,5 @@
 import type { EncodeOptions } from '../audio-io.ts';
+import type { Features } from '../features.ts';
 import type { Examination, RenderResult } from '../master.ts';
 
 export interface RenderRequest {
@@ -96,6 +97,12 @@ export interface Api {
   onMenu(listener: (command: MenuCommand) => void): void;
   /** A recording handed to the app from outside while it is running. */
   onOpenFiles(listener: (paths: string[]) => void): void;
+  /**
+   * What the visuals of a recording move to. Worked out in the background the
+   * first time it is asked for, and kept; progress comes through `onListening`.
+   */
+  features(path: string): Promise<Features>;
+  onListening(listener: (path: string, fraction: number) => void): void;
   /** Tells the main process the window has drawn this recording; it is the one to reopen next time. */
   painted(path: string): void;
   /** The recordings opened lately, newest first, without those that are not there right now. */
@@ -106,7 +113,10 @@ export interface Api {
   closed(): void;
 }
 
-export type Job = { kind: 'measure'; input: string } | ({ kind: 'render' } & RenderRequest);
+export type Job =
+  | { kind: 'measure'; input: string }
+  | { kind: 'listen'; input: string }
+  | ({ kind: 'render' } & RenderRequest);
 
 export type JobMessage =
   | { type: 'progress'; fraction: number }

@@ -294,6 +294,35 @@ test('a recording in several files opens, plays and is remembered as one', { ski
   assert.deepEqual(listed, ['Night part *.wav (3 files)'], 'one entry for the three files');
 });
 
+test('what the visuals move to is worked out on request, and kept', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, given: mix }, async (page, path) => {
+    const fractions: number[] = [];
+    window.api.onListening((_path, fraction) => fractions.push(fraction));
+    let start = performance.now();
+    const first = await window.api.features(path);
+    const firstMs = performance.now() - start;
+    start = performance.now();
+    const again = await window.api.features(path);
+    return {
+      steps: first.level.length,
+      beats: first.beats.length,
+      same: again.beats.length === first.beats.length,
+      againMs: performance.now() - start,
+      firstMs,
+      progressed: fractions.length > 0 && fractions.at(-1)! > 0.9,
+      // Asking for them never stopped the window from working.
+      name: page.text('file-name'),
+    };
+  });
+  assert.equal(seen.steps, MIX_SECONDS * 30);
+  assert.ok(Math.abs(seen.beats - MIX_SECONDS / 0.48) <= 3, `${seen.beats} beats`);
+  assert.ok(seen.same && seen.progressed);
+  assert.ok(seen.againMs < seen.firstMs / 2, 'the second time they come from storage');
+  assert.equal(seen.name, 'Test mix.wav');
+  assert.equal((await readdir(join(data, 'visual-features'))).length, 1);
+});
+
 test('a last recording that is gone gives an empty start, without a word', { skip }, async () => {
   const data = await fresh();
   const gone = join(work, 'Gone.wav');

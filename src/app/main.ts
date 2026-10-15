@@ -13,6 +13,7 @@ import {
 } from '../audio-io.ts';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
+import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
 import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import { nameForParts, orderParts } from './parts.ts';
@@ -413,15 +414,60 @@ ipcMain.handle('measure', async (_event, input: string) => {
   return examination;
 });
 
+/** When the recording last changed; for one in parts, the last time any part did. */
+async function lastModified(input: string): Promise<number> {
+  return Math.max(...(await Promise.all(partsOf(input).map(async (part) => (await stat(part)).mtimeMs))));
+}
+
+// What the visuals move to: worked out the first time it is asked for, in a
+// worker of its own so that it never holds up an analysis or an export, and
+// kept like the analyses. Asking again while it runs waits for the same run.
+const listening = new Map<string, Promise<Features>>();
+
+ipcMain.handle('features', (_event, input: string) => {
+  let features = listening.get(input);
+  if (!features) {
+    features = listenTo(input).finally(() => listening.delete(input));
+    listening.set(input, features);
+  }
+  return features;
+});
+
+async function listenTo(input: string): Promise<Features> {
+  const file = stored('visual-features', `${FEATURES_VERSION}|${await fingerprint(input)}|${await lastModified(input)}`, 'bin');
+  try {
+    const cached = deserialize(await readFile(file)) as Features;
+    await utimes(file, new Date(), new Date());
+    return cached;
+  } catch {
+    // Not worked out before.
+  }
+  const features = await new Promise<Features>((resolvePromise, reject) => {
+    const worker = new Worker(join(__dirname, 'worker.cjs'), { workerData: { kind: 'listen', input } satisfies Job });
+    worker.on('message', (message: JobMessage) => {
+      if (message.type === 'progress') window?.webContents.send('listening', input, message.fraction);
+      else if (message.type === 'done') resolvePromise(message.result as Features);
+      else reject(new Error(message.message));
+    });
+    worker.on('error', reject);
+    worker.on('exit', () => reject(new Error(CANCELLED)));
+  });
+  try {
+    await writeStored(file, serialize(features));
+    await pruneAnalyses(join(file, '..'));
+  } catch (error) {
+    console.error('Could not store what the visuals move to:', error);
+  }
+  return features;
+}
+
 /** The recording's analysis: stored from an earlier time, or made now. */
 async function examine(input: string): Promise<Examination> {
   // Keyed on the content and the modified time: a moved or renamed file is
   // found again, a changed one is analysed afresh. Analyses stored before
   // recordings had fingerprints are under the file's path, and are moved over.
   const info = await stat(input);
-  // For a recording in parts, the last time any part changed.
-  const modified = Math.max(...(await Promise.all(partsOf(input).map(async (part) => (await stat(part)).mtimeMs))));
-  const file = stored('analyses', `${ANALYSIS_VERSION}|${await fingerprint(input)}|${modified}`, 'bin');
+  const file = stored('analyses', `${ANALYSIS_VERSION}|${await fingerprint(input)}|${await lastModified(input)}`, 'bin');
   const byPath = stored('analyses', `${ANALYSIS_VERSION}|${input}|${info.size}|${info.mtimeMs}`, 'bin');
   for (const candidate of [file, byPath]) {
     try {
