@@ -9,8 +9,8 @@ are under "Not released yet" and appear there once they are.
 - **Videos for YouTube.** A Video view, beside the mastering view, shows the
   selected mix as a video: a template that moves to the music (its beats, its
   spectrum, how much energy it has), showing the mix's artist, with a colour and
-  a logo to fill in. Exporting as MP4 video makes the file, in 1080p. Three templates
-  come with it, and fourteen fonts for the text, from clean to techno to
+  a logo to fill in. Exporting as MP4 video makes the file, in 1080p. Four templates
+  come with it, one of them over a photo of your own, and fourteen fonts for the text, from clean to techno to
   neon; any font installed on the computer can be used as well.
 - **An Artist field** beside the mix's name, for the exported file's tags and
   for the video.

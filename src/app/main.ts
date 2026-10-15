@@ -648,6 +648,7 @@ const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 const IMAGE_MOST_BYTES = 40 * 1024 * 1024;
 
 ipcMain.handle('pick-image', async () => {
+  if (SCREENSHOT && process.env.DJMASTER_SHOT_IMAGE) return process.env.DJMASTER_SHOT_IMAGE;
   const result = await dialog.showOpenDialog(window!, {
     properties: ['openFile'],
     filters: [{ name: 'Pictures', extensions: IMAGE_EXTENSIONS }],

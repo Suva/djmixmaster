@@ -126,6 +126,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `help`) to the window before the script runs |
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
+| `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
 
 ```bash

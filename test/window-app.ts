@@ -106,6 +106,8 @@ export interface Run<Given> {
   menu?: string;
   /** The folder "Export all" saves into. */
   exportFolder?: string;
+  /** What the dialog for a template's picture answers. */
+  image?: string;
   /** Handed to the function as its second argument; must survive JSON. */
   given?: Given;
   timeoutMs?: number;
@@ -137,6 +139,7 @@ export function runApp<Result, Given = undefined>(
         DJMASTER_SHOT_SCRIPT: script,
         ...(run.menu ? { DJMASTER_SHOT_MENU: run.menu } : {}),
         ...(run.exportFolder ? { DJMASTER_SHOT_FOLDER: run.exportFolder } : {}),
+        ...(run.image ? { DJMASTER_SHOT_IMAGE: run.image } : {}),
       },
     });
     let output = '';
