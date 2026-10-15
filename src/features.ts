@@ -12,7 +12,7 @@ export const HIGHEST_HZ = 16000;
 /** Band values and the level are kept as one byte each, from this many dB below full scale up to it. */
 export const FLOOR_DB = -72;
 /** Bump when the values would come out differently, so stored ones are worked out again. */
-export const FEATURES_VERSION = 1;
+export const FEATURES_VERSION = 2;
 
 export interface Features {
   /** Values per second in `bands` and `level`. */
@@ -296,10 +296,13 @@ export function findBeats(kickEnergy: Float64Array, rate: number): { beats: Floa
   for (let t = last; t >= 0; t = before[t]) steps.push(t);
   steps.reverse();
 
-  const strongest = Math.max(1e-9, ...steps.map((t) => onset[t]));
+  // A typical strong kick counts as full strength; measured against the very
+  // strongest, ordinary kicks would barely register.
+  const onBeats = Float64Array.from(steps, (t) => onset[t]).sort();
+  const strong = Math.max(1e-9, onBeats[Math.floor(onBeats.length * 0.8)] ?? 0);
   return {
     beats: Float64Array.from(steps, (t) => (t + 0.5) / rate),
-    strength: Float32Array.from(steps, (t) => Math.min(1, onset[t] / (strongest * 0.5))),
+    strength: Float32Array.from(steps, (t) => Math.min(1, onset[t] / strong)),
   };
 }
 
