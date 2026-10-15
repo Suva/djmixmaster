@@ -40,8 +40,10 @@ export interface Page {
   type(id: string, value: string): void;
   /** The labels on the mix tabs, in order. */
   tabs(): string[];
-  /** The playhead as the transport shows it, in seconds. */
+  /** The playhead as the transport shows it, in seconds into the selected mix. */
   playhead(): number;
+  /** Where the selected mix lies in the recording, and how long it is, as times to the millisecond. */
+  region(): { start: string; end: string; length: string };
 }
 
 // Kept as text because it runs in the window, not here. It must match `Page`.
@@ -87,7 +89,8 @@ const PAGE_SOURCE = `(() => {
       field.blur();
     },
     tabs: () => [...document.querySelectorAll('.mix-tab')].map((tab) => tab.textContent.trim()),
-    playhead: () => element('play-time').textContent.split(':').reduce((total, part) => total * 60 + Number(part), 0),
+    playhead: () => element('play-time').textContent.split(' / ')[0].split(':').reduce((total, part) => total * 60 + Number(part), 0),
+    region: () => ({ ...element('play-time').dataset }),
   };
 })()`;
 

@@ -131,8 +131,7 @@ dropouts in white. The report describes; it does not repair yet.
 - **Zooming in**: scroll over the curves to zoom, down to half a second across
   the window. From 20 seconds inwards the waveform is drawn from the sound
   itself, so single beats and bass notes can be seen. The start and end of a
-  mix, and a split, land on the playhead to the millisecond, and the Start
-  and End fields take fractions of a second.
+  mix, and a split, land on the playhead to the millisecond.
 - **Live preview**: settings change what you hear immediately, and the preview
   uses the same limiter as the export.
 - **Level meter**: beside the curves, two columns of lights show what reaches
@@ -194,8 +193,8 @@ everything below together with the mouse and trackpad gestures.
 
 YouTube will not take a mix as sound alone. The **Video** view (the switch at
 the bottom of the window, or Tab) shows the selected mix as a video: a
-template drawn to the music, with a few things to fill in, such as an artist
-name, a colour and a logo. The recording timeline, the playback controls and
+template drawn to the music, showing the mix's artist, with a few things to
+fill in, such as a colour and a logo. The recording timeline, the playback controls and
 a strip of the mix stay at hand. Three templates come with the app: Glitter,
 Spectrum ring and Waveform. What is chosen is kept with the mix.
 

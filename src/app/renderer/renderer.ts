@@ -552,11 +552,6 @@ function setStats(stats: Stats | null) {
 // ---------------------------------------------------------------------------
 // Mixes and their regions
 
-function parseTime(text: string): number | null {
-  const parts = text.trim().split(':').map(Number);
-  if (parts.length === 0 || parts.length > 3 || parts.some((p) => !Number.isFinite(p) || p < 0)) return null;
-  return parts.reduce((total, part) => total * 60 + part, 0);
-}
 
 /** The free stretch of the recording around `block`, between the neighbouring mixes other than `except`. */
 function freeSpace(block: number, except: Mix | null): Region {
@@ -578,11 +573,13 @@ function showMix() {
     if (hasDefaultName(m)) m.name = `Mix ${index + 1}`;
   });
   const { start, end } = edges(mix);
-  $<HTMLInputElement>('region-start').value = stamp(start);
-  $<HTMLInputElement>('region-end').value = stamp(end);
-  $('region-length').textContent = stamp(end - start);
+  // Where the mix lies, to the millisecond, for scripted checks; on screen it is the timeline that shows it.
+  Object.assign($('play-time').dataset, { start: stamp(start), end: stamp(end), length: stamp(end - start) });
+  showPlayback();
   const nameInput = $<HTMLInputElement>('mix-name');
   if (document.activeElement !== nameInput) nameInput.value = mix.name;
+  const artistInput = $<HTMLInputElement>('mix-artist');
+  if (document.activeElement !== artistInput) artistInput.value = mix.artist ?? '';
 
   const tabs = $('mix-tabs');
   tabs.replaceChildren(
@@ -825,16 +822,7 @@ window.addEventListener('mouseup', (event) => {
   drag = null;
 });
 
-for (const id of ['region-start', 'region-end']) {
-  const input = $<HTMLInputElement>(id);
-  input.addEventListener('change', () => {
-    const start = parseTime($<HTMLInputElement>('region-start').value);
-    const end = parseTime($<HTMLInputElement>('region-end').value);
-    if (start === null || end === null || end <= start) showMix();
-    else setRegion(start / HOP_SECONDS, end / HOP_SECONDS);
-  });
-}
-for (const id of ['region-start', 'region-end', 'mix-name']) {
+for (const id of ['mix-name', 'mix-artist']) {
   const input = $<HTMLInputElement>(id);
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') input.blur();
@@ -846,6 +834,12 @@ $<HTMLInputElement>('mix-name').addEventListener('input', (event) => {
   showMix();
 });
 $<HTMLInputElement>('mix-name').addEventListener('blur', showMix);
+$<HTMLInputElement>('mix-artist').addEventListener('input', (event) => {
+  const artist = (event.target as HTMLInputElement).value.trim();
+  if (artist) mix.artist = artist;
+  else delete mix.artist;
+  scheduleSave();
+});
 
 /** Stretches the selected mix over all the free space around it. */
 function expandMix() {
@@ -1306,8 +1300,11 @@ function showFigures() {
   ]);
 }
 
+/** The playhead as time into the selected mix, beside the mix's length. */
 function showPlayback() {
-  $('play-time').textContent = clock(player.time);
+  const { start, end } = edges(mix);
+  const elapsed = clamp(player.time - start * HOP_SECONDS, 0, (end - start) * HOP_SECONDS);
+  $('play-time').textContent = recording ? `${clock(elapsed)} / ${clock((end - start) * HOP_SECONDS)}` : '0:00:00 / 0:00:00';
   scheduleDraw();
 }
 

@@ -8,9 +8,14 @@ are under "Not released yet" and appear there once they are.
 
 - **Videos for YouTube.** A Video view, beside the mastering view, shows the
   selected mix as a video: a template that moves to the music (its beats, its
-  spectrum, how much energy it has), with an artist name, a colour and a logo
-  to fill in. Exporting as MP4 video makes the file, in 1080p. Three templates
+  spectrum, how much energy it has), showing the mix's artist, with a colour and
+  a logo to fill in. Exporting as MP4 video makes the file, in 1080p. Three templates
   come with it.
+- **An Artist field** beside the mix's name, for the exported file's tags and
+  for the video.
+- The time beside the transport now counts **into the mix, over its length**.
+  The Start and End fields are gone: the mix's edges are set on the timeline,
+  with I and O, or by splitting.
 
 ## 0.7.0 — 14 October 2026
 
