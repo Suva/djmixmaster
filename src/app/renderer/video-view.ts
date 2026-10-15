@@ -80,8 +80,9 @@ export class VideoView {
     });
     window.addEventListener('mousemove', (event) => dragging && seekTo(event));
     window.addEventListener('mouseup', () => (dragging = false));
+    // Once started, the listening goes on, and is counted, in the Mastering view too.
     options.api.onListening((path, fraction) => {
-      if (this.#visible && path === this.#featuresFor && !this.#features) options.say(`Listening to the recording for the video… ${Math.floor(fraction * 100)}%`);
+      if (path === this.#featuresFor && !this.#features) this.#listening(fraction);
     });
   }
 
@@ -107,6 +108,11 @@ export class VideoView {
     const mix = this.#options.mix();
     const choice = mix?.visuals ?? { template: DEFAULT_TEMPLATE, fields: {} };
     const key = `${mix?.path}|${mix?.number}|${JSON.stringify(choice)}`;
+    if (mix?.path !== this.#featuresFor && this.#featuresFor !== null && !this.#features) {
+      // Another recording, opened while this one was still being listened to: its count no longer means anything here.
+      this.#featuresFor = null;
+      this.#listening(1, true);
+    }
     if (mix && mix.path !== this.#featuresFor && this.#visible) this.#loadFeatures(mix.path);
     if (key === this.#shownFor) return;
     this.#choice = choice;
@@ -119,15 +125,33 @@ export class VideoView {
     this.#features = null;
     this.#reader = null;
     this.#readerFor = '';
-    this.#options.say('Listening to the recording for the video…');
+    this.#listening(null);
     try {
       const features = await this.#options.api.features(path);
       if (this.#featuresFor !== path) return;
       this.#features = features;
-      this.#options.say('');
+      this.#listening(1, true);
     } catch (error) {
-      if (this.#featuresFor === path) this.#options.say(`Could not listen to the recording: ${error instanceof Error ? error.message : error}`);
+      if (this.#featuresFor !== path) return;
+      this.#listening(1, true);
+      this.#options.say(`Could not listen to the recording: ${error instanceof Error ? error.message : error}`);
     }
+  }
+
+  /**
+   * Says how far the listening has got, in the status line and over the
+   * picture, which stands still until it is done; `null` before the first
+   * count. Done, the two are cleared.
+   */
+  #listening(fraction: number | null, done = false) {
+    const notice = $('picture-notice');
+    notice.hidden = done;
+    if (done) return this.#options.say('');
+    const count = fraction === null ? '' : ` ${Math.floor(fraction * 100)}%`;
+    this.#options.say(`Listening to the recording for the video…${count}`);
+    const line = document.createElement('small');
+    line.textContent = 'The picture moves to the music once this is done.';
+    notice.replaceChildren(`Listening to the recording for the video…${count}`, line);
   }
 
   #template(): Template {

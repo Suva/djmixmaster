@@ -369,6 +369,22 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
   assert.deepEqual(again, { template: 'ring', fields: ['Colour', 'Font', 'Logo'] }, 'kept with the mix and back on the next start');
 });
 
+test('while the music is listened to, the picture says so, and the count goes on in the Mastering view', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
+    const notice = page.element('picture-notice');
+    page.click('view-video');
+    const shown = !notice.hidden && notice.offsetWidth > 0 ? notice.textContent : null;
+    page.click('view-mastering');
+    const counts: string[] = [];
+    new MutationObserver(() => counts.push(page.text('readout'))).observe(page.element('readout'), { childList: true, characterData: true, subtree: true });
+    await page.until(() => notice.hidden, 'the listening to be done');
+    return { shown, counted: counts.filter((text) => /Listening .*\d+%/.test(text)).length, last: page.text('readout').trim() };
+  });
+  assert.match(seen.shown ?? '', /Listening to the recording for the video/);
+  assert.ok(seen.counted > 0, 'the count went on after switching views');
+  assert.equal(seen.last, '');
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');
