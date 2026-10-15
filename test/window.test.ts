@@ -355,7 +355,7 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
   });
   assert.deepEqual(first.mastering, { pictureShown: false, curvesShown: true });
   assert.deepEqual(first.video, { pictureShown: true, curvesShown: false, templateShown: true, levellingShown: false });
-  assert.deepEqual(first.options, ['glitter', 'ring', 'waveform']);
+  assert.deepEqual(first.options, ['glitter', 'ring', 'waveform', 'photo']);
   assert.ok(first.lit > 50, 'the picture is not blank');
   assert.ok(first.back, 'the bar at the bottom switches back');
 
@@ -383,6 +383,27 @@ test('while the music is listened to, the picture says so, and the count goes on
   assert.match(seen.shown ?? '', /Listening to the recording for the video/);
   assert.ok(seen.counted > 0, 'the count went on after switching views');
   assert.equal(seen.last, '');
+});
+
+test('the Photo template fills the picture with a chosen photo', { skip }, async () => {
+  const photo = join(work, 'Photo.png');
+  // Bright red, so that it is told apart from any background a template draws.
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0xff2020:s=640x400', '-frames:v', '1', photo]);
+  const seen = await runApp({ recording: mix, data: await fresh(), image: photo, timeoutMs: 90_000 }, async (page) => {
+    page.click('view-video');
+    const template = page.element<HTMLSelectElement>('template');
+    template.value = 'photo';
+    template.dispatchEvent(new Event('change'));
+    await page.wait(100);
+    const fields = [...page.element('video-fields').querySelectorAll('label')].map((label) => label.textContent);
+    [...page.element('video-fields').querySelectorAll('button')].find((button) => button.textContent === 'Choose…')!.click();
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const middle = () => [...picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data];
+    await page.until(() => middle()[0] > 150 && middle()[1] < 80, 'the photo to be drawn');
+    return { fields, middle: middle() };
+  });
+  assert.deepEqual(seen.fields, ['Photo', 'Colour', 'Font']);
+  assert.ok(seen.middle[0] > 150, `the middle of the picture is ${seen.middle}`);
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {

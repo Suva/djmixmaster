@@ -349,12 +349,15 @@ values into the ones a frame gets. None draws anything yet.
 - The template and what was filled in belong to the mix: kept with its other
   settings, saved, and undone with them. Fields of the same name carry over
   when the template changes, so a name and a colour need entering once.
-- Three templates come with it, each showing the mix's Artist field (from the
+- Four templates come with it, each showing the mix's Artist field (from the
   mix row) and asking for one colour, deriving the rest from it: **Glitter** (a radial glow, particles that thicken
   with the energy and burst on the kick, a logo that pulses), **Spectrum
   ring** (a circular spectrum from the colour to its complement around the
   logo) and **Waveform** (the level of the last eight seconds as a wave, with
-  a spectrum underneath, and the time).
+  a spectrum underneath, and the time), and **Photo** (a photo of the user's
+  own that drifts slowly and swells a little with the bass, a little dust falling,
+  the artist and the mix in a corner and a spectrum along the bottom; asks for
+  the photo, and the colour is the spectrum's).
 - Drawing is a 2D canvas (`src/visuals/draw.ts`), the same code the export
   will use. A frame follows from its moment in the mix alone, except for the
   spectrum's rise and fall and a text changing, which remember the frame

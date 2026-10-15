@@ -90,7 +90,14 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
         {
           type: 'gradient',
           name: 'Background',
-          params: { kind: 'linear', angle: 120, drift: 2, colour1: 'darken(colour1, 0.62)', colour2: '#06070a', colour3: 'darken(complement(colour1), 0.6)' },
+          // The colour's hue at a set lightness rather than darkened by a set amount, which
+          // left anything but the lightest colours almost black.
+          params: {
+            kind: 'linear', angle: 120, drift: 2,
+            colour1: 'oklch(0.34, 0.6 * chroma(colour1), hueOf(colour1))',
+            colour2: 'oklch(0.17, 0.25 * chroma(colour1), hueOf(colour1))',
+            colour3: 'oklch(0.3, 0.5 * chroma(colour1), hueOf(colour1) + 180)',
+          },
         },
         {
           type: 'spectrum',
@@ -160,6 +167,75 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           params: { text: '%elapsed% / %mixLength%', x: 96, y: 7, anchor: 'top right', align: 'right', size: 2.4, font: 'Mono', colour: '#ffffffaa' },
         },
         { ...nowPlaying, params: { ...nowPlaying.params, x: 4, y: 84, anchor: 'top left', align: 'left' } },
+      ],
+    },
+  },
+  {
+    id: 'photo',
+    template: {
+      format: 1,
+      name: 'Photo',
+      fields: [
+        { key: 'photo', label: 'Photo', kind: 'image', default: '' },
+        { key: 'colour1', label: 'Colour', kind: 'colour', default: '#f4efe6' },
+        { key: 'font', label: 'Font', kind: 'font', default: 'Space Grotesk' },
+      ],
+      layers: [
+        // Seen only until a photo is chosen.
+        { type: 'gradient', name: 'Background', params: { kind: 'radial', colour1: '#22252c', colour2: '#08090b' } },
+        {
+          type: 'image',
+          name: 'Photo',
+          // A little larger than the frame, so that drifting never shows its edges. It wanders
+          // slowly on its own, and swells a little with the bass.
+          params: {
+            image: '%photo%', fit: 'cover', width: 100, height: 100,
+            x: '50 + 1.6 * (noise(time / 9) - 0.5)', y: '50 + 1.6 * (noise(time / 11 + 40) - 0.5)',
+            rotation: '0.5 * (noise(time / 13 + 80) - 0.5)',
+            scale: '108 + 2.5 * smooth(bass, 0, 0.2)',
+          },
+        },
+        {
+          type: 'gradient',
+          name: 'Shade',
+          // Darker at the top and the bottom, where the writing and the spectrum are.
+          params: { kind: 'linear', angle: 90, colour1: '#00000080', colour2: '#00000000', colour3: '#000000a0' },
+        },
+        {
+          type: 'particles',
+          name: 'Dust',
+          params: {
+            // Drawn over the photo as it is, not lightened into it, so that it shows on bright photos too.
+            count: 120, shape: 'soft dot', colour1: '#ffffff', colour2: 'colour1',
+            sizeLow: 0.15, sizeHigh: 0.6, speed: 1.2, direction: 90, spread: 30, turbulence: 25,
+            lifetime: 20, twinkle: 0.3, twinkleDepth: 40, opacity: 70,
+          },
+        },
+        {
+          type: 'spectrum',
+          name: 'Spectrum',
+          params: {
+            y: 100, anchor: 'bottom', width: 100, height: 16, bars: 96, gap: 30, rounded: false,
+            colourLow: 'alpha(colour1, 0.85)', colourHigh: 'alpha(hue(colour1, 40), 0.85)',
+          },
+        },
+        {
+          type: 'text',
+          name: 'Artist',
+          params: {
+            text: '%artist%', font: '%font%', x: 4, y: 6, anchor: 'top left', align: 'left', size: 5.5, weight: 700,
+            colour: '#ffffff', shadowColour: '#000000aa', shadowBlur: 1.5,
+          },
+        },
+        {
+          type: 'text',
+          name: 'Mix',
+          params: {
+            text: '%mixName%', font: '%font%', x: 4, y: 13, anchor: 'top left', align: 'left', size: 2.8, weight: 400,
+            colour: 'alpha(colour1, 0.9)', shadowColour: '#000000aa', shadowBlur: 1.5,
+          },
+        },
+        { ...nowPlaying, params: { ...nowPlaying.params, x: 4, y: 78, anchor: 'top left', align: 'left' } },
       ],
     },
   },

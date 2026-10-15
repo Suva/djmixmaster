@@ -195,8 +195,8 @@ YouTube will not take a mix as sound alone. The **Video** view (the switch at
 the bottom of the window, or Tab) shows the selected mix as a video: a
 template drawn to the music, showing the mix's artist, with a few things to
 fill in, such as a colour and a logo. The recording timeline, the playback controls and
-a strip of the mix stay at hand. Three templates come with the app: Glitter,
-Spectrum ring and Waveform. What is chosen is kept with the mix.
+a strip of the mix stay at hand. Four templates come with the app: Glitter,
+Spectrum ring, Waveform, and Photo, which sets the mix over a photo of your own. What is chosen is kept with the mix.
 
 Exporting a mix as **MP4 video** draws every frame of it at 1920 × 1080, 30
 frames a second, with the sound in AAC. On an M1 Mac it takes about a sixth of
