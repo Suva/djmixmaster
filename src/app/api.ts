@@ -45,6 +45,9 @@ export interface VideoMixInfo {
   artist: string;
   album: string;
   visuals: VisualsChoice | undefined;
+  /** The mix's fades in and out, in seconds, which the picture follows. */
+  fadeIn: number;
+  fadeOut: number;
 }
 
 /** What is remembered between sessions. The window decides what goes in; the main process only stores it. */

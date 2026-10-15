@@ -31,6 +31,8 @@ export interface Frame {
   text: TextValues;
   /** Pictures for image layers, by the name or path a template gives. */
   images: Map<string, CanvasImageSource & { width: number; height: number }>;
+  /** How much of the picture shows, 0 to 1: the mix's fades in and out take it to black. */
+  shown?: number;
 }
 
 /** What a layer remembers from frame to frame. */
@@ -122,6 +124,16 @@ export class FrameDrawer {
       }
       ctx.restore();
     });
+    // The picture follows the sound's fades: black where it is silent, by the same curve.
+    const shown = frame.shown ?? 1;
+    if (shown < 1) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1 - Math.max(0, shown);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1;
+    }
   }
 
   /** How far a layer is shown at this moment: its time on screen, and its fades in and out. */
