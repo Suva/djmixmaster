@@ -48,6 +48,8 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/draw.ts` | Draws a frame of a template on a 2D canvas, for the preview and the export alike |
 | `src/visuals/templates.ts` | The templates that come with the app |
 | `src/app/renderer/video-view.ts` | The Video view: a mix's template, its fields and a live picture |
+| `src/app/renderer/video-frame.ts` | A frame of a mix's video, drawn the same for the view and the export |
+| `src/app/renderer/exporter.ts` | The hidden page that draws and encodes a video export |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
 | `src/checkup.ts` | Turns that data into the findings of the check-up report |
 | `src/fade.ts` | The fade curve shared by drawing, preview and export |
@@ -194,6 +196,13 @@ Do not write test data there.
 - **The window is served from `djm://app/`**, not `file://`, so that audio can
   pass through Web Audio. Only files listed in `APP_FILES` in `main.ts` are
   served; a new file in `dist/` has to be added there.
+- **A video export has three steps** (`renderVideo` in `main.ts`): the sound
+  is exported to a temporary AAC file as any export is; a hidden window
+  (`exporter.ts`) draws each frame with the Video view's code and encodes it
+  with WebCodecs, hardware first; the encoded picture is piped into ffmpeg,
+  which packs it with the sound without encoding either again. Cancelling
+  stops all three and removes the files. The hidden window must keep drawing
+  unseen, so it is made with `backgroundThrottling: false`.
 - **The window has two views,** Mastering and Video, switched by the bar at
   the bottom or Tab. The Video view (`video-view.ts`) replaces the curves with
   the picture and the levelling settings with the template's fields; the

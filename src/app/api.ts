@@ -18,6 +18,33 @@ export interface RenderRequest {
   fadeInSeconds: number;
   fadeOutSeconds: number;
   ceilingDb: number | null;
+  /** For an MP4: the picture to go with the sound. */
+  video?: VideoRequest;
+}
+
+/** The picture of a video export. */
+export interface VideoRequest {
+  /** The mix as the template sees it, with the template and fields chosen for it. */
+  mix: VideoMixInfo;
+  width: number;
+  height: number;
+  fps: number;
+  /** Bitrate of the picture, in kbps. */
+  kbps: number;
+}
+
+/** What the drawing of a mix's video needs to know about it. */
+export interface VideoMixInfo {
+  path: string;
+  recordingName: string;
+  name: string;
+  number: number;
+  count: number;
+  start: number;
+  end: number;
+  artist: string;
+  album: string;
+  visuals: VisualsChoice | undefined;
 }
 
 /** What is remembered between sessions. The window decides what goes in; the main process only stores it. */
@@ -119,6 +146,13 @@ export interface Api {
   pickImage(): Promise<string | null>;
   /** The bytes of a picture file chosen before. */
   readImage(path: string): Promise<Uint8Array>;
+  /** In the hidden page that draws a video export: the picture to make. */
+  onVideoJob(listener: (job: VideoRequest) => void): void;
+  /** From that page: the next stretch of the encoded picture. Resolves once it is written. */
+  videoChunk(bytes: Uint8Array): Promise<void>;
+  videoProgress(fraction: number): void;
+  /** From that page: the picture is finished, or failed with this message. */
+  videoDone(failure: string | null): void;
   /** Tells the main process the recording has been closed, so it is not reopened next time. */
   closed(): void;
 }

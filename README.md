@@ -190,14 +190,29 @@ everything below together with the mouse and trackpad gestures.
 | Tab | Switch between the Mastering and the Video view |
 | Esc | Cancel an analysis or export in progress |
 
+### A video for YouTube
+
+YouTube will not take a mix as sound alone. The **Video** view (the switch at
+the bottom of the window, or Tab) shows the selected mix as a video: a
+template drawn to the music, with a few things to fill in, such as an artist
+name, a colour and a logo. The recording timeline, the playback controls and
+a strip of the mix stay at hand. Three templates come with the app: Glitter,
+Spectrum ring and Waveform. What is chosen is kept with the mix.
+
+Exporting a mix as **MP4 video** draws every frame of it at 1920 × 1080, 30
+frames a second, with the sound in AAC. On an M1 Mac it takes about a sixth of
+the mix's length: some 20 minutes for two hours. The first time, the
+recording is also listened to for the beats and the spectrum the template
+moves to, which takes about as long as its analysis.
+
 ### Exporting
 
 The export dialog asks for:
 
-- **Format**: WAV, FLAC, MP3 or AAC.
+- **Format**: WAV, FLAC, MP3, AAC, or MP4 video.
 - **Bit depth** for WAV and FLAC: 16-bit, which is dithered and the usual
   choice for sharing and playing, or 24-bit.
-- **Bitrate** for MP3 and AAC.
+- **Bitrate** for MP3 and AAC, and for the sound of a video.
 - **Sample rate**: the recording's own, or 44.1 or 48 kHz.
 - **Tags**: a title and an artist per mix and an album for the recording.
 

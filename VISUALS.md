@@ -359,7 +359,26 @@ values into the ones a frame gets. None draws anything yet.
   will use. A frame follows from its moment in the mix alone, except for the
   spectrum's rise and fall and a text changing, which remember the frame
   before. The view draws only while shown.
-- Not yet: the MP4 export itself, a template file to load or save, the
+- Not yet: a template file to load or save, the
   editor, the waveform as a true oscilloscope (it shows the level, not the
   wave), the glow's threshold (approximated), and track markers for
   `%currentTrack%`, which stays empty.
+
+## The MP4 export, as built
+
+- "MP4 video" is a format in the export dialog, beside WAV, FLAC, MP3 and
+  AAC; Export all works with it too. Each mix is drawn with its own template,
+  or Glitter if none was chosen. The dialog says which.
+- 1920 × 1080 at 30 frames a second, H.264 at up to 8 Mbit/s (the encoder
+  uses far less on calm pictures: 2 to 4 Mbit/s for the built-in templates),
+  and the sound in AAC at the bitrate chosen, made 1 dB quieter like any
+  lossy export. The tags go into the video file.
+- Measured on an M1, from a clean start: ten minutes of the tekno recording
+  as two five-minute videos in 100 seconds, about six times real time. Each
+  file had exactly 9000 frames and picture and sound both 300.000 seconds
+  long.
+- Not yet tried: Windows and Linux, where the hardware encoder may not be
+  offered and the software one built into Electron takes over (about half
+  the speed on the Mac); other sizes and frame rates; very long mixes end to
+  end.
+
