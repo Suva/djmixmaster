@@ -55,7 +55,7 @@ test('a recording opens as one mix over all of it', { skip }, async () => {
     return {
       name: page.text('file-name'),
       tabs: page.tabs(),
-      length: page.text('region-length'),
+      length: page.region().length,
       loudnessNow: page.text('stat-in'),
       afterLevelling: page.text('stat-out'),
       checkup: page.text('checkup'),
@@ -105,10 +105,10 @@ test('a mix can be split, deleted with Backspace, and both undone', { skip }, as
     await page.wait(100);
     page.key('KeyI');
     await page.wait(100);
-    const trimmed = page.text('region-length');
+    const trimmed = page.region().length;
     page.key('Backspace');
     await page.wait(100);
-    const afterDeletingTheOnlyMix = { tabs: page.tabs().length, length: page.text('region-length'), trimmed };
+    const afterDeletingTheOnlyMix = { tabs: page.tabs().length, length: page.region().length, trimmed };
 
     page.key('Enter');
     for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
@@ -191,6 +191,7 @@ test('work is remembered, and the last recording comes back by itself', { skip }
   const data = await fresh();
   await runApp({ recording: mix, data }, async (page) => {
     page.type('mix-name', 'Warm-up');
+    page.type('mix-artist', 'Suva');
     page.slide('cut', 6);
     page.key('Enter');
     for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
@@ -202,6 +203,7 @@ test('work is remembered, and the last recording comes back by itself', { skip }
   const back = await runApp({ data }, (page) => ({
     name: page.text('file-name'),
     tabs: page.tabs(),
+    artist: page.element<HTMLInputElement>('mix-artist').value,
     cut: page.text('cut-value'),
     message: page.text('export-status'),
     undo: !page.element<HTMLButtonElement>('undo').disabled,
@@ -209,6 +211,7 @@ test('work is remembered, and the last recording comes back by itself', { skip }
   assert.equal(back.name, 'Test mix.wav');
   assert.equal(back.tabs.length, 2);
   assert.match(back.tabs[0], /Warm-up/);
+  assert.equal(back.artist, 'Suva');
   assert.match(back.cut, /6\.0 dB/);
   assert.equal(back.message, 'Picked up where you left off.');
   assert.ok(!back.undo, 'undo does not reach into an earlier session');
@@ -276,7 +279,7 @@ test('a recording in several files opens, plays and is remembered as one', { ski
     for (let i = 0; i < 14; i++) page.click('zoom-in');
     await page.wait(150);
     await page.until(() => page.element('detail').dataset.wave === 'fine', 'the wave across the join');
-    return { name: page.text('file-name'), length: page.text('region-length'), stats };
+    return { name: page.text('file-name'), length: page.region().length, stats };
   });
   assert.equal(joined.name, 'Night part *.wav (3 files)');
   assert.equal(joined.length, '0:09:00');
@@ -341,7 +344,7 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
     template.value = 'ring';
     template.dispatchEvent(new Event('change'));
     await page.wait(100);
-    page.type('field-name', 'Suva');
+    page.type('mix-artist', 'Suva');
     await page.settle();
     await page.wait(300);
     const pixels = picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
@@ -360,10 +363,10 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
     page.click('view-video');
     return {
       template: page.element<HTMLSelectElement>('template').value,
-      name: page.element<HTMLInputElement>('field-name').value,
+      fields: [...page.element('video-fields').querySelectorAll('label')].map((label) => label.textContent),
     };
   });
-  assert.deepEqual(again, { template: 'ring', name: 'Suva' }, 'kept with the mix and back on the next start');
+  assert.deepEqual(again, { template: 'ring', fields: ['Colour', 'Logo'] }, 'kept with the mix and back on the next start');
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
@@ -387,7 +390,10 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
   await mkdir(folder);
   // Two mixes of ten seconds each, given a template and a name in the Video view.
   const message = await runApp({ recording: mix, data: await fresh(), exportFolder: folder, timeoutMs: 120_000 }, async (page) => {
-    page.type('region-end', '0:00:20');
+    page.key('Enter');
+    for (let i = 0; i < 4; i++) page.key('ArrowRight');
+    await page.wait(100);
+    page.key('KeyO');
     await page.wait(100);
     page.key('Enter');
     for (let i = 0; i < 2; i++) page.key('ArrowRight');
@@ -398,7 +404,7 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
     const template = page.element<HTMLSelectElement>('template');
     template.value = 'ring';
     template.dispatchEvent(new Event('change'));
-    page.type('field-name', 'Suva');
+    page.type('mix-artist', 'Suva');
     await page.settle();
     page.click('export-all');
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
@@ -448,12 +454,12 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
   assert.deepEqual(await readdir(stopped), [], 'nothing is left of the cancelled video');
 });
 
-test('a field of the video can be typed in while the mix plays, and undone', { skip }, async () => {
+test('the artist can be typed in the Video view while the mix plays, and undone', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
     page.click('view-video');
     page.key('Space');
     await page.until(() => page.element('play').classList.contains('playing'), 'playback to start');
-    const name = page.element<HTMLInputElement>('field-name');
+    const name = page.element<HTMLInputElement>('mix-artist');
     name.focus();
     for (const typed of ['S', 'Su', 'Suv', 'Suva']) {
       name.value = typed;
@@ -467,7 +473,7 @@ test('a field of the video can be typed in while the mix plays, and undone', { s
     await page.settle();
     page.click('undo');
     await page.wait(200);
-    return { kept, undone: page.element<HTMLInputElement>('field-name').value };
+    return { kept, undone: page.element<HTMLInputElement>('mix-artist').value };
   });
   assert.deepEqual(seen.kept, { focused: true, value: 'Suva' });
   assert.equal(seen.undone, '', 'undo takes the typing back');
@@ -564,7 +570,7 @@ test('the keys move the playhead, switch what is heard and show the help', { ski
 
 test('I and O put the start and the end of the mix at the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
-    const region = () => [page.element<HTMLInputElement>('region-start').value, page.element<HTMLInputElement>('region-end').value];
+    const region = () => [page.region().start, page.region().end];
     page.key('Enter');
     for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
     await page.wait(60);
@@ -590,7 +596,7 @@ test('I and O put the start and the end of the mix at the playhead', { skip }, a
     await page.settle();
     page.click('undo');
     await page.settle();
-    return { afterIn, afterOut, refused, afterUndo: region(), length: page.text('region-length') };
+    return { afterIn, afterOut, refused, afterUndo: region(), length: page.region().length };
   });
   assert.deepEqual(seen.afterIn, ['0:01:00', '0:09:00']);
   assert.deepEqual(seen.afterOut, ['0:01:00', '0:03:00']);
@@ -621,7 +627,7 @@ test('a double click on a free part of the recording fills it with a mix', { ski
     const onAMix = page.tabs().length;
     doubleClick(0.9);
     await page.wait(100);
-    const region = [page.element<HTMLInputElement>('region-start').value, page.element<HTMLInputElement>('region-end').value];
+    const region = [page.region().start, page.region().end];
     doubleClick(0.9);
     await page.wait(100);
     return { onAMix, tabs: page.tabs(), region };
@@ -716,7 +722,7 @@ test('zoomed in close, the waveform is drawn from the wave itself', { skip }, as
     page.key('KeyI');
     await page.wait(150);
     await page.until(() => detail.dataset.wave === 'fine', 'the view to stay close after marking the start');
-    const afterMark = { wave: detail.dataset.wave, start: page.element<HTMLInputElement>('region-start').value };
+    const afterMark = { wave: detail.dataset.wave, start: page.region().start };
     page.key('ArrowRight', { shift: true });
     await page.wait(150);
     page.click('split-here');
@@ -735,7 +741,7 @@ test('edges and cuts land on the playhead to the millisecond, and so does the ex
   await mkdir(exportFolder);
   const seen = await runApp({ recording: mix, data: await fresh(), exportFolder, timeoutMs: 120_000 }, async (page) => {
     const playing = () => page.element('play').classList.contains('playing');
-    const field = (id: string) => page.element<HTMLInputElement>(id).value;
+    const field = (id: 'start' | 'end') => page.region()[id];
     page.key('Enter');
     for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
     // Stop playback wherever it happens to be and start the mix there; again
@@ -748,17 +754,17 @@ test('edges and cuts land on the playhead to the millisecond, and so does the ex
       await page.until(() => !playing(), 'playback to stop');
       page.key('KeyI');
       await page.wait(100);
-    } while (!/\.\d\d/.test(field('region-start')));
+    } while (!/\.\d\d/.test(field('start')));
 
     // A minute on, cut. The first piece is then a minute long exactly.
     for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
     page.click('split-here');
     await page.settle();
-    const first = { start: field('region-start'), end: field('region-end'), length: page.text('region-length') };
+    const first = { start: field('start'), end: field('end'), length: page.region().length };
     document.querySelectorAll<HTMLElement>('.mix-tab')[1].click();
     await page.wait(100);
-    const second = { start: field('region-start'), end: field('region-end') };
+    const second = { start: field('start'), end: field('end') };
 
     page.click('export-all');
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');

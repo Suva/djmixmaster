@@ -349,8 +349,8 @@ values into the ones a frame gets. None draws anything yet.
 - The template and what was filled in belong to the mix: kept with its other
   settings, saved, and undone with them. Fields of the same name carry over
   when the template changes, so a name and a colour need entering once.
-- Three templates come with it, each asking for an artist name and one colour
-  and deriving the rest: **Glitter** (a radial glow, particles that thicken
+- Three templates come with it, each showing the mix's Artist field (from the
+  mix row) and asking for one colour, deriving the rest from it: **Glitter** (a radial glow, particles that thicken
   with the energy and burst on the kick, a logo that pulses), **Spectrum
   ring** (a circular spectrum from the colour to its complement around the
   logo) and **Waveform** (the level of the last eight seconds as a wave, with

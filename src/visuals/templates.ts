@@ -1,14 +1,14 @@
-// The templates that come with the app. Each asks for a few things (a name, a
-// colour, a logo) and derives the rest from them, so that one colour picked
-// gives a whole palette. They are written in the same format a template file
-// would be, and checked the same way.
+// The templates that come with the app. Each asks for a few things (a colour,
+// a logo) and derives the rest from them, so that one colour picked gives a
+// whole palette. Who played is the mix's own Artist field, shown as %artist%.
+// They are written in the same format a template file would be, and checked
+// the same way.
 
 export interface BuiltIn {
   id: string;
   template: unknown;
 }
 
-const name = { key: 'name', label: 'Artist name', kind: 'text', default: '' };
 const logo = { key: 'logo', label: 'Logo', kind: 'image', default: '' };
 const nowPlaying = {
   type: 'text',
@@ -26,7 +26,6 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       format: 1,
       name: 'Glitter',
       fields: [
-        name,
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#b43cff' },
         logo,
         { key: 'sparkle', label: 'Sparkle', kind: 'number', default: 1, min: 0, max: 3 },
@@ -62,7 +61,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           type: 'text',
           name: 'Artist',
           params: {
-            text: '%name%', y: 72, size: 7, weight: 800, letterSpacing: 4, case: 'upper',
+            text: '%artist%', y: 72, size: 7, weight: 800, letterSpacing: 4, case: 'upper',
             colour: '#ffffff', shadowColour: 'alpha(lighten(colour1, 0.2), 0.8)', shadowBlur: 2,
           },
         },
@@ -82,7 +81,6 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       format: 1,
       name: 'Spectrum ring',
       fields: [
-        name,
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#3ddc97' },
         logo,
       ],
@@ -108,7 +106,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
         {
           type: 'text',
           name: 'Artist',
-          params: { text: '%name%', y: 81, size: 6, weight: 700, colour: '#ffffff' },
+          params: { text: '%artist%', y: 81, size: 6, weight: 700, colour: '#ffffff' },
         },
         {
           type: 'text',
@@ -126,7 +124,6 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       format: 1,
       name: 'Waveform',
       fields: [
-        name,
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#ff6a3d' },
       ],
       layers: [
@@ -147,7 +144,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
         {
           type: 'text',
           name: 'Artist',
-          params: { text: '%name%', x: 4, y: 7, anchor: 'top left', align: 'left', size: 5, weight: 800, colour: '#ffffff' },
+          params: { text: '%artist%', x: 4, y: 7, anchor: 'top left', align: 'left', size: 5, weight: 800, colour: '#ffffff' },
         },
         {
           type: 'text',

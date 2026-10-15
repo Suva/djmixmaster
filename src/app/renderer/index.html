@@ -58,9 +58,7 @@
         <canvas id="overview"></canvas>
         <div class="region-bar">
           <label>Name <input id="mix-name" type="text" spellcheck="false"></label>
-          <label title="Where the mix starts in the recording. I puts the start at the playhead.">Start <input id="region-start" type="text" spellcheck="false"></label>
-          <label title="Where the mix ends in the recording. O puts the end at the playhead.">End <input id="region-end" type="text" spellcheck="false"></label>
-          <span>Length <output id="region-length"></output></span>
+          <label title="Who played this mix. Goes into the exported file's tags, and a video can show it.">Artist <input id="mix-artist" type="text" spellcheck="false" placeholder="Who played it"></label>
           <span class="spacer"></span>
           <button id="split-gaps" class="with-icon" title="Cut this mix apart at the silences inside it, and trim silence from its ends"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1 5h3.5v6H1zM6.25 5h3.5v6h-3.5zM11.5 5H15v6h-3.5z"/></svg>Split at gaps</button>
           <div class="toggle" role="group" aria-label="This mix">
@@ -90,7 +88,7 @@
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2l8.5 6L2 14zM11.5 2H14v12h-2.5z"/></svg>
             </button>
           </div>
-          <output id="play-time">0:00:00</output>
+          <output id="play-time" title="Time into the mix, and its length">0:00:00 / 0:00:00</output>
           <output id="shuttle" title="How fast the playhead is running. J runs it backwards, L forwards; press again to go faster. K stops."></output>
           <div class="toggle" role="group" aria-label="What to listen to">
             <button id="hear-original" title="A switches between the two">Original</button>

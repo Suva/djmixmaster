@@ -261,7 +261,7 @@ button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; f
 #play:hover:not(:disabled) { color: #5be6ab; }
 #play .when-playing, #play.playing .when-paused { display: none; }
 #play.playing .when-playing { display: block; }
-#play-time { font-variant-numeric: tabular-nums; min-width: 66px; font-size: 15px; }
+#play-time { font-variant-numeric: tabular-nums; min-width: 150px; font-size: 15px; white-space: nowrap; }
 /* Kept at its full width when empty, so the row does not shift when playback starts. */
 .toggle { display: flex; flex: none; }
 .toggle-label { color: var(--muted); margin-right: -6px; white-space: nowrap; }
