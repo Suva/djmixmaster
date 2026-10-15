@@ -97,7 +97,7 @@
             <button id="hear-levelled" class="on" title="A switches between the two">Levelled</button>
           </div>
           <span class="spacer"></span>
-          <div class="toggle" role="group" aria-label="Zoom the mix">
+          <div class="toggle" id="zoom-mix" role="group" aria-label="Zoom the mix">
             <button id="zoom-out" class="icon" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.4 8.8l3.9 3.9-1.1 1.1-3.9-3.9A5.5 5.5 0 1 1 6.5 1zm0 1.6a3.9 3.9 0 1 0 0 7.8 3.9 3.9 0 0 0 0-7.8zM4 5.7h5v1.6H4z"/></svg></button>
             <button id="zoom-in" class="icon" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 1a5.5 5.5 0 0 1 4.4 8.8l3.9 3.9-1.1 1.1-3.9-3.9A5.5 5.5 0 1 1 6.5 1zm0 1.6a3.9 3.9 0 1 0 0 7.8 3.9 3.9 0 0 0 0-7.8zM5.7 4h1.6v1.7H9v1.6H7.3V9H5.7V7.3H4V5.7h1.7z"/></svg></button>
             <button id="zoom-fit" title="Show the whole mix">Fit</button>
@@ -105,6 +105,10 @@
         </div>
         <div id="detail-area">
           <canvas id="detail"></canvas>
+          <div id="picture-area">
+            <div id="picture-box"><canvas id="picture" width="1280" height="720"></canvas></div>
+            <canvas id="mix-strip" title="The selected mix. Click or drag to move the playhead."></canvas>
+          </div>
           <canvas id="level-meter" title="What reaches the left and right speaker, with the peak held for a moment. The thin column lights from the top as the limiter works; the lamp above lights when the recording itself is clipped. Underneath: the loudness at the playhead, and the gain and bass change the levelling applies there."></canvas>
           <div id="adjust-switch" title="What dragging across the gain lane raises or lowers">
             <span>Drag adjusts</span>
@@ -114,12 +118,21 @@
             </div>
           </div>
         </div>
-        <div id="readout">&nbsp;</div>
       </div>
     </section>
 
     <aside id="settings" inert>
       <p id="settings-for"></p>
+      <div id="video-settings">
+        <h2>Video</h2>
+        <div class="control">
+          <div class="control-head"><label for="template">Template</label></div>
+          <select id="template"></select>
+        </div>
+        <div id="video-fields"></div>
+        <p class="note">Kept with this mix. The video uses it when the mix is exported in a video format.</p>
+      </div>
+      <div id="mastering-settings">
       <h2>Levelling</h2>
       <div class="control">
         <div class="control-head">
@@ -196,8 +209,16 @@
         <button id="reset" title="Put this mix's settings back to the defaults">Reset settings</button>
         <button id="apply-all" title="Give every other mix in this recording the same settings as this one. Fades and hand adjustments stay as they are." disabled>Apply to all mixes</button>
       </div>
+      </div>
     </aside>
   </main>
+  <footer id="view-bar">
+    <div class="toggle" role="group" aria-label="View">
+      <button id="view-mastering" class="on" title="The curves and the levelling (Tab switches)">Mastering</button>
+      <button id="view-video" title="The mix's video as it will look (Tab switches)">Video</button>
+    </div>
+    <div id="readout">&nbsp;</div>
+  </footer>
   <dialog id="help-dialog">
     <h3>Gestures and shortcuts</h3>
     <div id="help-content"></div>

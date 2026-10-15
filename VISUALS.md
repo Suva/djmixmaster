@@ -12,13 +12,11 @@ template works at any size; times are in seconds unless they say beats.
 
 ## How it fits the app
 
-- **A window of its own.** A small screen icon in the transport row, beside
-  Original/Levelled, opens the visuals window: the template, its fields and a
-  live picture. It sits beside the mastering window (or on a second screen)
-  and follows it: the selected mix, the playhead, playing and pausing. The
-  mastering window does not change.
-- **Nothing changes until it is used.** Without the visuals window ever being
-  opened, exporting works exactly as it does now. Visuals come into play only
+- **A view of its own.** The main window gets a second view, Video, beside
+  Mastering: the template, its fields and a live picture of the selected mix,
+  following the playhead. See "The Video view, as built" below.
+- **Nothing changes until it is used.** Without the Video view ever being
+  used, exporting works exactly as it does now. Visuals come into play only
   when a video format (MP4) is chosen in the export dialog; that format takes
   the template and fields set for the mix, or a default template if none was.
 - **What the picture follows is worked out ahead, not listened to live.** The
@@ -27,7 +25,7 @@ template works at any size; times are in seconds unless they say beats.
 - **Opening a recording stays as quick as now.** The values the visuals need
   (a spectrum per video frame, beats, tempo) come from a second pass over the
   recording that runs in the background, at low priority, only once the
-  visuals window has been opened or a video is exported. It is stored with the
+  Video view is shown or a video is exported. It is stored with the
   analysis, so it is done once per recording. Until it has reached the part
   being played, the preview moves without the music. It must never hold up an
   audio export, which runs as before.
@@ -335,3 +333,33 @@ values into the ones a frame gets. None draws anything yet.
   hand (shift the bar by one to three beats) is the way, not cleverer
   detection. Reading a frame takes well under a microsecond.
 
+## The Video view, as built
+
+- The main window has two views, **Mastering** and **Video**, switched by a
+  small switch in the bar along the bottom, or Tab, as in Ableton. (A
+  separate window was tried first and dropped: two windows had to keep each
+  other informed, which made editing while playing unreliable, and the
+  switching between windows got in the way.)
+- The Video view keeps the header, the recording timeline with its mix tabs
+  and the transport row, so mixes are chosen and played as before. The curves
+  give way to the picture, with the level meter still beside it, and the
+  levelling settings to the template and its fields. Under the picture, a strip
+  shows the selected mix on its own, how loud it is along its length and how
+  far the playhead has got; clicking or dragging on it moves the playhead.
+- The template and what was filled in belong to the mix: kept with its other
+  settings, saved, and undone with them. Fields of the same name carry over
+  when the template changes, so a name and a colour need entering once.
+- Three templates come with it, each asking for an artist name and one colour
+  and deriving the rest: **Glitter** (a radial glow, particles that thicken
+  with the energy and burst on the kick, a logo that pulses), **Spectrum
+  ring** (a circular spectrum from the colour to its complement around the
+  logo) and **Waveform** (the level of the last eight seconds as a wave, with
+  a spectrum underneath, and the time).
+- Drawing is a 2D canvas (`src/visuals/draw.ts`), the same code the export
+  will use. A frame follows from its moment in the mix alone, except for the
+  spectrum's rise and fall and a text changing, which remember the frame
+  before. The view draws only while shown.
+- Not yet: the MP4 export itself, a template file to load or save, the
+  editor, the waveform as a true oscilloscope (it shows the level, not the
+  wave), the glow's threshold (approximated), and track markers for
+  `%currentTrack%`, which stays empty.

@@ -120,7 +120,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     label: 'Text',
     params: {
       text: { kind: 'text', label: 'Text', default: '%mixName%' },
-      font: { kind: 'font', label: 'Font', default: 'Inter' },
+      font: { kind: 'font', label: 'Font', default: 'Sans' },
       weight: number('Weight', 600, 100, 900),
       size: number('Size', 6, 0.5, 40, '%'),
       colour: colour('Colour', '#ffffff'),
@@ -184,6 +184,20 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       tint: colour('Tint', '#ffffff'),
     },
   },
+};
+
+/**
+ * The fonts a template can name, and what each stands for. Only fonts every
+ * system has, under one name or another, so a template looks the same
+ * wherever it is used.
+ */
+export const FONTS: Record<string, string> = {
+  Sans: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  Condensed: '"Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", sans-serif',
+  Serif: 'Georgia, "Times New Roman", serif',
+  Mono: 'ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace',
+  Rounded: 'ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", system-ui, sans-serif',
+  Impact: 'Impact, "Arial Black", sans-serif',
 };
 
 export type FieldKind = 'text' | 'colour' | 'image' | 'number' | 'choice' | 'font';

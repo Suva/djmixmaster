@@ -26,6 +26,8 @@ const api: Api = {
   onOpenFiles: (listener) => ipcRenderer.on('open-files', (_event, paths: string[]) => listener(paths)),
   painted: (path: string) => ipcRenderer.send('painted', path),
   closed: () => ipcRenderer.send('closed'),
+  pickImage: () => ipcRenderer.invoke('pick-image'),
+  readImage: (path) => ipcRenderer.invoke('read-image', path),
   features: (path) => ipcRenderer.invoke('features', path),
   onListening: (listener) => ipcRenderer.on('listening', (_event, path: string, fraction: number) => listener(path, fraction)),
   recent: () => ipcRenderer.invoke('recent'),

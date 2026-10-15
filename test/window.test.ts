@@ -323,6 +323,90 @@ test('what the visuals move to is worked out on request, and kept', { skip }, as
   assert.equal((await readdir(join(data, 'visual-features'))).length, 1);
 });
 
+test('the Video view draws the selected mix, and the mix keeps its template', { skip }, async () => {
+  const data = await fresh();
+  const first = await runApp({ recording: mix, data, timeoutMs: 90_000 }, async (page) => {
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const mastering = { pictureShown: picture.offsetWidth > 0, curvesShown: page.element('detail').offsetWidth > 0 };
+    page.key('Tab');
+    await page.until(() => picture.dataset.music === 'true', 'the picture to be drawn from the music');
+    const video = {
+      pictureShown: picture.offsetWidth > 0,
+      curvesShown: page.element('detail').offsetWidth > 0,
+      templateShown: page.element('template').offsetWidth > 0,
+      levellingShown: page.element('loudness').offsetWidth > 0,
+    };
+    const template = page.element<HTMLSelectElement>('template');
+    const options = [...template.options].map((option) => option.value);
+    template.value = 'ring';
+    template.dispatchEvent(new Event('change'));
+    await page.wait(100);
+    page.type('field-name', 'Suva');
+    await page.settle();
+    await page.wait(300);
+    const pixels = picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
+    let lit = 0;
+    for (let i = 0; i < pixels.length; i += 4 * 97) if (pixels[i] + pixels[i + 1] + pixels[i + 2] > 60) lit++;
+    page.click('view-mastering');
+    return { mastering, video, options, lit, back: page.element('detail').offsetWidth > 0 };
+  });
+  assert.deepEqual(first.mastering, { pictureShown: false, curvesShown: true });
+  assert.deepEqual(first.video, { pictureShown: true, curvesShown: false, templateShown: true, levellingShown: false });
+  assert.deepEqual(first.options, ['glitter', 'ring', 'waveform']);
+  assert.ok(first.lit > 50, 'the picture is not blank');
+  assert.ok(first.back, 'the bar at the bottom switches back');
+
+  const again = await runApp({ recording: mix, data, timeoutMs: 90_000 }, (page) => {
+    page.click('view-video');
+    return {
+      template: page.element<HTMLSelectElement>('template').value,
+      name: page.element<HTMLInputElement>('field-name').value,
+    };
+  });
+  assert.deepEqual(again, { template: 'ring', name: 'Suva' }, 'kept with the mix and back on the next start');
+});
+
+test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    page.click('view-video');
+    const strip = page.element<HTMLCanvasElement>('mix-strip');
+    await page.until(() => strip.dataset.seconds !== undefined, 'the strip to be drawn');
+    const box = strip.getBoundingClientRect();
+    strip.dispatchEvent(new MouseEvent('mousedown', { clientX: box.left + box.width / 2, clientY: box.top + 10, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: box.left + box.width * 0.75, clientY: box.top + 10, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await page.wait(100);
+    return { height: Math.round(box.height), playhead: page.playhead() };
+  });
+  assert.equal(seen.height, 48);
+  assert.ok(Math.abs(seen.playhead - MIX_SECONDS * 0.75) <= 1, `dragged to ${seen.playhead}`);
+});
+
+test('a field of the video can be typed in while the mix plays, and undone', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
+    page.click('view-video');
+    page.key('Space');
+    await page.until(() => page.element('play').classList.contains('playing'), 'playback to start');
+    const name = page.element<HTMLInputElement>('field-name');
+    name.focus();
+    for (const typed of ['S', 'Su', 'Suv', 'Suva']) {
+      name.value = typed;
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+      await page.wait(300);
+    }
+    await page.wait(1000);
+    const kept = { focused: document.activeElement === name, value: name.value };
+    name.blur();
+    page.key('Space');
+    await page.settle();
+    page.click('undo');
+    await page.wait(200);
+    return { kept, undone: page.element<HTMLInputElement>('field-name').value };
+  });
+  assert.deepEqual(seen.kept, { focused: true, value: 'Suva' });
+  assert.equal(seen.undone, '', 'undo takes the typing back');
+});
+
 test('a last recording that is gone gives an empty start, without a word', { skip }, async () => {
   const data = await fresh();
   const gone = join(work, 'Gone.wav');
