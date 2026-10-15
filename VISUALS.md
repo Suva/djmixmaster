@@ -210,3 +210,62 @@ Values any number parameter can follow, through a knob or an expression:
 | Number | Particle amount, as a slider with the range the designer allows |
 | Choice | Layout: logo left or centred |
 | Font | From the fonts the app carries |
+
+## What the first try of the export showed
+
+`spikes/video-export/` holds a proof of the pipeline, run outside the app:
+a hidden window draws each frame with WebGL, the browser's own encoder
+(WebCodecs) turns it into H.264, and the stream is piped into ffmpeg, which
+packs it with the audio into an MP4 without encoding the picture again. The
+picture was a full-screen shader (gradient, rings, 64 bars), about what a
+modest template would cost. On an M1, at 1920×1080 and 30 frames a second:
+
+| | Speed | Time for a 2-hour mix |
+|---|---|---|
+| Hardware encoder | 206 frames a second, 6.9 times real time | about 18 minutes |
+| Software encoder (OpenH264, built into Electron) | 111 frames a second, 3.7 times | about 32 minutes |
+
+- A whole hour (113,070 frames) came out with picture and sound both exactly
+  3769.000 seconds long, so they stay in step.
+- Memory stayed flat throughout: 29 MB in the window, 143 MB in the main
+  process. Nothing but the output file is written.
+- At 8 Mbit/s an hour is 3.9 GB. Calm visuals would look as good at half that.
+- A raw H.264 stream carries no timing. ffmpeg has to be given the frame rate
+  with `-r` before the input; `-framerate`, the option documented for raw
+  input, is ignored when the stream is copied, and the video comes out a
+  thousand times too fast.
+- Not tried yet: Windows and Linux, where the hardware encoder may not be
+  offered and the software one would take over, and heavier templates.
+
+## What the music gives, as built
+
+`src/features.ts` works it out; `listen` in `master.ts` runs it over a
+recording, and the main process does so in a worker of its own, with the
+decoder at low priority, the first time the window asks (`api.features`).
+The result is stored in `visual-features/`, beside the analyses.
+
+- **Spectrum:** 24 bands from 30 Hz to 16 kHz, evenly spaced in pitch, 30
+  times a second, each a byte from -72 dB to full scale. A video at 60 frames
+  a second interpolates between them.
+- **Level:** the same, one value 30 times a second.
+- **Beats:** the time of each beat to the millisecond, and how strong the
+  kick on it is. Found from how suddenly the low end (below 120 Hz) gets
+  louder, followed 200 times a second: first the tempo of each stretch, then
+  the row of beats that best fits the kicks at that tempo (after Ellis, "Beat
+  tracking by dynamic programming", 2007). Stretches with no clear kick take
+  the tempo around them, so the beats run on through a breakdown, with low
+  strength.
+- **On the synthetic mix** (a kick every 0.48 s, three tracks with
+  breakdowns) every beat where the kick plays lands on it, and the tempo holds
+  at 125 through the breakdowns. Inside a breakdown the row can slip half a
+  beat until the kick returns.
+- **On real recordings:** the one-hour test recording comes out at a steady
+  160–164 BPM, the eight-hour one at 150 BPM in the middle. Nobody has yet
+  checked those against the music by ear.
+- **Cost:** the eight-hour MP3 takes 75 seconds in the background (about as
+  long as its analysis), and 23 MB is stored. A one-hour WAV takes about 9
+  seconds.
+
+`bass`, `mids` and the rest, `tempo`, `beatPhase` and `energy` are not
+stored: they are worked out from these when a frame is drawn.
+

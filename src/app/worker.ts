@@ -1,6 +1,6 @@
 // Runs one analysis or render job off the main thread so the window stays responsive.
 import { parentPort, workerData } from 'node:worker_threads';
-import { measure, render } from '../master.ts';
+import { listen, measure, render } from '../master.ts';
 import type { Job, JobMessage } from './api.ts';
 
 const port = parentPort!;
@@ -16,6 +16,7 @@ const progress = (fraction: number) => {
 
 async function run(job: Job): Promise<unknown> {
   if (job.kind === 'measure') return measure(job.input, {}, progress);
+  if (job.kind === 'listen') return listen(job.input, progress);
   const region = { start: job.start, end: job.end };
   return render(job.input, region, job.gainDb, job.output, {
     ceilingDb: job.ceilingDb,

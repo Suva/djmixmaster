@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
+import { setPriority } from 'node:os';
 import { delimiter, extname, join } from 'node:path';
 import {
   DEFAULT_AAC_KBPS, DEFAULT_BIT_DEPTH, DEFAULT_MP3_KBPS, type EncodeOptions,
@@ -146,14 +147,24 @@ function probeFile(file: string): Promise<AudioInfo> {
   });
 }
 
-/** Streams the region as interleaved stereo float32 chunks at the file's own sample rate. */
-export async function* decode(file: string, region: Region = {}): AsyncGenerator<Float32Array> {
+/**
+ * Streams the region as interleaved stereo float32 chunks at the file's own sample rate.
+ * `background` runs the decoder at a lower priority, for work nobody is waiting on.
+ */
+export async function* decode(file: string, region: Region = {}, background = false): AsyncGenerator<Float32Array> {
   const args = ['-v', 'error', '-nostdin'];
   if (region.start !== undefined) args.push('-ss', String(region.start));
   if (region.end !== undefined) args.push('-to', String(region.end));
   args.push(...inputArgs(file), '-map', 'a:0', '-ac', String(CHANNELS), '-f', 'f32le', '-');
 
   const child = spawn(ffmpeg(), args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  if (background && child.pid) {
+    try {
+      setPriority(child.pid, 10);
+    } catch {
+      // Not allowed here; it runs at the usual priority.
+    }
+  }
   let err = '';
   child.stderr.on('data', (d) => (err += d));
   const closed = once(child, 'close');
