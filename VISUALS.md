@@ -269,3 +269,69 @@ The result is stored in `visual-features/`, beside the analyses.
 `bass`, `mids` and the rest, `tempo`, `beatPhase` and `energy` are not
 stored: they are worked out from these when a frame is drawn.
 
+## Templates and expressions, as built
+
+`src/visuals/template.ts` defines the format; `src/visuals/expression.ts`
+the expression language; `src/visuals/music.ts` turns the stored music
+values into the ones a frame gets. None draws anything yet.
+
+- **A template is JSON:** `format`, `name`, `fields` (each with a `key`, a
+  label, a kind and a default) and `layers` (each a `type` and its
+  `params`). The layer types so far are the ★ ones above: gradient,
+  particles, image, text, spectrum, waveform and glow.
+- **Settings take what fits their kind:** a number, or an expression giving
+  one; a colour, or an expression giving one (`#3ddc97`, `colour1 * 0.5`,
+  `complement(colour1)`); text with `%variables%`; for a choice, image or
+  font, a value or just `%field%`. Number and colour fields are used in
+  expressions by their bare name, so one field such as "Colour 1" can serve
+  several layers, changed differently in each.
+- **Checking** (`checkTemplate`) never refuses a template outright. Each
+  problem is listed with where it is (layer, setting, and for expressions and
+  text the characters to underline) and the setting falls back to its
+  default, so a slightly broken template still draws.
+- **The expression language:** numbers, names, `+ - * / % ^`, comparisons
+  giving 1 or 0, `condition ? a : b`, brackets, and functions:
+  - waves taking a phase in cycles and giving 0 to 1: `sine`, `triangle`,
+    `saw`, `square`; so `sine(time / 8)` sways every 8 seconds and
+    `saw(beats / 4)` ramps once a bar;
+  - `noise(x)` and `random(n)`, the same on every render;
+  - `smooth(value, rise, fall)`, an envelope follower that remembers from
+    frame to frame;
+  - `min`, `max`, `clamp`, `mix`, `step`, `smoothstep`, `abs`, `floor`,
+    `ceil`, `round`, `fract`, `sqrt`, `pow`, `exp`, `log`, `sin`, `cos`, and
+    the constant `pi`.
+- **Colours are values too,** as in a shader. An expression gives a number or
+  a colour, and the compiler works out which from what it is made of; a
+  colour setting given a number, or the other way round, is reported.
+  - Written `#3ddc97` (or with alpha, `#3ddc9780`), or made with
+    `rgb(r, g, b)` (each 0 to 1), `hsl(hue, saturation, lightness)` or
+    `oklch(lightness, chroma, hue)`.
+  - Arithmetic works on red, green and blue alike: `colour1 * 0.5` is half
+    as bright, `colour1 * #ffcc99` tints, `colour1 + colour2 * 0.2` adds a
+    little. Adding a plain number to a colour is refused, with the advice to
+    multiply or use `lighten`, since what it should mean is unclear.
+  - Hue, lightness and saturation are changed in OKLCH, where equal steps
+    look equal: `hue(c, degrees)`, `complement(c)`, `lighten(c, amount)`,
+    `darken(c, amount)`, `saturate(c, amount)`, `desaturate(c, amount)`,
+    `gray(c)`, `alpha(c, value)`. A complement looks as light as the colour
+    it came from, which HSL does not manage.
+  - `mix(a, b, t)` blends colours in the same space, so red to blue passes a
+    clear purple; `smooth` follows colours as well as numbers.
+  - Read back as numbers: `lightness`, `chroma`, `hueOf`, `red`, `green`,
+    `blue`, `alphaOf`. So text that stays readable on whatever colour was
+    picked is `lightness(colour1) > 0.6 ? #000000 : #ffffff`.
+  - A colour no screen can show has its saturation lowered until it fits,
+    keeping hue and lightness.
+
+  An unknown name is reported with a guess ("did you mean bass?"), and what
+  cannot be worked out (a division by zero) is 0, never a broken frame.
+- **Music values** are each scaled to the mix's own range: 0 is the quiet end
+  of what that mix does (its 10th percentile), 1 the loud end (98th). `beat`
+  is the kick's strength on the beat, falling away by the next. `beats`
+  counts from the first beat of the mix, so `beats / 4` starts its bars
+  there. Where the downbeat of a bar really is is not detected, on purpose:
+  DJs break the bar structure, on purpose or by starting a track early, and
+  build-ups bring kicks ahead of the bar. If it ever matters, a nudge by
+  hand (shift the bar by one to three beats) is the way, not cleverer
+  detection. Reading a frame takes well under a microsecond.
+

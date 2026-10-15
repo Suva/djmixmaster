@@ -41,6 +41,10 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/level.ts` | Combines the above; automatic target with headroom; bass correction |
 | `src/gaps.ts` | Finds silences between sets |
 | `src/features.ts` | What the visuals of a video move to: spectrum, level and beats |
+| `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
+| `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
+| `src/visuals/template.ts` | Templates: layer types and their settings, fields, text variables, checking |
+| `src/visuals/music.ts` | The music values a video frame gets, read from `features.ts`'s output |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
 | `src/checkup.ts` | Turns that data into the findings of the check-up report |
 | `src/fade.ts` | The fade curve shared by drawing, preview and export |
@@ -69,7 +73,7 @@ and curves in the code are block indexes unless a name says seconds.
   dependency, and the app is bundled by esbuild. Adding a runtime dependency
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
-  `level.ts`, `gaps.ts`, `features.ts`, `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
+  `level.ts`, `gaps.ts`, `features.ts`, `visuals/*.ts`, `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
   `diagnostics.ts`, `checkup.ts` and `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
