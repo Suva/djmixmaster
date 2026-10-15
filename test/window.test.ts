@@ -406,6 +406,43 @@ test('the Photo template fills the picture with a chosen photo', { skip }, async
   assert.ok(seen.middle[0] > 150, `the middle of the picture is ${seen.middle}`);
 });
 
+test('the picture fades in from black with the mix', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
+    // Drag the fade-in handle, in the top left corner of the mix, a quarter of the way in.
+    const detail = page.element('detail');
+    const box = detail.getBoundingClientRect();
+    const gutter = 48;
+    const at = (share: number) => box.left + gutter + share * (box.width - gutter);
+    detail.dispatchEvent(new MouseEvent('mousedown', { clientX: box.left + gutter + 5, clientY: box.top + 28, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: at(0.1), clientY: box.top + 28, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: at(0.25), clientY: box.top + 28, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    const fade = page.text('readout');
+
+    page.click('view-video');
+    const strip = page.element<HTMLCanvasElement>('mix-strip');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const brightness = async (share: number) => {
+      const s = strip.getBoundingClientRect();
+      strip.dispatchEvent(new MouseEvent('mousedown', { clientX: s.left + share * s.width, clientY: s.top + 10, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      await page.wait(300);
+      const pixels = picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4 * 101) {
+        sum += pixels[i] + pixels[i + 1] + pixels[i + 2];
+        count++;
+      }
+      return sum / count;
+    };
+    return { fade, start: await brightness(0), halfway: await brightness(0.125), middle: await brightness(0.5) };
+  });
+  assert.match(seen.fade, /^Fade in \d+\.\d s/);
+  assert.ok(seen.start < 1, `black at the start: ${seen.start}`);
+  assert.ok(seen.halfway > seen.start && seen.halfway < seen.middle * 0.8, `dimmer halfway through the fade: ${JSON.stringify(seen)}`);
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

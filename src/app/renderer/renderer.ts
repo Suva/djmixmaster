@@ -114,6 +114,8 @@ function videoMixOf(m: Mix): VideoMixInfo {
     artist: m.artist ?? '',
     album,
     visuals: m.visuals,
+    fadeIn: fades(m).in * HOP_SECONDS,
+    fadeOut: fades(m).out * HOP_SECONDS,
   };
 }
 

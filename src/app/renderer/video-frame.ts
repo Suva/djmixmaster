@@ -9,6 +9,7 @@ import { checkTemplate, TEXT_VARIABLES, type PreparedLayer, type Template, type 
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
 import { BAND_COUNT } from '../../features.ts';
+import { fadeGain } from '../../fade.ts';
 
 /** What a video needs to know about its mix: its name, place and length, and the template chosen for it. */
 export type VideoMix = VideoMixInfo;
@@ -76,5 +77,6 @@ export function drawVideoFrame(
     levelHistory: (span, points) => (reader ? reader.levelHistory(seconds, span, points) : new Float32Array(points)),
     text: textValues(mix, seconds, typeof music.tempo === 'number' ? music.tempo : 0),
     images,
+    shown: fadeGain(seconds, length, mix.fadeIn, mix.fadeOut),
   });
 }
