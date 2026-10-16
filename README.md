@@ -227,7 +227,12 @@ The templates that come with the app stay as they are. **Duplicate** makes a
 copy that is yours. **Edit** opens it in the editor, in a wider panel beside
 the picture, which shows every change as it is made: its layers, front-most at
 the top, can be hidden, added, duplicated, deleted, renamed and dragged to
-reorder. While the editor is open, undo works on the template. **Edit a copy**
+reorder. Below the list are the selected layer's settings. A number, a switch
+or a colour can instead be an **expression** (the ƒ button) that follows the
+music, such as `100 + 8 * smooth(bass, 0.02, 0.4)`. A mistake is underlined
+as you type, with what is wrong beneath it, and while the mix plays the value
+the expression comes to shows beside it. A picture chosen for a layer is packed
+into the template. While the editor is open, undo works on the template. **Edit a copy**
 on a template that comes with the app duplicates it first. **Export** saves a
 template as a `.djmtemplate` file to share, with any pictures it uses packed
 inside, and **Import** adds one someone shared. **Delete** moves one of yours

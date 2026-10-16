@@ -52,6 +52,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/font-picker.ts` | The font list of the Video view, each name in its own face |
 | `src/app/renderer/video-view.ts` | The Video view: a mix's template, its fields and a live picture |
 | `src/app/renderer/template-editor.ts` | The template editor in the Video view's panel, with its own undo |
+| `src/app/renderer/layer-settings.ts` | The selected layer's settings in the editor, made from its kind's list of settings |
 | `src/app/renderer/video-frame.ts` | A frame of a mix's video, drawn the same for the view and the export |
 | `src/app/renderer/exporter.ts` | The hidden page that draws and encodes a video export |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
@@ -223,6 +224,9 @@ Do not write test data there.
   `video-frame.ts`). So a video export is handed the checked template itself,
   not its name. A template can carry pictures as data URLs in `assets`, named
   in an image setting as `asset:name`; `pictureOf` loads either kind.
+  The editor saves a template as typed, half-written expressions and all; the
+  picture shows it checked, with a setting that does not work yet at its last
+  good value (`#lastGood` in `video-view.ts`).
 - **A recording can be several files.** Recorders split long recordings at
   2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
   their numbers, or else by when each was written) and listed in

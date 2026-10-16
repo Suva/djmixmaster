@@ -297,7 +297,7 @@ export interface Names {
 }
 
 /** The names a template's expressions may use: the music values, and its number and colour fields. */
-function expressionNames(fields: Field[], musicNames: readonly string[]): Record<string, Kind> {
+export function expressionNames(fields: Field[], musicNames: readonly string[]): Record<string, Kind> {
   const names: Record<string, Kind> = Object.fromEntries(musicNames.map((name) => [name, 'number' as Kind]));
   for (const field of fields) if (field.kind === 'number' || field.kind === 'colour') names[field.key] = field.kind;
   return names;
@@ -395,6 +395,20 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
   };
 }
 
+/**
+ * What is wrong with one setting's value in a template, if anything: as the
+ * template is checked, for the editor to say while it is being typed.
+ */
+export function checkSetting(
+  template: Template, value: unknown, param: ParamSpec, musicNames: readonly string[], textNames: readonly string[],
+): Omit<TemplateProblem, 'where'> | null {
+  const names: Names = {
+    expressions: expressionNames(template.fields, musicNames),
+    text: [...textNames, ...template.fields.map((field) => field.key)],
+  };
+  return checkValue(value, param, names, (key) => template.fields.find((field) => field.key === key), template.assets ?? {});
+}
+
 /** What is wrong with one parameter's value, if anything. */
 function checkValue(
   value: unknown, param: ParamSpec, names: Names, fieldOf: (key: string) => Field | undefined, assets: Record<string, string>,
@@ -456,6 +470,8 @@ export interface PreparedLayer {
    * expressions evaluated. A colour comes out as a Colour, or null for none.
    */
   resolve(music: Record<string, Value>, text: TextValues): ResolvedParams;
+  /** What the last call of `resolve` gave, for the editor to show; null before the first. */
+  readonly last: ResolvedParams | null;
   /** Forgets what smoothing functions remember, after a jump in time. */
   reset(): void;
 }
@@ -505,6 +521,7 @@ export function prepare(template: Template, filled: Record<string, string | numb
         fixed[key] = whole && whole[1] in fieldValues ? fieldValues[whole[1]] : value;
       }
     }
+    let last: ResolvedParams | null = null;
     return {
       type: layer.type,
       spec,
@@ -516,7 +533,11 @@ export function prepare(template: Template, filled: Record<string, string | numb
           resolved[key] = kind === 'switch' ? result !== 0 : result;
         }
         for (const [key, value] of texts) resolved[key] = fillText(value, { ...text, ...fieldTexts }).text;
+        last = resolved;
         return resolved;
+      },
+      get last() {
+        return last;
       },
       reset() {
         for (const [, compiled] of expressions) compiled.reset();

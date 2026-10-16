@@ -9,7 +9,10 @@ import type { Features } from '../../features.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
-import { ASSET_PREFIX, fontsOf, imagesOf, prepare, type Field, type PreparedLayer, type Template } from '../../visuals/template.ts';
+import {
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, fontsOf, imagesOf, LAYER_TYPES, prepare, TEXT_VARIABLES,
+  type Field, type PreparedLayer, type Template,
+} from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
 import { TemplateEditor } from './template-editor.ts';
 import {
@@ -59,6 +62,8 @@ export class VideoView {
   #layers: PreparedLayer[] = [];
 
   readonly #editor: TemplateEditor;
+  /** The user's templates as saved: with settings that were left half typed, which checking replaces. */
+  readonly #typed = new Map<string, unknown>();
   /** The template being edited, by its name in a mix's choice, or null. */
   #editing: string | null = null;
   #saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -68,12 +73,26 @@ export class VideoView {
     this.#editor = new TemplateEditor({
       change: (template) => this.#edited(template),
       history: () => options.history(),
+      live: (index) => this.#layers[index]?.last ?? null,
+      pickPicture: async () => {
+        const path = await options.api.pickImage();
+        if (!path) return null;
+        const bytes = await options.api.readImage(path);
+        const file = path.split(/[\\/]/).pop()!;
+        const type = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', webp: 'webp', gif: 'gif' }[file.split('.').pop()!.toLowerCase()] ?? 'png';
+        let binary = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return { name: file.replace(/\.[^.]+$/, ''), data: `data:image/${type};base64,${btoa(binary)}` };
+      },
     });
     const select = $<HTMLSelectElement>('template');
     this.#fillTemplates();
     // The user's own templates come in from disk a moment after the window is up.
     options.api.templates().then((stored) => {
-      for (const { id, template } of stored) USER_TEMPLATES.set(USER_TEMPLATE + id, checked(template).template);
+      for (const { id, template } of stored) {
+        USER_TEMPLATES.set(USER_TEMPLATE + id, checked(template).template);
+        this.#typed.set(USER_TEMPLATE + id, template);
+      }
       this.#fillTemplates();
       this.#shownFor = '';
       this.refresh();
@@ -309,7 +328,26 @@ export class VideoView {
     $('editor-done').hidden = false;
     $('video-heading').textContent = 'Editing the template';
     $('template-name-row').hidden = false;
-    this.#editor.start(this.#template());
+    this.#editor.start(this.#asTyped(this.#template(), this.#typed.get(this.#editing)));
+  }
+
+  /**
+   * A checked template with its settings as they were typed, where they were
+   * left half done: so that the editor shows them again, problems and all.
+   */
+  #asTyped(template: Template, typed: unknown): Template {
+    const result = structuredClone(template);
+    const layers = (typed as { layers?: unknown } | undefined)?.layers;
+    if (!Array.isArray(layers)) return result;
+    result.layers.forEach((layer, index) => {
+      const saved = layers[index] as { type?: unknown; params?: Record<string, unknown> } | undefined;
+      if (saved?.type !== layer.type || typeof saved.params !== 'object' || saved.params === null) return;
+      for (const key of Object.keys(layer.params)) {
+        const value = saved.params[key];
+        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') layer.params[key] = value;
+      }
+    });
+    return result;
   }
 
   #stopEditing() {
@@ -328,7 +366,10 @@ export class VideoView {
   #edited(template: Template) {
     const id = this.#editing;
     if (!id) return;
-    USER_TEMPLATES.set(id, template);
+    // What is saved is what was typed, so that nothing is lost; the picture
+    // shows a setting half typed at its last good value meanwhile.
+    USER_TEMPLATES.set(id, this.#lastGood(template, USER_TEMPLATES.get(id)));
+    this.#typed.set(id, template);
     this.#prepare();
     const name = $<HTMLInputElement>('template-name');
     if (document.activeElement !== name) name.value = template.name;
@@ -336,6 +377,25 @@ export class VideoView {
     if (option) option.text = template.name;
     clearTimeout(this.#saveTimer);
     this.#saveTimer = setTimeout(() => this.#options.api.saveTemplate(id.slice(USER_TEMPLATE.length), template), 400);
+  }
+
+  /**
+   * The template as typed, with every setting that does not work (yet) given
+   * the value it had in the template shown before, or else its default.
+   */
+  #lastGood(template: Template, before: Template | undefined): Template {
+    const usable = structuredClone(template);
+    usable.layers.forEach((layer, index) => {
+      const spec = LAYER_TYPES[layer.type];
+      if (!spec) return;
+      const all = { ...COMMON_PARAMS, ...spec.params };
+      const old = before?.layers[index]?.type === layer.type ? before.layers[index] : undefined;
+      for (const [key, value] of Object.entries(layer.params)) {
+        const param = all[key];
+        if (param && checkSetting(usable, value, param, MUSIC_NAMES, TEXT_VARIABLES)) layer.params[key] = old?.params[key] ?? param.default;
+      }
+    });
+    return checked(usable).template;
   }
 
   #templateActions() {
@@ -532,6 +592,7 @@ export class VideoView {
     this.#lastPlayhead = playhead;
     const seconds = Math.max(0, Math.min(length, playhead - mix.start));
     drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images);
+    if (this.#editing) this.#editor.tick();
     // For scripted checks: whether the picture is drawn from the music yet.
     canvas.dataset.music = String(!!reader);
     this.#drawStrip(mix, seconds);

@@ -7,13 +7,18 @@
 // The layers are listed front-most first, as in image editors, though a
 // template keeps them in drawing order, back first.
 
-import { COMMON_PARAMS, LAYER_TYPES, type Layer, type ParamValue, type Template } from '../../visuals/template.ts';
+import { COMMON_PARAMS, LAYER_TYPES, type Layer, type ParamValue, type ResolvedParams, type Template } from '../../visuals/template.ts';
+import { layerSettings } from './layer-settings.ts';
 
 export interface TemplateEditorOptions {
   /** A change made here: the template as it now is. */
   change(template: Template): void;
   /** What can be undone or redone has changed. */
   history(): void;
+  /** What a layer's settings came to in the frame last drawn, by its place in the template. */
+  live(index: number): ResolvedParams | null;
+  /** Asks for a picture file and gives its name and contents as a data URL, or null. */
+  pickPicture(): Promise<{ name: string; data: string } | null>;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -39,6 +44,9 @@ export class TemplateEditor {
   #past: string[] = [];
   #future: string[] = [];
   #lastChange = { kind: '', at: 0 };
+  /** The settings of the selected layer, as shown. */
+  #settings: { element: HTMLElement; tick(): void } | null = null;
+  #settingsFor: Layer | null = null;
 
   constructor(options: TemplateEditorOptions) {
     this.#options = options;
@@ -78,9 +86,15 @@ export class TemplateEditor {
 
   stop() {
     this.#template = null;
+    this.#showSettings();
     this.#past = [];
     this.#future = [];
     this.#options.history();
+  }
+
+  /** Brings the live values of the selected layer's expressions up to date: once a frame. */
+  tick() {
+    this.#settings?.tick();
   }
 
   /** The template's name was changed outside the list of layers; one undo step per bout of typing. */
@@ -171,6 +185,34 @@ export class TemplateEditor {
     }
     $<HTMLButtonElement>('editor-duplicate').disabled = this.#selected < 0;
     $<HTMLButtonElement>('editor-delete').disabled = this.#selected < 0;
+    if (template.layers[this.#selected] !== this.#settingsFor) this.#showSettings();
+  }
+
+  /** The settings of the selected layer, made anew only when another layer is selected or the template is replaced. */
+  #showSettings() {
+    const layer = this.#template?.layers[this.#selected] ?? null;
+    this.#settingsFor = layer;
+    const panel = $('editor-layer');
+    if (!layer || !this.#template) {
+      this.#settings = null;
+      panel.replaceChildren();
+      return;
+    }
+    const kindOf = (key: string) => `param:${this.#template!.layers.indexOf(layer)}:${key}`;
+    this.#settings = layerSettings(layer, {
+      template: () => this.#template!,
+      set: (key, value) => this.#change(kindOf(key), () => (layer.params[key] = value)),
+      pack: (key, name, data) => this.#change('', (template) => {
+        template.assets = { ...template.assets, [name]: data };
+        layer.params[key] = `asset:${name}`;
+      }),
+      live: () => this.#options.live(this.#template!.layers.indexOf(layer)),
+      pickPicture: () => this.#options.pickPicture(),
+    });
+    const title = document.createElement('h3');
+    title.className = 'editor-section';
+    title.textContent = layer.name || LAYER_TYPES[layer.type].label;
+    panel.replaceChildren(title, this.#settings.element);
   }
 
   #row(layer: Layer, index: number): HTMLElement {
@@ -225,6 +267,7 @@ export class TemplateEditor {
       for (const other of $('editor-layers').children) other.classList.toggle('on', other === row);
       $<HTMLButtonElement>('editor-duplicate').disabled = false;
       $<HTMLButtonElement>('editor-delete').disabled = false;
+      if (this.#template!.layers[index] !== this.#settingsFor) this.#showSettings();
       this.#dragRow(event, row, index);
     });
     return row;

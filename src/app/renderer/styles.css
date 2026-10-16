@@ -407,3 +407,40 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
   color: var(--text); background: var(--panel); border: 1px solid var(--accent); border-radius: 4px; padding: 3px 6px;
   user-select: text;
 }
+
+/* The selected layer's settings in the template editor. */
+#editor-layer > .editor-section { margin: 4px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.layer-settings details { margin-bottom: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+.layer-settings summary { cursor: pointer; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: var(--label, #c9ced8); }
+.setting { margin-bottom: 9px; }
+.setting-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.setting-head label { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); }
+.setting-head .live { font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 4px; }
+.setting-head .live .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+.setting-head .fx { flex: none; width: 22px; height: 20px; padding: 0; font-size: 12px; font-style: italic; font-family: Georgia, serif; color: var(--muted); }
+.setting.expression .fx { background: rgba(61, 220, 151, 0.18); border-color: var(--accent); color: var(--accent); }
+.setting-problem { margin: 3px 0 0; font-size: 11px; color: #ff8a7a; }
+.setting-problem:empty { display: none; }
+.number-setting { display: flex; align-items: center; gap: 8px; }
+.number-setting input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.switch-setting input { accent-color: var(--accent); }
+.number-setting input[type="number"] { width: 64px; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 3px 5px; user-select: text; }
+.switch-setting { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.colour-setting { display: flex; align-items: center; gap: 8px; }
+.colour-setting input[type="color"] { width: 44px; height: 24px; padding: 0 2px; border: 1px solid var(--border); border-radius: 5px; background: #262a33; }
+.colour-setting.none input[type="color"] { opacity: 0.35; }
+.colour-code { flex: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.colour-setting button { padding: 2px 8px; font-size: 11px; }
+.layer-settings select, .text-setting { width: 100%; }
+.text-setting { font: inherit; font-size: 12px; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 4px 6px; user-select: text; }
+.font-setting { display: flex; flex-direction: column; gap: 6px; }
+/* An expression: the field is transparent over a copy of its text, in which what is wrong is underlined. */
+.expr { position: relative; }
+.expr-mirror, .expr-input {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 4px 6px; border: 1px solid var(--border); border-radius: 5px;
+  white-space: pre; letter-spacing: 0;
+}
+.expr-mirror { position: absolute; inset: 0; overflow: hidden; color: transparent; border-color: transparent; pointer-events: none; background: var(--lane); }
+.expr-mirror mark { color: transparent; background: rgba(255, 110, 90, 0.18); text-decoration: underline wavy #ff6e5a; text-underline-offset: 3px; }
+.expr-input { position: relative; width: 100%; color: var(--text); background: transparent; user-select: text; }
+.expr-input:focus { outline: 1px solid var(--accent); }

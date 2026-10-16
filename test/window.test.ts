@@ -658,6 +658,94 @@ test('the template editor: layers shown and hidden, added, reordered, renamed, d
   assert.equal(saved.layers.find((layer: { name?: string }) => layer.name === 'Ring').params.visible, false);
 });
 
+test('a layer\'s settings in the editor: numbers, colours, packed pictures and expressions, checked as typed', { skip }, async () => {
+  const data = await fresh();
+  const red = join(work, 'Red dot.png');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0xff2020:s=32x32', '-frames:v', '1', red]);
+  const seen = await runApp({ recording: mix, data, image: red, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const select = (name: string) => {
+      const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+      row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+    const setting = (key: string) => document.querySelector<HTMLElement>(`#editor-layer .setting[data-key="${key}"]`)!;
+    const type = (input: HTMLInputElement, value: string) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    select('Ring');
+    const title = document.querySelector('#editor-layer .editor-section')!.textContent;
+    type(setting('bars').querySelector<HTMLInputElement>('input[type="number"]')!, '60');
+    await page.wait(1100);
+    await page.wait(1100);
+
+    // An expression: wrong, then right.
+    setting('radius').querySelector<HTMLButtonElement>('.fx')!.click();
+    const expression = () => setting('radius').querySelector<HTMLInputElement>('.expr-input')!;
+    type(expression(), '20 + 0 * bas');
+    await page.wait(200);
+    const wrong = { problem: setting('radius').querySelector('.setting-problem')!.textContent, marked: setting('radius').querySelector('mark')?.textContent, live: setting('radius').querySelector('.live')!.textContent };
+    type(expression(), '20 + 0 * bass');
+    await page.wait(300);
+    const right = { problem: setting('radius').querySelector('.setting-problem')!.textContent, live: setting('radius').querySelector('.live')!.textContent };
+    await page.wait(1100);
+
+    select('Artist');
+    type(setting('colour').querySelector<HTMLInputElement>('input[type="color"]')!, '#ff0000');
+    await page.wait(1100);
+
+    // A picture, packed into the template.
+    select('Logo');
+    const image = setting('image').querySelector<HTMLSelectElement>('select')!;
+    image.value = '+';
+    image.dispatchEvent(new Event('change', { bubbles: true }));
+    await page.until(() => setting('image').querySelector<HTMLSelectElement>('select')?.value === 'asset:Red dot', 'the picture to be packed');
+    await page.wait(1100);
+
+    // Undo takes back the picture, and the template is saved as it then is.
+    page.click('undo');
+    await page.wait(100);
+    const afterUndo = setting('image').querySelector<HTMLSelectElement>('select')!.value;
+    page.click('redo');
+    await page.wait(100);
+    // Left half typed, to be found again next time.
+    select('Ring');
+    type(setting('radius').querySelector<HTMLInputElement>('.expr-input')!, '20 + 0 * (bass');
+    await page.wait(700);
+    return { title, wrong, right, afterUndo };
+  });
+  assert.equal(seen.title, 'Ring');
+  assert.deepEqual(seen.wrong, { problem: 'Unknown name bas; did you mean bass?', marked: 'bas', live: '' });
+  assert.deepEqual(seen.right, { problem: '', live: '= 20.0' });
+  assert.equal(seen.afterUndo, '%logo%');
+
+  const [file] = await readdir(join(data, 'templates'));
+  const saved = JSON.parse(readFileSync(join(data, 'templates', file), 'utf8'));
+  const ring = saved.layers.find((layer: { name?: string }) => layer.name === 'Ring').params;
+  assert.equal(ring.bars, 60);
+  assert.equal(saved.layers.find((layer: { name?: string }) => layer.name === 'Artist').params.colour, '#ff0000');
+  assert.equal(ring.radius, '20 + 0 * (bass');
+  assert.equal(saved.layers.find((layer: { name?: string }) => layer.name === 'Logo').params.image, 'asset:Red dot');
+  assert.match(saved.assets['Red dot'], /^data:image\/png;base64,/);
+
+  const again = await runApp({ recording: mix, data }, async (page) => {
+    page.click('view-video');
+    await page.until(() => page.element<HTMLSelectElement>('template').value.startsWith('user:'), 'the template to come back');
+    page.click('template-edit');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Ring')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    const radius = document.querySelector<HTMLElement>('#editor-layer .setting[data-key="radius"]')!;
+    return { typed: radius.querySelector<HTMLInputElement>('.expr-input')?.value, problem: radius.querySelector('.setting-problem')!.textContent };
+  });
+  assert.deepEqual(again, { typed: '20 + 0 * (bass', problem: 'Expected a closing ")"' });
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');
