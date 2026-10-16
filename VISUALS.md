@@ -277,7 +277,13 @@ values into the ones a frame gets. None draws anything yet.
 - **A template is JSON:** `format`, `name`, `fields` (each with a `key`, a
   label, a kind and a default) and `layers` (each a `type` and its
   `params`). The layer types so far are the ★ ones above: gradient,
-  particles, image, text, spectrum, waveform and glow.
+  particles, image, text, spectrum, waveform and glow; and effects that
+  change the picture beneath them: colour split (`split`: straight, or from
+  the centre as a lens does), glitch (slices torn sideways with the colours
+  split, worked out from the time alone so the export matches the preview),
+  brightness and contrast (`adjust`), hue and saturation (`hue`), and blur.
+  The colour split and the glitch take the picture apart into red, green and
+  blue on scratch canvases; the others use the canvas's own filters.
 - **Settings take what fits their kind:** a number, or an expression giving
   one; a colour, or an expression giving one (`#3ddc97`, `colour1 * 0.5`,
   `complement(colour1)`); text with `%variables%`; for a choice, image or

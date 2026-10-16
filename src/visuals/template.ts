@@ -184,6 +184,50 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       tint: colour('Tint', '#ffffff'),
     },
   },
+  split: {
+    label: 'Colour split',
+    effect: true,
+    params: {
+      form: choice('Form', 'straight', ['straight', 'from the centre']),
+      amount: number('Amount', 0.4, 0, 5, '%'),
+      angle: number('Direction, when straight', 0, 0, 360, '°'),
+    },
+  },
+  glitch: {
+    label: 'Glitch',
+    effect: true,
+    params: {
+      amount: number('How often', 30, 0, 100, '%'),
+      slices: number('Slices', 10, 1, 60),
+      shift: number('How far they tear', 6, 0, 40, '%'),
+      split: number('Colour split', 0.6, 0, 5, '%'),
+      rate: number('Changes a second', 8, 0.5, 30),
+    },
+  },
+  adjust: {
+    label: 'Brightness and contrast',
+    effect: true,
+    params: {
+      brightness: number('Brightness', 100, 0, 300, '%'),
+      contrast: number('Contrast', 100, 0, 300, '%'),
+    },
+  },
+  hue: {
+    label: 'Hue and saturation',
+    effect: true,
+    params: {
+      hue: number('Hue', 0, -180, 180, '°'),
+      saturation: number('Saturation', 100, 0, 300, '%'),
+      lightness: number('Lightness', 0, -100, 100, '%'),
+    },
+  },
+  blur: {
+    label: 'Blur',
+    effect: true,
+    params: {
+      radius: number('Radius', 0.5, 0, 10, '%'),
+    },
+  },
 };
 
 /**

@@ -16,6 +16,9 @@ are under "Not released yet" and appear there once they are.
   bass, the beat, a slow wave) and how much. The fields a template asks for can be
   added, renamed, reordered and given defaults. Layers can be picked, moved
   and resized on the picture itself. Every change shows straight away.
+- **New effects for videos:** a colour split, straight or growing towards the
+  edges like a lens; a digital glitch; brightness and contrast; hue and
+  saturation; and blur. Like everything else, they can follow the music.
 
 ## 0.8.0 — 15 October 2026
 

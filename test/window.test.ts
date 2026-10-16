@@ -1018,6 +1018,84 @@ test('Delete removes the selected layer while editing, however it was selected, 
   assert.equal(seen.mixes, 1, 'the mix is never deleted while editing');
 });
 
+test('effects change the picture beneath them: a colour split, shown and hidden', { skip }, async () => {
+  const file = join(work, 'Split.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Split',
+    fields: [],
+    layers: [
+      { type: 'gradient', params: { colour1: '#202020', colour2: '#202020' } },
+      { type: 'text', params: { text: 'SPLIT', size: 20, weight: 900, colour: '#ffffff' } },
+      { type: 'split', name: 'Split', params: { amount: 1, angle: 0 } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Split', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    // Pixels of red alone: the fringe a split leaves beside white letters, and nowhere else.
+    const red = () => {
+      const pixels = picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 200 && pixels[i + 1] < 80 && pixels[i + 2] < 80) count++;
+      return count;
+    };
+    await page.wait(500);
+    const split = red();
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const offered = [...page.element<HTMLSelectElement>('editor-add').options].map((option) => option.text);
+    [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Split')!
+      .querySelector<HTMLButtonElement>('.layer-eye')!.click();
+    await page.wait(300);
+    return { split, hidden: red(), offered };
+  });
+  assert.ok(seen.split > 500, `${seen.split} red pixels with the split`);
+  assert.equal(seen.hidden, 0, 'none without it');
+  for (const effect of ['Colour split', 'Glitch', 'Brightness and contrast', 'Hue and saturation', 'Blur']) assert.ok(seen.offered.includes(effect), effect);
+});
+
+test('a blur reaches the edges of the picture as it does the middle', { skip }, async () => {
+  // A fine black and white checkerboard over the whole picture: grey once blurred.
+  const stripes = join(work, 'Checks.png');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', "color=black:s=480x270,geq=lum='255*mod(X+Y,2)':cb=128:cr=128", '-frames:v', '1', stripes]);
+  const file = join(work, 'Blurred.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Blurred',
+    fields: [],
+    layers: [
+      { type: 'image', params: { image: 'asset:stripes', fit: 'stretch', width: 100, height: 100 } },
+      { type: 'blur', params: { radius: 2 } },
+    ],
+    assets: { stripes: `data:image/png;base64,${readFileSync(stripes).toString('base64')}` },
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Blurred', 'the template to be added');
+    await page.wait(600);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const { width, height } = picture;
+    const pixels = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
+    const light = (x: number, y: number) => pixels[(y * width + x) * 4];
+    // How far the brightness swings along a line: little once blurred.
+    const swing = (points: [number, number][]) => {
+      const values = points.map(([x, y]) => light(x, y));
+      return Math.max(...values) - Math.min(...values);
+    };
+    const across = (y: number) => swing(Array.from({ length: 200 }, (_, i) => [Math.floor(width * (0.2 + 0.6 * (i / 200))), y]));
+    const down = (x: number) => swing(Array.from({ length: 200 }, (_, i) => [x, Math.floor(height * (0.2 + 0.6 * (i / 200)))]));
+    return { top: across(0), middleRow: across(Math.floor(height / 2)), left: down(0), middleColumn: down(Math.floor(width / 2)) };
+  });
+  assert.ok(seen.middleRow < 60, `the middle is blurred: ${JSON.stringify(seen)}`);
+  assert.ok(seen.top <= seen.middleRow + 25, `the top edge as much as the middle: ${JSON.stringify(seen)}`);
+  assert.ok(seen.left <= seen.middleColumn + 25, `the left edge as much as the middle: ${JSON.stringify(seen)}`);
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

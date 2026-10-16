@@ -98,6 +98,8 @@ export class FrameDrawer {
   readonly #ctx: Context;
   /** Scratch canvases for effects and images, kept between frames. */
   #scratch: OffscreenCanvas | null = null;
+  /** More scratch canvases, for effects that take the picture apart by colour. */
+  #extra: OffscreenCanvas[] = [];
   #memories: Memory[] = [];
   /** Particle pictures, drawn once per shape, colour and size. */
   readonly #sprites = new Map<string, OffscreenCanvas>();
@@ -159,6 +161,11 @@ export class FrameDrawer {
         case 'spectrum': this.#spectrum(params, frame, memory); break;
         case 'waveform': this.#waveform(params, frame); break;
         case 'glow': this.#glow(params, opacity); break;
+        case 'split': this.#split(params); break;
+        case 'glitch': this.#glitch(params, frame); break;
+        case 'adjust': this.#filtered(`brightness(${Math.max(0, num(params, 'brightness'))}%) contrast(${Math.max(0, num(params, 'contrast'))}%)`); break;
+        case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
+        case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#canvas.height); break;
       }
       ctx.restore();
     });
@@ -196,6 +203,25 @@ export class FrameDrawer {
     this.#ctx.rotate((num(params, 'rotation') * Math.PI) / 180);
     const scale = num(params, 'scale') / 100;
     this.#ctx.scale(scale, scale);
+  }
+
+  /** The nth extra scratch canvas: the size of the picture, unless another is asked for. */
+  #extraCanvas(n: number, width = this.#canvas.width, height = this.#canvas.height): OffscreenCanvas {
+    const canvas = this.#extra[n];
+    if (!canvas || canvas.width !== width || canvas.height !== height) this.#extra[n] = new OffscreenCanvas(width, height);
+    return this.#extra[n];
+  }
+
+  /** A copy of the picture so far, on a scratch canvas, to draw back changed. */
+  #copyOfPicture(): OffscreenCanvas {
+    const copy = this.#scratchCanvas();
+    const s = copy.getContext('2d')!;
+    s.setTransform(1, 0, 0, 1, 0, 0);
+    s.globalCompositeOperation = 'copy';
+    s.globalAlpha = 1;
+    s.filter = 'none';
+    s.drawImage(this.#canvas, 0, 0);
+    return copy;
   }
 
   #scratchCanvas(): OffscreenCanvas {
@@ -626,16 +652,12 @@ export class FrameDrawer {
   #glow(params: ResolvedParams, opacity: number) {
     const ctx = this.#ctx;
     const { width, height } = this.#canvas;
-    const scratch = this.#scratchCanvas();
-    const s = scratch.getContext('2d')!;
-    s.setTransform(1, 0, 0, 1, 0, 0);
-    s.globalCompositeOperation = 'copy';
-    s.globalAlpha = 1;
-    // Only what is brighter than the threshold glows.
+    // Only what is brighter than the threshold glows; blurred to the edges, as the Blur effect is.
     const threshold = num(params, 'threshold') / 100;
-    s.filter = `brightness(${Math.max(0, 1 - threshold) * 100 + 20}%) contrast(${100 + threshold * 300}%) blur(${(num(params, 'radius') / 100) * height}px)`;
-    s.drawImage(this.#canvas, 0, 0);
-    s.filter = 'none';
+    const scratch = this.#extraCanvas(0);
+    this.#blurInto(this.#copyOfPicture(), scratch, (num(params, 'radius') / 100) * height,
+      `brightness(${Math.max(0, 1 - threshold) * 100 + 20}%) contrast(${100 + threshold * 300}%)`);
+    const s = scratch.getContext('2d')!;
     const tint = col(params, 'tint');
     if (tint && hexOf(tint) !== '#ffffff') {
       s.globalCompositeOperation = 'multiply';
@@ -645,5 +667,186 @@ export class FrameDrawer {
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = Math.min(1, opacity * (num(params, 'strength') / 100));
     ctx.drawImage(scratch, 0, 0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Effects that change the picture beneath them. Each is drawn back over it
+  // with the layer's opacity and blend, so a lower opacity mixes in less.
+
+  /**
+   * Blurs `source` into `target` (of the same size) by `radius` pixels, after
+   * any other `filter`. The canvas's blur takes what lies beyond the picture
+   * to be transparent, which leaves the edges half blurred, fading to the
+   * sharp picture beneath; so the picture is first extended past its edges by
+   * stretching its outermost pixels outwards, blurred, and cut back.
+   */
+  #blurInto(source: OffscreenCanvas, target: OffscreenCanvas, radius: number, filter = '') {
+    const { width, height } = this.#canvas;
+    const t = target.getContext('2d')!;
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    t.globalCompositeOperation = 'copy';
+    t.globalAlpha = 1;
+    if (radius <= 0) {
+      t.filter = filter || 'none';
+      t.drawImage(source, 0, 0);
+      t.filter = 'none';
+      return;
+    }
+    const pad = Math.ceil(radius * 3);
+    const wide = this.#extraCanvas(3, width + pad * 2, height + pad * 2);
+    const w = wide.getContext('2d')!;
+    w.setTransform(1, 0, 0, 1, 0, 0);
+    w.globalCompositeOperation = 'copy';
+    w.globalAlpha = 1;
+    w.filter = 'none';
+    w.drawImage(source, pad, pad);
+    w.globalCompositeOperation = 'source-over';
+    // The outermost row or column of pixels on each side, stretched across the margin; the corners, one pixel each.
+    w.drawImage(source, 0, 0, width, 1, pad, 0, width, pad);
+    w.drawImage(source, 0, height - 1, width, 1, pad, pad + height, width, pad);
+    w.drawImage(source, 0, 0, 1, height, 0, pad, pad, height);
+    w.drawImage(source, width - 1, 0, 1, height, pad + width, pad, pad, height);
+    w.drawImage(source, 0, 0, 1, 1, 0, 0, pad, pad);
+    w.drawImage(source, width - 1, 0, 1, 1, pad + width, 0, pad, pad);
+    w.drawImage(source, 0, height - 1, 1, 1, 0, pad + height, pad, pad);
+    w.drawImage(source, width - 1, height - 1, 1, 1, pad + width, pad + height, pad, pad);
+    // Blurred whole, then cut: drawn cut, the canvas would cut first and blur after, beside nothing again.
+    const blurred = this.#extraCanvas(4, width + pad * 2, height + pad * 2);
+    const b = blurred.getContext('2d')!;
+    b.setTransform(1, 0, 0, 1, 0, 0);
+    b.globalCompositeOperation = 'copy';
+    b.globalAlpha = 1;
+    b.filter = `${filter} blur(${radius}px)`.trim();
+    b.drawImage(wide, 0, 0);
+    b.filter = 'none';
+    t.filter = 'none';
+    t.drawImage(blurred, pad, pad, width, height, 0, 0, width, height);
+  }
+
+  /** The picture beneath, blurred to the edges. */
+  #blurred(radius: number) {
+    const copy = this.#copyOfPicture();
+    const result = this.#extraCanvas(0);
+    this.#blurInto(copy, result, radius);
+    this.#ctx.drawImage(result, 0, 0);
+  }
+
+  /** The picture beneath, through one of the canvas's filters. */
+  #filtered(filter: string) {
+    const ctx = this.#ctx;
+    const copy = this.#copyOfPicture();
+    const result = this.#extraCanvas(0);
+    const r = result.getContext('2d')!;
+    r.setTransform(1, 0, 0, 1, 0, 0);
+    r.globalCompositeOperation = 'copy';
+    r.globalAlpha = 1;
+    r.filter = filter;
+    r.drawImage(copy, 0, 0);
+    r.filter = 'none';
+    ctx.drawImage(result, 0, 0);
+  }
+
+  /**
+   * Draws `source` into `result` with its red, green and blue each moved on
+   * its own: by `place`, which gets the channel (0 red, 1 green, 2 blue) and
+   * transforms the drawing for it.
+   */
+  #channels(source: OffscreenCanvas, result: OffscreenCanvas, place: (s: OffscreenCanvasRenderingContext2D, channel: number) => void) {
+    const { width, height } = this.#canvas;
+    const one = this.#extraCanvas(1);
+    const c = one.getContext('2d')!;
+    const r = result.getContext('2d')!;
+    r.setTransform(1, 0, 0, 1, 0, 0);
+    r.globalAlpha = 1;
+    r.globalCompositeOperation = 'copy';
+    r.fillStyle = '#000000';
+    r.fillRect(0, 0, width, height);
+    r.globalCompositeOperation = 'lighter';
+    ['#ff0000', '#00ff00', '#0000ff'].forEach((only, channel) => {
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalAlpha = 1;
+      c.globalCompositeOperation = 'copy';
+      c.fillStyle = '#000000';
+      c.fillRect(0, 0, width, height);
+      c.globalCompositeOperation = 'source-over';
+      place(c, channel);
+      c.drawImage(source, 0, 0);
+      // Keeps this channel alone.
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalCompositeOperation = 'multiply';
+      c.fillStyle = only;
+      c.fillRect(0, 0, width, height);
+      r.drawImage(one, 0, 0);
+    });
+  }
+
+  /**
+   * Chromatic aberration: red and blue pulled apart from green. Straight, in
+   * one direction; or from the centre, as a lens does it, none in the middle
+   * and most at the edges.
+   */
+  #split(params: ResolvedParams) {
+    const { width, height } = this.#canvas;
+    const amount = (num(params, 'amount') / 100) * width;
+    if (amount === 0) return;
+    const copy = this.#copyOfPicture();
+    const result = this.#extraCanvas(0);
+    const radial = str(params, 'form') === 'from the centre';
+    const angle = (num(params, 'angle') * Math.PI) / 180;
+    // From the centre: red enlarged most, green half as much, blue not at all, so that
+    // red and blue are the amount apart at the corners and no edge is left without a colour.
+    const scale = amount / Math.hypot(width / 2, height / 2);
+    this.#channels(copy, result, (c, channel) => {
+      const sign = channel === 0 ? 1 : channel === 2 ? -1 : 0;
+      if (radial) {
+        const k = 1 + ((sign + 1) / 2) * scale;
+        c.setTransform(k, 0, 0, k, (width / 2) * (1 - k), (height / 2) * (1 - k));
+      } else {
+        c.setTransform(1, 0, 0, 1, Math.cos(angle) * amount * sign, Math.sin(angle) * amount * sign);
+      }
+    });
+    this.#ctx.drawImage(result, 0, 0);
+  }
+
+  /**
+   * A digital glitch: on some moments, slices of the picture torn sideways,
+   * with its colours split. What happens is worked out from the time alone,
+   * so a video glitches the same each time it is made.
+   */
+  #glitch(params: ResolvedParams, frame: Frame) {
+    const { width, height } = this.#canvas;
+    const tick = Math.floor(frame.seconds * Math.max(0.1, num(params, 'rate')));
+    const random = (n: number) => hash(tick * 7919 + n * 104729 + 17);
+    // How often: the share of moments that glitch.
+    if (random(0) >= num(params, 'amount') / 100) return;
+    const copy = this.#copyOfPicture();
+    const result = this.#extraCanvas(0);
+    const split = (num(params, 'split') / 100) * width * (0.5 + random(1));
+    if (split > 0) {
+      this.#channels(copy, result, (c, channel) => c.setTransform(1, 0, 0, 1, (channel - 1) * split, 0));
+    } else {
+      const r = result.getContext('2d')!;
+      r.setTransform(1, 0, 0, 1, 0, 0);
+      r.globalCompositeOperation = 'copy';
+      r.drawImage(copy, 0, 0);
+    }
+    // Slices of the picture, each moved sideways: taken from the split picture, so they carry its colours.
+    const r = result.getContext('2d')!;
+    r.globalCompositeOperation = 'source-over';
+    r.setTransform(1, 0, 0, 1, 0, 0);
+    const torn = this.#extraCanvas(2);
+    const t = torn.getContext('2d')!;
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    t.globalCompositeOperation = 'copy';
+    t.drawImage(result, 0, 0);
+    const slices = Math.max(1, Math.round(num(params, 'slices') * (0.3 + 0.7 * random(2))));
+    const shift = (num(params, 'shift') / 100) * width;
+    for (let i = 0; i < slices; i++) {
+      const y = Math.floor(random(10 + i * 3) * height);
+      const h = Math.max(2, Math.floor((0.005 + 0.06 * random(11 + i * 3) ** 2) * height));
+      const dx = Math.round((random(12 + i * 3) * 2 - 1) * shift);
+      r.drawImage(torn, 0, y, width, h, dx, y, width, h);
+    }
+    this.#ctx.drawImage(result, 0, 0);
   }
 }
