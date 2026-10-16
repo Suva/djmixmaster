@@ -218,70 +218,39 @@ show, and a video can show the track playing.
 
 YouTube will not take a mix as sound alone. The **Video** view (the switch at
 the bottom of the window, or Tab) shows the selected mix as a video: a
-template drawn to the music, showing the mix's artist, with a few things to
-fill in, such as a colour and a logo. The recording timeline, the playback controls and
-a strip of the mix stay at hand. Four templates come with the app: Glitter,
-Spectrum ring, Waveform, and Photo, which sets the mix over a photo of your own. What is chosen is kept with the mix.
-While the music is paused the picture stands still, and is drawn again only
-when something in it changes, so a template heavy with effects costs nothing
-while you stop to think.
+template that moves to the music, with a few things to fill in, such as a
+colour, a logo and the artist's name. Four templates come with the app:
+Glitter, Spectrum ring, Waveform, and Photo, over a photo of your own. What is
+chosen is kept with the mix.
 
-Under the list of templates are the chosen one's name, who made it and what it
-is. The templates that come with the app stay as they are. The **⋯** beside
-the list has **Duplicate**, which makes a copy that is yours, Import, Export and
-Delete. The **pencil** opens a template of yours in the editor, in a wider panel beside
-the picture, which shows every change as it is made: its layers, front-most at
-the top, can be hidden, added, duplicated (⌘J), deleted, renamed and dragged to
-reorder. Layers can be put in **groups** (⌘G, or dragged onto one; Shift+⌘G
-takes them out again): a group's layers are drawn together and laid on the
-picture as one, with the group's opacity and blend, an effect in a group
-changes only what is beneath it in the group, and hiding or deleting the group
-takes all of it. Several layers can be selected at once, with ⌘-click or
-Shift-click, to group, delete, duplicate or drag together. The **+** under the list adds a layer of any kind, with a
-search to find one by name; the list's bottom edge can be dragged to make it
-taller or shorter. Above the list are the selected layer's blend and opacity, as in an
-image editor: the opacity is a value in a box, which opens its full control on
-a click or while the pointer rests on it. Below the list are the rest of its
-settings. Any number box can be dragged sideways to change it (with Shift, ten
-times finer); a click is still for typing. A number, a switch
-or a colour can instead be an **expression** (the ƒ button) that follows the
-music, such as `100 + 8 * smooth(bass, 0.02, 0.4)`. A mistake is underlined
-as you type, with what is wrong beneath it, and while the mix plays the value
-the expression comes to shows beside it. For a number, **∿** (moves with…)
-writes the expression for you: pick what it follows (the bass, the highs, the
-level, the beat, or a slow wave or a wander that needs no music), from what
-value, by how much and how quickly, and the panel writes it, and reads it back
-later to be changed. A picture chosen for a layer is packed into the template.
-Besides what draws (gradients, glitter, pictures, text, spectrum, waveform),
-layers can change what is beneath them: glow, a colour split (straight, or
-growing towards the edges like a lens), a digital glitch, brightness and
-contrast, hue and saturation, blur, and a kaleidoscope (one slice of the
-picture repeated round a centre, which can be dragged on the picture, and
-turned by its rotation). Their amounts can follow the music
-like anything else: a glitch on the beat, say.
-On the picture, the selected layer has an outline: drag it to move the layer,
-or a corner to resize it (with Shift, keeping its proportions). A click on the
-picture selects the layer there. The **Fields** tab lists what someone using the template
-fills in: each field's label, kind (colour, number, text, picture, font or a
-list), the name settings use it by, and its default. Renaming a field renames
-it wherever the template uses it. The **About** tab says who made the template
-and what it is (author, email, website, description); that shows under the list
-of templates, and goes with the template when it is shared, where the website
-and email open in your own browser and mail program when clicked (the app
-itself still contacts nothing). While the editor is open, undo works on the
-template. The pencil on a template that comes with the app edits a copy of
-it. The editor is also where a template is renamed. **Export** saves a
-template as a `.djmtemplate` file to share, with any pictures it uses packed
-inside (the editor has an **Export…** button too), and **Import** adds one
-someone shared; so does dropping a `.djmtemplate` file on the window, or
-opening one from Finder or Explorer, which starts the app if it is not running. **Delete** moves one of yours
-to the Trash.
+You can also make templates of your own, in an editor beside the picture that
+shows every change as it is made:
+
+- **Layers** that draw (gradients, glitter, pictures, text, the spectrum, the
+  waveform) and effects that change what is beneath them (glow, colour split,
+  glitch, kaleidoscope, blur, brightness and contrast, hue and saturation),
+  with blends as in an image editor, and **groups** to keep them together.
+  Layers can be moved and resized on the picture itself.
+- **Anything can follow the music**: pick what a setting moves with, such as
+  the bass or the beat, and by how much; or write an expression, such as
+  `100 + 8 * smooth(bass, 0.02, 0.4)`.
+- **Fields**: what someone using the template fills in, such as a colour or a
+  logo.
+- **About**: who made the template and what it is.
+
+Templates are shared as `.djmtemplate` files, with their pictures packed
+inside: export one from the editor, and add one by importing it, dropping it
+on the window, or opening it from Finder or Explorer. The templates that come
+with the app stay as they are; editing one makes a copy of your own. A
+template's website and email open in your own browser and mail program when
+clicked; the app itself still contacts nothing.
 
 Exporting a mix as **MP4 video** draws every frame of it at 1920 × 1080, 30
 frames a second, with the sound in AAC. On an M1 Mac it takes about a sixth of
-the mix's length: some 20 minutes for two hours. The first time, the
-recording is also listened to for the beats and the spectrum the template
-moves to, which takes about as long as its analysis.
+the mix's length with the templates that come with the app, some 20 minutes
+for two hours; a template heavy with effects takes about three times as long.
+The first time, the recording is also listened to for the beats and the
+spectrum the template moves to, which takes about as long as its analysis.
 
 ### Exporting
 
