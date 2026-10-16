@@ -57,7 +57,8 @@ const inline = (text) =>
 /**
  * The released versions in CHANGELOG.md as HTML. Each "## <version> — <date>"
  * becomes a heading; under it, lines starting "- " are list items (continued
- * on indented lines) and anything else is a paragraph. Changes not released
+ * on indented lines), lines starting "  - " items of a list within the item
+ * before, and anything else is a paragraph. Changes not released
  * yet are left out: the page goes with the downloads.
  */
 function changes() {
@@ -69,9 +70,13 @@ function changes() {
       const [version, date] = heading.split(' — ');
       const blocks = [];
       for (const line of lines) {
+        const last = blocks.at(-1);
         if (!line.trim()) blocks.push(null);
-        else if (line.startsWith('- ')) blocks.push({ kind: 'li', text: line.slice(2) });
-        else if (blocks.at(-1)) blocks.at(-1).text += ` ${line.trim()}`;
+        else if (line.startsWith('- ')) blocks.push({ kind: 'li', text: line.slice(2), items: [] });
+        else if (line.startsWith('  - ') && last?.kind === 'li') last.items.push(line.slice(4));
+        // A line carried on: of the last item within, if there is one, else of the block.
+        else if (last?.items?.length) last.items[last.items.length - 1] += ` ${line.trim()}`;
+        else if (last) last.text += ` ${line.trim()}`;
         else blocks.push({ kind: 'p', text: line.trim() });
       }
       let html = `<h2 id="v${escape(version.trim())}">${escape(version.trim())}${date ? ` <span class="date">${escape(date.trim())}</span>` : ''}</h2>\n`;
@@ -80,7 +85,8 @@ function changes() {
         if (block.kind === 'li' && !inList) html += '<ul>\n';
         if (block.kind !== 'li' && inList) html += '</ul>\n';
         inList = block.kind === 'li';
-        html += `<${block.kind}>${inline(block.text)}</${block.kind}>\n`;
+        const within = block.items?.length ? `\n<ul>\n${block.items.map((item) => `<li>${inline(item)}</li>`).join('\n')}\n</ul>\n` : '';
+        html += `<${block.kind}>${inline(block.text)}${within}</${block.kind}>\n`;
       }
       return html + (inList ? '</ul>\n' : '');
     })

@@ -2874,7 +2874,7 @@ async function exportAll() {
       await renderMix(m, outputs[index], `${index + 1}/${mixes.length}`);
       done++;
     }
-    showExported(`Exported ${done} mixes.`, outputs[0]);
+    showExported(`Exported ${done} ${done === 1 ? 'mix' : 'mixes'}.`, outputs[0]);
   } catch (error) {
     $('export-status').textContent = wasCancelled(error)
       ? `Export cancelled after ${done} of ${mixes.length} mixes.`

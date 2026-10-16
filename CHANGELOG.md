@@ -6,34 +6,36 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
-- **Templates of your own.** Duplicate a template to make a copy that is
-  yours, export it as a file to share, with its pictures packed inside, and
-  import templates others shared.
-- **A template editor**, beside the picture: add, hide, reorder, rename and
-  delete a template's layers, set each one's colours, sizes, texts, fonts and
-  pictures, and make any number or colour follow the music with an
-  expression, checked as you type, or by choosing what it moves with (the
-  bass, the beat, a slow wave) and how much. The fields a template asks for can be
-  added, renamed, reordered and given defaults. Layers can be picked, moved
-  and resized on the picture itself. Every change shows straight away.
-- **New effects for videos:** a colour split, straight or growing towards the
-  edges like a lens; a digital glitch; brightness and contrast; hue and
-  saturation; blur; and a kaleidoscope.
-- **Template files open with the app:** double-click a `.djmtemplate` in
-  Finder or Explorer, or drop one on the window, to add it. The editor has an
-  Export button of its own.
-- **Templates say who made them:** an author, email, website and description,
-  set in the editor's About tab and shown under the list of templates. The
-  website and email open in your browser and mail program.
-- **The video's picture stands still while the music is paused**, and is drawn
-  again only when something changes, sparing the computer.
-- **Layer groups** in the template editor: group layers to fade, blend or hide
-  them together, or to keep an effect to just them. ⌘J duplicates a layer,
-  ⌘G groups it, as in an image editor, and the buttons under the layers are
-  icons now.
+- **Make your own video templates.** A template editor opens beside the
+  picture, and every change shows straight away:
+  - Layers, front-most at the top, are added, hidden, reordered, renamed,
+    duplicated (⌘J) and deleted, and picked, moved and resized on the picture
+    itself. Several can be selected at once (⌘-click, Shift-click).
+  - **Groups** (⌘G) fade, blend or hide layers together, or keep an effect to
+    just them.
+  - Each layer's colours, sizes, texts, fonts and pictures are set beside the
+    list; blend and opacity sit above it, as in an image editor. Any number box
+    can be dragged sideways to change it.
+  - Any number or colour can follow the music: by choosing what it moves with
+    (the bass, the beat, a slow wave) and how much, or with an expression,
+    checked as you type.
+  - The fields a template asks for (a colour, a logo, a font) are added,
+    renamed and given defaults in a tab of their own, and an About tab says
+    who made the template and what it is.
+- **Share templates** as files, with their pictures packed inside: export
+  from the editor or the ⋯ beside the list of templates, and add one by
+  importing it, dropping it on the window, or double-clicking it in Finder or
+  Explorer. The templates that come with the app stay as they are; editing one
+  makes a copy that is yours.
+- **New effects:** a colour split, straight or growing towards the edges like
+  a lens; a digital glitch; a kaleidoscope; brightness and contrast; hue and
+  saturation; and blur.
 - **More ways to blend a layer** into what is beneath it: colour dodge and
   burn, linear burn, lighten and darken, soft and hard light, exclusion, and
-  hue, saturation, colour and luminosity. Like everything else, they can follow the music.
+  hue, saturation, colour and luminosity.
+- **The video's picture stands still while the music is paused**, and is drawn
+  again only when something changes, sparing the computer.
+- Exporting a single mix with "Export all" no longer says "1 mixes".
 
 ## 0.8.0 — 15 October 2026
 
