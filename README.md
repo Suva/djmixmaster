@@ -239,7 +239,9 @@ later to be changed. A picture chosen for a layer is packed into the template.
 Besides what draws (gradients, glitter, pictures, text, spectrum, waveform),
 layers can change what is beneath them: glow, a colour split (straight, or
 growing towards the edges like a lens), a digital glitch, brightness and
-contrast, hue and saturation, and blur. Their amounts can follow the music
+contrast, hue and saturation, blur, and a kaleidoscope (one slice of the
+picture repeated round a centre, which can be dragged on the picture, and
+turned by its rotation). Their amounts can follow the music
 like anything else: a glitch on the beat, say.
 On the picture, the selected layer has an outline: drag it to move the layer,
 or a corner to resize it (with Shift, keeping its proportions). A click on the

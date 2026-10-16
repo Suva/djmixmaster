@@ -67,7 +67,8 @@ export class PictureHandles {
     const index = this.#context.selected();
     const box = this.#context.boxes()[index] ?? null;
     const layer = this.#context.layer(index);
-    const effect = layer ? LAYER_TYPES[layer.type]?.effect === true : true;
+    // An effect has no place, except a kaleidoscope, whose position is its centre.
+    const effect = layer ? LAYER_TYPES[layer.type]?.effect === true && layer.type !== 'kaleidoscope' : true;
     const { k, offsetX, offsetY } = this.#frame();
     this.#outline.hidden = !box;
     // A layer without a box (a gradient, glitter) has its position only; an effect has none.

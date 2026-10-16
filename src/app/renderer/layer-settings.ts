@@ -38,6 +38,9 @@ const GROUPS: [string, string[], boolean][] = [
 /** Which groups were folded, kept while other layers are selected. */
 const opened = new Map<string, boolean>();
 
+/** Choices shown with more than their stored name: what an image editor would call them too. */
+const SHOWN_AS: Record<string, string> = { add: 'add (linear dodge)' };
+
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 /** Whether a value of a setting is an expression rather than a plain value. */
 function isExpression(value: ParamValue, param: ParamSpec): boolean {
@@ -373,7 +376,7 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
         }
         case 'choice': {
           const select = document.createElement('select');
-          for (const option of param.choices ?? []) select.add(new Option(option, option));
+          for (const option of param.choices ?? []) select.add(new Option(SHOWN_AS[option] ?? option, option));
           for (const field of context.template().fields.filter((f) => f.kind === 'choice')) select.add(new Option(`Field: ${field.label}`, `%${field.key}%`));
           select.value = String(current);
           select.addEventListener('change', () => change(select.value));

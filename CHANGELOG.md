@@ -18,7 +18,10 @@ are under "Not released yet" and appear there once they are.
   and resized on the picture itself. Every change shows straight away.
 - **New effects for videos:** a colour split, straight or growing towards the
   edges like a lens; a digital glitch; brightness and contrast; hue and
-  saturation; and blur. Like everything else, they can follow the music.
+  saturation; blur; and a kaleidoscope.
+- **More ways to blend a layer** into what is beneath it: colour dodge and
+  burn, linear burn, lighten and darken, soft and hard light, exclusion, and
+  hue, saturation, colour and luminosity. Like everything else, they can follow the music.
 
 ## 0.8.0 — 15 October 2026
 

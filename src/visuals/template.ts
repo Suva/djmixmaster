@@ -46,7 +46,13 @@ const toggle = (label: string, value: boolean): ParamSpec => ({ kind: 'switch', 
 export const COMMON_PARAMS: Record<string, ParamSpec> = {
   visible: toggle('Visible', true),
   opacity: number('Opacity', 100, 0, 100, '%'),
-  blend: choice('Blend', 'normal', ['normal', 'add', 'screen', 'multiply', 'overlay', 'difference']),
+  // "add" is also known as linear dodge.
+  blend: choice('Blend', 'normal', [
+    'normal', 'add', 'screen', 'lighten', 'colour dodge',
+    'multiply', 'darken', 'colour burn', 'linear burn',
+    'overlay', 'soft light', 'hard light', 'difference', 'exclusion',
+    'hue', 'saturation', 'colour', 'luminosity',
+  ]),
   x: number('Across', 50, 0, 100, '%'),
   y: number('Down', 50, 0, 100, '%'),
   anchor: choice('Anchor', 'centre', ['centre', 'top', 'bottom', 'left', 'right', 'top left', 'top right', 'bottom left', 'bottom right']),
@@ -219,6 +225,15 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       hue: number('Hue', 0, -180, 180, '°'),
       saturation: number('Saturation', 100, 0, 300, '%'),
       lightness: number('Lightness', 0, -100, 100, '%'),
+    },
+  },
+  kaleidoscope: {
+    label: 'Kaleidoscope',
+    effect: true,
+    params: {
+      segments: number('Segments', 6, 2, 24),
+      angle: number('Taken from', 0, 0, 360, '°'),
+      mirrored: toggle('Mirrored', true),
     },
   },
   blur: {

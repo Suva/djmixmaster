@@ -1096,6 +1096,114 @@ test('a blur reaches the edges of the picture as it does the middle', { skip }, 
   assert.ok(seen.left <= seen.middleColumn + 25, `the left edge as much as the middle: ${JSON.stringify(seen)}`);
 });
 
+test('a kaleidoscope mirrors a slice all the way round, and fills the corners from any centre', { skip }, async () => {
+  const file = join(work, 'Kaleidoscope.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Kaleidoscope',
+    fields: [],
+    layers: [
+      { type: 'gradient', params: { kind: 'linear', angle: 20, colour1: '#ff5a3d', colour2: '#3ddc97' } },
+      { type: 'text', params: { text: 'ONE SIDE', size: 12, weight: 900, colour: '#ffffff', x: 72, y: 35 } },
+      { type: 'kaleidoscope', name: 'Kaleidoscope', params: { segments: 2, angle: 0, mirrored: true } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Kaleidoscope', 'the template to be added');
+    await page.wait(500);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const pixels = () => picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
+    // How different the picture is from its mirror image, left to right, on average over a grid of points.
+    const asymmetry = (width = picture.width, height = picture.height) => {
+      const data = pixels();
+      let total = 0;
+      let count = 0;
+      for (let y = 10; y < height; y += Math.floor(height / 12)) {
+        for (let x = 10; x < width / 2; x += Math.floor(width / 24)) {
+          const a = (y * width + x) * 4;
+          const b = (y * width + (width - 1 - x)) * 4;
+          total += Math.abs(data[a] - data[b]) + Math.abs(data[a + 1] - data[b + 1]) + Math.abs(data[a + 2] - data[b + 2]);
+          count++;
+        }
+      }
+      return total / count;
+    };
+    const mirrored = asymmetry();
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Kaleidoscope')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    // More segments, round a centre far to one side: the corners are still filled.
+    const set = (key: string, value: string) => {
+      const input = document.querySelector<HTMLInputElement>(`#editor-layer .setting[data-key="${key}"] input[type="number"]`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    set('segments', '8');
+    set('x', '85');
+    set('y', '20');
+    await page.wait(300);
+    // The editor's wider panel has made the picture smaller since.
+    const data = pixels();
+    const [w, h] = [picture.width, picture.height];
+    const corners = [[1, 1], [w - 2, 1], [1, h - 2], [w - 2, h - 2]].map(([x, y]) => {
+      const i = (y * w + x) * 4;
+      return data[i] + data[i + 1] + data[i + 2];
+    });
+    row.querySelector<HTMLButtonElement>('.layer-eye')!.click();
+    await page.wait(300);
+    return { mirrored, plain: asymmetry(picture.width, picture.height), corners };
+  });
+  assert.ok(seen.plain > 40, `the picture itself is lopsided: ${seen.plain}`);
+  assert.ok(seen.mirrored < 6, `mirrored, it is the same both ways: ${seen.mirrored}`);
+  for (const corner of seen.corners) assert.ok(corner > 60, `no black corner: ${seen.corners}`);
+});
+
+test('blends work out as their formulas say, linear burn included', { skip }, async () => {
+  const file = join(work, 'Greys.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Greys',
+    fields: [],
+    layers: [
+      { type: 'gradient', params: { colour1: '#808080', colour2: '#808080' } },
+      { type: 'gradient', name: 'Top', params: { colour1: '#c0c0c0', colour2: '#c0c0c0' } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Greys', 'the template to be added');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Top')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const middle = () => picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data[0];
+    const levels: Record<string, number> = {};
+    for (const blend of ['normal', 'add', 'colour dodge', 'multiply', 'colour burn', 'linear burn']) {
+      const select = document.querySelector<HTMLSelectElement>('#editor-layer .setting[data-key="blend"] select')!;
+      select.value = blend;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await page.wait(150);
+      levels[blend] = middle();
+    }
+    // Half as much of the layer: half way from the grey beneath to the burnt.
+    const opacity = document.querySelector<HTMLInputElement>('#editor-layer .setting[data-key="opacity"] input[type="number"]')!;
+    opacity.value = '50';
+    opacity.dispatchEvent(new Event('input', { bubbles: true }));
+    await page.wait(150);
+    levels['linear burn at half'] = middle();
+    return levels;
+  });
+  const expected: Record<string, number> = { normal: 192, add: 255, 'colour dodge': 255, multiply: 96, 'colour burn': 86, 'linear burn': 65, 'linear burn at half': 96 };
+  for (const [blend, level] of Object.entries(expected)) assert.ok(Math.abs(seen[blend] - level) <= 6, `${blend}: ${seen[blend]}, not about ${level}`);
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

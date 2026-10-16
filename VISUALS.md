@@ -281,7 +281,14 @@ values into the ones a frame gets. None draws anything yet.
   change the picture beneath them: colour split (`split`: straight, or from
   the centre as a lens does), glitch (slices torn sideways with the colours
   split, worked out from the time alone so the export matches the preview),
-  brightness and contrast (`adjust`), hue and saturation (`hue`), and blur.
+  brightness and contrast (`adjust`), hue and saturation (`hue`), blur, and
+  a kaleidoscope (a slice round the layer's position repeated all the way
+  round, filled from the picture mirrored past its edges so that no corner is
+  left black).
+- **Blends** are the canvas's own, by their names in an image editor (add is
+  linear dodge), except linear burn, which the canvas has not: such a layer
+  is drawn on a canvas of its own and burnt in by inverting, adding and
+  inverting back (`#linearBurn` in `draw.ts`).
   The colour split and the glitch take the picture apart into red, green and
   blue on scratch canvases; the others use the canvas's own filters.
 - **Settings take what fits their kind:** a number, or an expression giving
