@@ -698,6 +698,15 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     select('Artist');
     type(setting('colour').querySelector<HTMLInputElement>('input[type="color"]')!, '#ff0000');
     await page.wait(1100);
+    // A colour as an expression, and back: plain #ff0000 is an expression too, so the button decides.
+    setting('colour').querySelector<HTMLButtonElement>('.fx')!.click();
+    const colourExpression = setting('colour').querySelector<HTMLInputElement>('.expr-input')?.value;
+    type(setting('colour').querySelector<HTMLInputElement>('.expr-input')!, 'mix(#ff0000, #0000ff, 0)');
+    await page.wait(300);
+    const colourLive = setting('colour').querySelector('.live .swatch') !== null;
+    setting('colour').querySelector<HTMLButtonElement>('.fx')!.click();
+    const colourBack = setting('colour').querySelector<HTMLInputElement>('input[type="color"]')?.value;
+    await page.wait(1100);
 
     // A picture, packed into the template.
     select('Logo');
@@ -717,9 +726,10 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     select('Ring');
     type(setting('radius').querySelector<HTMLInputElement>('.expr-input')!, '20 + 0 * (bass');
     await page.wait(700);
-    return { title, wrong, right, afterUndo };
+    return { title, wrong, right, afterUndo, colourExpression, colourLive, colourBack };
   });
   assert.equal(seen.title, 'Ring');
+  assert.deepEqual([seen.colourExpression, seen.colourLive, seen.colourBack], ['#ff0000', true, '#ff0000']);
   assert.deepEqual(seen.wrong, { problem: 'Unknown name bas; did you mean bass?', marked: 'bas', live: '' });
   assert.deepEqual(seen.right, { problem: '', live: '= 20.0' });
   assert.equal(seen.afterUndo, '%logo%');
@@ -744,6 +754,71 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     return { typed: radius.querySelector<HTMLInputElement>('.expr-input')?.value, problem: radius.querySelector('.setting-problem')!.textContent };
   });
   assert.deepEqual(again, { typed: '20 + 0 * (bass', problem: 'Expected a closing ")"' });
+});
+
+test('a template\'s fields in the editor: renamed everywhere, added, changed, reordered and removed', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    await page.wait(200);
+    // What the mix filled in, under the field's old name.
+    const colour = page.element<HTMLInputElement>('field-colour1');
+    colour.value = '#ff0000';
+    colour.dispatchEvent(new Event('input', { bubbles: true }));
+    await page.settle();
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    page.click('editor-tab-fields');
+    const cardOf = (key: string) => document.querySelector<HTMLElement>(`.field-card[data-key="${key}"]`)!;
+    const type = (input: HTMLInputElement, value: string, commit = false) => {
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      if (commit) input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+
+    // A name that is taken is refused, with a word why.
+    type(cardOf('colour1').querySelector<HTMLInputElement>('.field-key')!, 'bass');
+    const refused = cardOf('colour1').querySelector('.setting-problem')!.textContent;
+    type(cardOf('colour1').querySelector<HTMLInputElement>('.field-key')!, 'bass', true);
+    const kept = !!cardOf('colour1');
+    type(cardOf('colour1').querySelector<HTMLInputElement>('.field-key')!, 'accent', true);
+    await page.wait(50);
+    const usage = cardOf('accent').querySelector('.field-usage')!.textContent;
+
+    // A text field, with its label and default.
+    page.choose('editor-add-field', 'text');
+    await page.wait(50);
+    type(cardOf('text1').querySelector<HTMLInputElement>('.field-label')!, 'Tagline');
+    type(cardOf('text1').querySelector<HTMLInputElement>('.field-default input')!, 'Live at the club');
+    await page.wait(1100);
+
+    // Sparkle becomes a colour; the logo moves to the end; the font goes.
+    const kind = cardOf('sparkle').querySelector<HTMLSelectElement>('.field-kind')!;
+    kind.value = 'colour';
+    kind.dispatchEvent(new Event('change', { bubbles: true }));
+    cardOf('logo').querySelector<HTMLButtonElement>('button[title^="Show this field later"]')!.click();
+    cardOf('font').querySelector<HTMLButtonElement>('button[title^="Remove"]')!.click();
+    const order = [...document.querySelectorAll<HTMLElement>('.field-card')].map((card) => card.dataset.key);
+    await page.wait(600);
+    page.click('editor-done');
+    await page.wait(100);
+    const panel = [...page.element('video-fields').querySelectorAll('label')].map((label) => label.textContent);
+    return { refused, kept, usage, order, panel, accent: page.element<HTMLInputElement>('field-accent').value };
+  });
+  assert.equal(seen.refused, 'The name bass is already taken');
+  assert.ok(seen.kept);
+  assert.equal(seen.usage, 'in expressions: accent');
+  assert.deepEqual(seen.order, ['accent', 'sparkle', 'logo', 'text1']);
+  assert.deepEqual(seen.panel, ['Colour', 'Sparkle', 'Logo', 'Tagline']);
+  assert.equal(seen.accent, '#ff0000', 'what the mix filled in went with the new name');
+
+  const [file] = await readdir(join(data, 'templates'));
+  const saved = JSON.parse(readFileSync(join(data, 'templates', file), 'utf8'));
+  assert.deepEqual(saved.fields.map((field: { key: string; kind: string }) => `${field.key}:${field.kind}`), ['accent:colour', 'sparkle:colour', 'logo:image', 'text1:text']);
+  assert.equal(saved.fields[3].default, 'Live at the club');
+  assert.equal(saved.fields[1].default, '#3ddc97');
+  const background = saved.layers.find((layer: { name?: string }) => layer.name === 'Background').params;
+  assert.match(background.colour1, /^darken\(accent, /);
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {

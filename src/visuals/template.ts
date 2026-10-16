@@ -577,5 +577,38 @@ export function imagesOf(template: Template, filled: Record<string, string | num
   return [...images];
 }
 
+/** Whether a name will do for a new field: letters, digits and _, not starting with a digit, and not taken. */
+export function fieldNameProblem(template: Template, name: string, musicNames: readonly string[], textNames: readonly string[], except?: string): string | null {
+  if (!FIELD_KEY.test(name)) return 'Letters and digits only, starting with a letter';
+  if (name !== except && (template.fields.some((field) => field.key === name) || musicNames.includes(name) || textNames.includes(name))) {
+    return `The name ${name} is already taken`;
+  }
+  return null;
+}
+
+/**
+ * Renames a field, and the field wherever a setting uses it: as a name in an
+ * expression, between percent signs in a text, or as a whole `%name%`.
+ */
+export function renameField(template: Template, from: string, to: string): void {
+  const field = template.fields.find((f) => f.key === from);
+  if (!field) return;
+  field.key = to;
+  const escaped = from.replace(/[$]/g, '\\$&');
+  // A name in an expression: not part of a longer name.
+  const asName = new RegExp(`(?<![A-Za-z0-9_])${escaped}(?![A-Za-z0-9_(])`, 'g');
+  const asVariable = new RegExp(`%${escaped}%`, 'g');
+  for (const layer of template.layers) {
+    const spec = LAYER_TYPES[layer.type];
+    if (!spec) continue;
+    const all = { ...COMMON_PARAMS, ...spec.params };
+    for (const [key, value] of Object.entries(layer.params)) {
+      if (typeof value !== 'string' || !all[key]) continue;
+      const kind = all[key].kind;
+      layer.params[key] = kind === 'number' || kind === 'switch' || kind === 'colour' ? value.replace(asName, to) : value.replace(asVariable, `%${to}%`);
+    }
+  }
+}
+
 /** A resolved colour as a hex code, for drawing with a 2D canvas. */
 export const hexOf = (colour: Colour | null) => (colour ? toHex(colour) : 'transparent');

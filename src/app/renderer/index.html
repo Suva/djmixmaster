@@ -143,6 +143,11 @@
           <input id="template-name" class="field-text" type="text" spellcheck="false">
         </div>
         <div id="template-editor" hidden>
+          <div class="toggle editor-tabs" role="tablist">
+            <button id="editor-tab-layers" class="on" role="tab" title="What the template draws, layer on layer">Layers</button>
+            <button id="editor-tab-fields" role="tab" title="What someone using the template fills in">Fields</button>
+          </div>
+          <div id="editor-layers-pane">
           <div class="editor-section">
             <h3>Layers</h3>
             <span class="note">Front at the top. Drag to reorder.</span>
@@ -154,6 +159,14 @@
             <button id="editor-delete" title="Remove the selected layer (Backspace)">Delete</button>
           </div>
           <div id="editor-layer"></div>
+          </div>
+          <div id="editor-fields-pane" hidden>
+            <p class="note">What someone using the template fills in, in this order. A setting uses a number or a colour by its name in an expression, anything else between percent signs.</p>
+            <div id="editor-fields"></div>
+            <div class="editor-actions">
+              <select id="editor-add-field" title="Add something to fill in"><option value="">Add a field…</option></select>
+            </div>
+          </div>
         </div>
         <div id="video-fields"></div>
         <p class="note">Kept with this mix. The video uses it when the mix is exported in a video format.</p>

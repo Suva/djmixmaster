@@ -45,6 +45,13 @@ function isExpression(value: ParamValue, param: ParamSpec): boolean {
   return false;
 }
 
+/**
+ * Settings switched to expressions with the ƒ button, by layer. A colour
+ * written plain, #ffffff, is also a valid expression, so what it looks like
+ * cannot tell which it is meant as; this remembers, while the layer lasts.
+ */
+const asExpression = new WeakMap<Layer, Set<string>>();
+
 const shown = (value: number) => (Math.abs(value) >= 100 ? value.toFixed(0) : Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2));
 
 export function layerSettings(layer: Layer, context: LayerSettingsContext): { element: HTMLElement; tick(): void } {
@@ -84,6 +91,9 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
     row.append(head, body, problem);
 
     const value = () => layer.params[key] ?? param.default;
+    const chosen = asExpression.get(layer) ?? new Set<string>();
+    asExpression.set(layer, chosen);
+    const expressed = () => chosen.has(key) || isExpression(value(), param);
     const canExpress = param.kind === 'number' || param.kind === 'switch' || param.kind === 'colour';
     if (canExpress) {
       const fx = document.createElement('button');
@@ -95,13 +105,15 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
       fx.addEventListener('click', () => {
         const now = value();
         let next: ParamValue;
-        if (isExpression(now, param)) {
+        if (expressed()) {
+          chosen.delete(key);
           // Back to a plain value: what the expression comes to now, or the default.
           const current = context.live()?.[key];
           if (param.kind === 'colour') next = current && typeof current === 'object' ? toHex(current as Colour) : String(param.default);
           else if (param.kind === 'switch') next = typeof current === 'boolean' ? current : Boolean(param.default);
           else next = typeof current === 'number' ? Number(shown(current)) : param.default;
         } else {
+          chosen.add(key);
           next = param.kind === 'switch' ? (now ? '1' : '0') : String(now === '' ? param.default || '#ffffff' : now);
         }
         context.set(key, next);
@@ -114,8 +126,8 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
       problem.textContent = '';
       live.textContent = '';
       ticks.delete(key);
-      row.classList.toggle('expression', isExpression(value(), param));
-      if (isExpression(value(), param)) body.replaceChildren(expression());
+      row.classList.toggle('expression', expressed());
+      if (expressed()) body.replaceChildren(expression());
       else body.replaceChildren(plain());
     }
 

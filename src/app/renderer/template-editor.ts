@@ -9,6 +9,7 @@
 
 import { COMMON_PARAMS, LAYER_TYPES, type Layer, type ParamValue, type ResolvedParams, type Template } from '../../visuals/template.ts';
 import { layerSettings } from './layer-settings.ts';
+import { FIELD_KINDS, fieldsEditor, freeFieldName, newField } from './fields-editor.ts';
 
 export interface TemplateEditorOptions {
   /** A change made here: the template as it now is. */
@@ -19,6 +20,8 @@ export interface TemplateEditorOptions {
   live(index: number): ResolvedParams | null;
   /** Asks for a picture file and gives its name and contents as a data URL, or null. */
   pickPicture(): Promise<{ name: string; data: string } | null>;
+  /** A field was renamed: what the mix filled in goes under the new name. */
+  renamedField(from: string, to: string): void;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -59,6 +62,46 @@ export class TemplateEditor {
     });
     $('editor-duplicate').addEventListener('click', () => this.#duplicateLayer());
     $('editor-delete').addEventListener('click', () => this.#deleteLayer());
+
+    const addField = $<HTMLSelectElement>('editor-add-field');
+    for (const [kind, label] of FIELD_KINDS) addField.add(new Option(label, kind));
+    addField.addEventListener('change', () => {
+      const kind = addField.value as (typeof FIELD_KINDS)[number][0];
+      addField.value = '';
+      if (!kind || !this.#template) return;
+      const field = newField(kind, freeFieldName(this.#template, kind));
+      this.#change('', (template) => template.fields.push(field));
+      this.#showFields();
+      // The new field's label, ready to be typed over.
+      const label = $('editor-fields').lastElementChild?.querySelector<HTMLInputElement>('.field-label');
+      label?.focus();
+      label?.select();
+    });
+    $('editor-tab-layers').addEventListener('click', () => this.#showTab('layers'));
+    $('editor-tab-fields').addEventListener('click', () => this.#showTab('fields'));
+  }
+
+  #showTab(tab: 'layers' | 'fields') {
+    $('editor-tab-layers').classList.toggle('on', tab === 'layers');
+    $('editor-tab-fields').classList.toggle('on', tab === 'fields');
+    $('editor-layers-pane').hidden = tab !== 'layers';
+    $('editor-fields-pane').hidden = tab !== 'fields';
+    // The settings of a layer list the fields there are; they are made anew on the way back.
+    if (tab === 'fields') this.#showFields();
+    else this.#showSettings();
+  }
+
+  #showFields() {
+    if (!this.#template) return $('editor-fields').replaceChildren();
+    $('editor-fields').replaceChildren(fieldsEditor({
+      template: () => this.#template!,
+      change: (kind, apply, rebuild) => {
+        this.#change(kind, apply);
+        if (rebuild) this.#showFields();
+      },
+      renamed: (from, to) => this.#options.renamedField(from, to),
+      pickPicture: () => this.#options.pickPicture(),
+    }));
   }
 
   get open(): boolean {
@@ -80,6 +123,7 @@ export class TemplateEditor {
     this.#past = [];
     this.#future = [];
     this.#lastChange = { kind: '', at: 0 };
+    this.#showTab('layers');
     this.#showLayers();
     this.#options.history();
   }
@@ -112,6 +156,8 @@ export class TemplateEditor {
     this.#selected = Math.min(this.#selected, this.#template!.layers.length - 1);
     this.#lastChange = { kind: '', at: 0 };
     this.#showLayers();
+    this.#showSettings();
+    if (!$('editor-fields-pane').hidden) this.#showFields();
     this.#options.change(structuredClone(this.#template!));
     this.#options.history();
   }

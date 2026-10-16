@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { parseHex, toHex, toLch, type Colour } from '../src/visuals/colour.ts';
 import { compile, type Value } from '../src/visuals/expression.ts';
 import { MUSIC_NAMES, MusicReader } from '../src/visuals/music.ts';
-import { checkTemplate, fillText, imagesOf, prepare, TEXT_VARIABLES } from '../src/visuals/template.ts';
+import { checkTemplate, fieldNameProblem, fillText, imagesOf, prepare, renameField, TEXT_VARIABLES } from '../src/visuals/template.ts';
 import { BAND_COUNT, FEATURE_RATE, type Features } from '../src/features.ts';
 
 const value = (text: string, values: Record<string, number> = {}) => {
@@ -279,4 +279,26 @@ test('pictures packed into a template are checked, and named by asset:', () => {
   assert.deepEqual(Object.keys(template.assets ?? {}), ['wall']);
   assert.deepEqual(problems.map((p) => p.where), ['Picture script', 'Layer 2 (Image), Image']);
   assert.deepEqual(imagesOf(template, { logo: '/pictures/logo.png' }), ['/pictures/logo.png', 'asset:wall']);
+});
+
+test('renaming a field renames it wherever a setting uses it', () => {
+  const { template } = checkTemplate({
+    format: 1,
+    fields: [{ key: 'colour1', kind: 'colour', default: '#ff0000' }, { key: 'colour10', kind: 'colour', default: '#0000ff' }, { key: 'font', kind: 'font', default: 'Inter' }, { key: 'tag', kind: 'text', default: '' }],
+    layers: [
+      { type: 'gradient', params: { colour1: 'darken(colour1, 0.2)', colour2: 'mix(colour1, colour10, 0.5)' } },
+      { type: 'text', params: { text: '%tag% by %artist%', font: '%font%', colour: 'colour1' } },
+    ],
+  }, MUSIC_NAMES, TEXT_VARIABLES);
+  renameField(template, 'colour1', 'accent');
+  renameField(template, 'font', 'face');
+  renameField(template, 'tag', 'label');
+  assert.deepEqual(template.fields.map((field) => field.key), ['accent', 'colour10', 'face', 'label']);
+  assert.equal(template.layers[0].params.colour1, 'darken(accent, 0.2)');
+  // colour10 is another name, and the setting called colour1 is not the field.
+  assert.equal(template.layers[0].params.colour2, 'mix(accent, colour10, 0.5)');
+  assert.deepEqual([template.layers[1].params.text, template.layers[1].params.font, template.layers[1].params.colour], ['%label% by %artist%', '%face%', 'accent']);
+  assert.equal(fieldNameProblem(template, 'bass', MUSIC_NAMES, TEXT_VARIABLES), 'The name bass is already taken');
+  assert.equal(fieldNameProblem(template, '2nd', MUSIC_NAMES, TEXT_VARIABLES), 'Letters and digits only, starting with a letter');
+  assert.equal(fieldNameProblem(template, 'accent', MUSIC_NAMES, TEXT_VARIABLES, 'accent'), null);
 });

@@ -232,7 +232,11 @@ or a colour can instead be an **expression** (the ƒ button) that follows the
 music, such as `100 + 8 * smooth(bass, 0.02, 0.4)`. A mistake is underlined
 as you type, with what is wrong beneath it, and while the mix plays the value
 the expression comes to shows beside it. A picture chosen for a layer is packed
-into the template. While the editor is open, undo works on the template. **Edit a copy**
+into the template. The **Fields** tab lists what someone using the template
+fills in: each field's label, kind (colour, number, text, picture, font or a
+list), the name settings use it by, and its default. Renaming a field renames
+it wherever the template uses it. While the editor is open, undo works on the
+template. **Edit a copy**
 on a template that comes with the app duplicates it first. **Export** saves a
 template as a `.djmtemplate` file to share, with any pictures it uses packed
 inside, and **Import** adds one someone shared. **Delete** moves one of yours

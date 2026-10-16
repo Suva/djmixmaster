@@ -74,6 +74,13 @@ export class VideoView {
       change: (template) => this.#edited(template),
       history: () => options.history(),
       live: (index) => this.#layers[index]?.last ?? null,
+      renamedField: (from, to) => {
+        if (!(from in this.#choice.fields)) return;
+        const { [from]: value, ...rest } = this.#choice.fields;
+        this.#choice = { ...this.#choice, fields: { ...rest, [to]: value } };
+        this.#prepare();
+        this.#options.choose(this.#choice);
+      },
       pickPicture: async () => {
         const path = await options.api.pickImage();
         if (!path) return null;
