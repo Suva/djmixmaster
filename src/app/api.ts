@@ -164,6 +164,8 @@ export interface Api {
   saveTemplate(id: string, template: unknown): Promise<void>;
   /** Moves a template of the user's own to the Trash. */
   deleteTemplate(id: string): Promise<void>;
+  /** What is in a template file, by its path, not yet checked: one dropped on the window or opened from Finder. */
+  readTemplateFile(path: string): Promise<unknown>;
   /** Asks for a template file and gives what is in it, not yet checked; null if none was chosen. */
   importTemplate(): Promise<unknown | null>;
   /** Asks where to save a template to share, and saves it there; gives the path, or null if cancelled. */

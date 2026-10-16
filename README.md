@@ -272,7 +272,9 @@ itself still contacts nothing). While the editor is open, undo works on the
 template. The pencil on a template that comes with the app edits a copy of
 it. The editor is also where a template is renamed. **Export** saves a
 template as a `.djmtemplate` file to share, with any pictures it uses packed
-inside, and **Import** adds one someone shared. **Delete** moves one of yours
+inside (the editor has an **Export…** button too), and **Import** adds one
+someone shared; so does dropping a `.djmtemplate` file on the window, or
+opening one from Finder or Explorer, which starts the app if it is not running. **Delete** moves one of yours
 to the Trash.
 
 Exporting a mix as **MP4 video** draws every frame of it at 1920 × 1080, 30

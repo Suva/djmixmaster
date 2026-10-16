@@ -428,6 +428,7 @@ export class VideoView {
     document.body.classList.add('editing');
     $('template-editor').hidden = false;
     $('editor-done').hidden = false;
+    $('editor-export').hidden = false;
     $('video-heading').textContent = 'Editing the template';
     $('template-name-row').hidden = false;
     this.#handles.show(true);
@@ -460,6 +461,7 @@ export class VideoView {
     this.#handles.show(false);
     $('template-editor').hidden = true;
     $('editor-done').hidden = true;
+    $('editor-export').hidden = true;
     $('video-heading').textContent = 'Video';
     this.#editor.stop();
     this.#fillTemplates();
@@ -503,6 +505,34 @@ export class VideoView {
       }
     });
     return checked(usable).template;
+  }
+
+  /** Adds a template from a file: chosen in the dialog, dropped on the window, or opened from Finder. */
+  async #import(read: () => Promise<unknown>) {
+    try {
+      const raw = await read();
+      if (raw === null) return;
+      const { template, problems } = checked(raw);
+      template.name = this.#freeName(template.name);
+      await this.#adopt(template);
+      this.#options.say(problems.length
+        ? `Added ${template.name}. Some of it could not be used and was left at its default: ${problems[0].where}, ${problems[0].message.toLowerCase()}${problems.length > 1 ? `, and ${problems.length - 1} more` : ''}.`
+        : `Added ${template.name}.`);
+    } catch (error) {
+      this.#options.say(`Could not add that template: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /** Adds the template in this file, and makes it the selected mix's: one dropped on the window or opened from Finder. */
+  importFile(path: string): Promise<void> {
+    return this.#import(() => this.#options.api.readTemplateFile(path));
+  }
+
+  /** Saves the template on show as a file to share, from the ⋯ menu or the editor. */
+  async #export() {
+    const template = this.#template();
+    const saved = await this.#options.api.exportTemplate(template, template.name);
+    if (saved) this.#options.say(`Saved ${template.name} as ${saved.split(/[\\/]/).pop()}, with its pictures, to share.`);
   }
 
   #templateActions() {
@@ -559,25 +589,9 @@ export class VideoView {
       this.#options.choose(this.#choice);
       this.#options.say(`${template.name} is in the Trash. Mixes that used it now use ${templates.get(DEFAULT_TEMPLATE)!.name}.`);
     });
-    $('template-import').addEventListener('click', async () => {
-      try {
-        const raw = await api.importTemplate();
-        if (raw === null) return;
-        const { template, problems } = checked(raw);
-        template.name = this.#freeName(template.name);
-        await this.#adopt(template);
-        this.#options.say(problems.length
-          ? `Added ${template.name}. Some of it could not be used and was left at its default: ${problems[0].where}, ${problems[0].message.toLowerCase()}${problems.length > 1 ? `, and ${problems.length - 1} more` : ''}.`
-          : `Added ${template.name}.`);
-      } catch (error) {
-        this.#options.say(`Could not add that template: ${error instanceof Error ? error.message : error}`);
-      }
-    });
-    $('template-export').addEventListener('click', async () => {
-      const template = this.#template();
-      const saved = await api.exportTemplate(template, template.name);
-      if (saved) this.#options.say(`Saved ${template.name} as ${saved.split(/[\\/]/).pop()}, with its pictures, to share.`);
-    });
+    $('template-import').addEventListener('click', () => this.#import(() => api.importTemplate()));
+    $('template-export').addEventListener('click', () => this.#export());
+    $('editor-export').addEventListener('click', () => this.#export());
     const name = $<HTMLInputElement>('template-name');
     name.addEventListener('input', () => {
       // While editing, a new name is a change like any other, and can be undone.

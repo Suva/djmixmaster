@@ -19,6 +19,9 @@ are under "Not released yet" and appear there once they are.
 - **New effects for videos:** a colour split, straight or growing towards the
   edges like a lens; a digital glitch; brightness and contrast; hue and
   saturation; blur; and a kaleidoscope.
+- **Template files open with the app:** double-click a `.djmtemplate` in
+  Finder or Explorer, or drop one on the window, to add it. The editor has an
+  Export button of its own.
 - **Templates say who made them:** an author, email, website and description,
   set in the editor's About tab and shown under the list of templates. The
   website and email open in your browser and mail program.

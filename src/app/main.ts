@@ -235,15 +235,20 @@ function saveRecent() {
   );
 }
 
+/** A video template to import, rather than a recording to open: from Finder, the command line or a drop. */
+const isTemplateFile = (path: string) => /\.djmtemplate$/i.test(path);
+
 async function initialFile(): Promise<string[] | null> {
-  if (openedFromFinder.length > 0) return openedFromFinder;
   // Several files named on the command line are parts of one recording.
-  const named = process.argv.slice(app.isPackaged ? 1 : 2).filter((arg) => !arg.startsWith('-') && existsSync(arg));
-  if (named.length > 0) return named.map((arg) => resolve(arg));
+  const named = process.argv.slice(app.isPackaged ? 1 : 2).filter((arg) => !arg.startsWith('-') && existsSync(arg)).map((arg) => resolve(arg));
+  const given = openedFromFinder.length > 0 ? openedFromFinder : named;
+  if (given.some((path) => !isTemplateFile(path))) return given;
+  // Nothing but templates, or nothing: the last recording opens as usual, and the templates are imported.
   const last = await lastRecording();
   // A scripted check of the empty window has no recording to wait for.
   if (!last && SCREENSHOT) setTimeout(runCheck, 300);
-  return last ? [last] : null;
+  const files = [...(last ? [last] : []), ...given];
+  return files.length ? files : null;
 }
 
 app.on('open-file', (event, path) => {
@@ -689,6 +694,16 @@ ipcMain.handle('import-template', async () => {
   if ((await stat(chosen)).size > TEMPLATE_MOST_BYTES) throw new Error('That file is too large to be a template');
   try {
     return JSON.parse(await readFile(chosen, 'utf8'));
+  } catch {
+    throw new Error('That file is not a template');
+  }
+});
+// A template file opened from Finder or dropped on the window, by its path.
+ipcMain.handle('read-template-file', async (_event, path: string) => {
+  if (!isTemplateFile(String(path)) && !/\.json$/i.test(String(path))) throw new Error('Not a template file');
+  if ((await stat(path)).size > TEMPLATE_MOST_BYTES) throw new Error('That file is too large to be a template');
+  try {
+    return JSON.parse(await readFile(path, 'utf8'));
   } catch {
     throw new Error('That file is not a template');
   }

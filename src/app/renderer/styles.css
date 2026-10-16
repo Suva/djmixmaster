@@ -565,3 +565,5 @@ textarea.about-input { resize: vertical; line-height: 1.45; }
 .template-menu button:hover:not(:disabled), .template-menu button:focus { background: rgba(61, 220, 151, 0.16); outline: none; }
 .template-menu hr { margin: 4px 2px; border: none; border-top: 1px solid var(--border); }
 #template-about .about-name { margin: 2px 0 2px; font-size: 13px; font-weight: 600; color: var(--text); }
+
+.editor-head-buttons { display: flex; gap: 6px; }

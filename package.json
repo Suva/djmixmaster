@@ -86,7 +86,24 @@
           "from": "node_modules/ffmpeg-static/ffmpeg.README",
           "to": "bin/ffmpeg.README"
         }
-      ]
+      ],
+      "extendInfo": {
+        "UTExportedTypeDeclarations": [
+          {
+            "UTTypeIdentifier": "com.djmixmaster.template",
+            "UTTypeDescription": "DJ Mix Master video template",
+            "UTTypeConformsTo": [
+              "public.json",
+              "public.data"
+            ],
+            "UTTypeTagSpecification": {
+              "public.filename-extension": [
+                "djmtemplate"
+              ]
+            }
+          }
+        ]
+      }
     },
     "dmg": {
       "title": "DJ Mix Master"
@@ -144,6 +161,15 @@
           "to": "bin/ffmpeg.README"
         }
       ]
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": "djmtemplate",
+        "name": "DJ Mix Master video template",
+        "description": "DJ Mix Master video template",
+        "role": "Editor",
+        "rank": "Owner"
+      }
+    ]
   }
 }

@@ -1692,6 +1692,28 @@ test('the ⋯ menu beside the templates opens, closes, and leaves Delete for tem
   });
 });
 
+test('a template file opened with the app is added, shown, and exported again from the editor', { skip }, async () => {
+  const file = join(work, 'Opened.djmtemplate');
+  await writeFile(file, JSON.stringify({ format: 1, name: 'Opened', fields: [], layers: [{ type: 'gradient', params: { colour1: '#ff0000', colour2: '#ff0000' } }] }));
+  const out = join(work, 'exported again');
+  await mkdir(out);
+  const data = await fresh();
+  // As from Finder or Explorer: the recording and the template named together.
+  const seen = await runApp({ recording: [mix, file], data, exportFolder: out, timeoutMs: 60_000 }, async (page) => {
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Opened', 'the template to be added');
+    const video = document.body.classList.contains('video');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const shown = !page.element('editor-export').hidden;
+    page.click('editor-export');
+    await page.wait(400);
+    return { video, shown, file: page.text('file-name') };
+  });
+  assert.deepEqual({ video: seen.video, shown: seen.shown, file: seen.file }, { video: true, shown: true, file: 'Test mix.wav' });
+  assert.equal(JSON.parse(readFileSync(join(out, 'Opened.djmtemplate'), 'utf8')).name, 'Opened');
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

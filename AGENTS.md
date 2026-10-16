@@ -230,6 +230,11 @@ Do not write test data there.
   `video-frame.ts`). So a video export is handed the checked template itself,
   not its name. A template can carry pictures as data URLs in `assets`, named
   in an image setting as `asset:name`; `pictureOf` loads either kind.
+  A `.djmtemplate` file opened from Finder or Explorer, named on the command
+  line or dropped on the window is added (`openFiles` in `renderer.ts`); the
+  installers register the extension (`build.fileAssociations` in
+  `package.json`), on the Mac with a type of its own (`extendInfo`). The
+  Linux AppImage cannot register one, so there it is dropped or imported.
   The editor saves a template as typed, half-written expressions and all; the
   picture shows it checked, with a setting that does not work yet at its last
   good value (`#lastGood` in `video-view.ts`).

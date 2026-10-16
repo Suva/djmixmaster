@@ -38,6 +38,7 @@ const api: Api = {
   saveTemplate: (id, template) => ipcRenderer.invoke('save-template', id, template),
   deleteTemplate: (id) => ipcRenderer.invoke('delete-template', id),
   importTemplate: () => ipcRenderer.invoke('import-template'),
+  readTemplateFile: (path) => ipcRenderer.invoke('read-template-file', path),
   exportTemplate: (template, name) => ipcRenderer.invoke('export-template', template, name),
   readClipboard: () => ipcRenderer.invoke('read-clipboard'),
   writeClipboard: (text) => ipcRenderer.send('write-clipboard', text),

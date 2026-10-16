@@ -2896,9 +2896,23 @@ window.addEventListener('dragleave', () => $('empty').classList.remove('dragging
 window.addEventListener('drop', (event) => {
   event.preventDefault();
   $('empty').classList.remove('dragging');
-  // Several files dropped together are the parts of one recording.
-  open([...(event.dataTransfer?.files ?? [])].map((file) => api.pathForFile(file)));
+  openFiles([...(event.dataTransfer?.files ?? [])].map((file) => api.pathForFile(file)));
 });
+
+/**
+ * Files from outside: dropped, opened from Finder or named on the command
+ * line. Video templates are added, and shown in the Video view; anything else
+ * is a recording to open (several together, the parts of one), first, so
+ * that the templates become its mix's.
+ */
+async function openFiles(files: string[]) {
+  const templates = files.filter((file) => /\.djmtemplate$/i.test(file));
+  const recordings = files.filter((file) => !templates.includes(file));
+  if (recordings.length) await open(recordings);
+  if (!templates.length) return;
+  if (recording) showVideo(true);
+  for (const template of templates) await videoView.importFile(template);
+}
 
 new ResizeObserver(scheduleDraw).observe(detailCanvas);
 new ResizeObserver(scheduleDraw).observe(overview);
@@ -2908,8 +2922,8 @@ $('view-video').addEventListener('click', () => showVideo(true));
 
 syncControls();
 initTooltips();
-api.onOpenFiles(open);
+api.onOpenFiles(openFiles);
 showRecent();
 api.initialFile().then((files) => {
-  if (files) open(files);
+  if (files) openFiles(files);
 });
