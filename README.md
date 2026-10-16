@@ -227,7 +227,11 @@ The templates that come with the app stay as they are. **Duplicate** makes a
 copy that is yours. **Edit** opens it in the editor, in a wider panel beside
 the picture, which shows every change as it is made: its layers, front-most at
 the top, can be hidden, added, duplicated, deleted, renamed and dragged to
-reorder. Below the list are the selected layer's settings. A number, a switch
+reorder. Above the list are the selected layer's blend and opacity, as in an
+image editor: the opacity is a value in a box, which opens its full control on
+a click or while the pointer rests on it. Below the list are the rest of its
+settings. Any number box can be dragged sideways to change it (with Shift, ten
+times finer); a click is still for typing. A number, a switch
 or a colour can instead be an **expression** (the ƒ button) that follows the
 music, such as `100 + 8 * smooth(bass, 0.02, 0.4)`. A mistake is underlined
 as you type, with what is wrong beneath it, and while the mix plays the value

@@ -8,7 +8,8 @@
 // template keeps them in drawing order, back first.
 
 import { COMMON_PARAMS, LAYER_TYPES, type Layer, type ParamValue, type ResolvedParams, type Template } from '../../visuals/template.ts';
-import { layerSettings } from './layer-settings.ts';
+import { layerSettings, SHOWN_AS } from './layer-settings.ts';
+import { scrubbable } from './scrub.ts';
 import { FIELD_KINDS, fieldsEditor, freeFieldName, newField } from './fields-editor.ts';
 
 export interface TemplateEditorOptions {
@@ -47,8 +48,9 @@ export class TemplateEditor {
   #past: string[] = [];
   #future: string[] = [];
   #lastChange = { kind: '', at: 0 };
-  /** The settings of the selected layer, as shown. */
+  /** The settings of the selected layer, as shown: below the list, and its blend and opacity above it. */
   #settings: { element: HTMLElement; tick(): void } | null = null;
+  #top: { element: HTMLElement; tick(): void } | null = null;
   #settingsFor: Layer | null = null;
 
   constructor(options: TemplateEditorOptions) {
@@ -172,6 +174,7 @@ export class TemplateEditor {
   /** Brings the live values of the selected layer's expressions up to date: once a frame. */
   tick() {
     this.#settings?.tick();
+    this.#top?.tick();
   }
 
   /** The template's name was changed outside the list of layers; one undo step per bout of typing. */
@@ -211,6 +214,128 @@ export class TemplateEditor {
     this.#showLayers();
     this.#options.change(structuredClone(template));
     this.#options.history();
+  }
+
+  /**
+   * The line above the list, as an image editor has it: the blend, and the
+   * opacity as a value in a box. The full opacity control, slider, ƒ and
+   * "moves with…" and all, opens under the box on a click, or while the
+   * pointer rests on it.
+   */
+  #topBar(layer: Layer, context: Parameters<typeof layerSettings>[1]): { element: HTMLElement; tick(): void } {
+    const bar = document.createElement('div');
+    bar.className = 'layer-top-settings';
+
+    const blend = document.createElement('select');
+    blend.className = 'layer-blend';
+    blend.title = 'How this layer mixes with what is beneath it';
+    blend.setAttribute('aria-label', 'Blend');
+    for (const option of COMMON_PARAMS.blend.choices ?? []) blend.add(new Option(SHOWN_AS[option] ?? option, option));
+    for (const field of this.#template!.fields.filter((f) => f.kind === 'choice')) blend.add(new Option(`Field: ${field.label}`, `%${field.key}%`));
+    blend.value = String(layer.params.blend ?? 'normal');
+    blend.addEventListener('change', () => context.set('blend', blend.value));
+
+    const holder = document.createElement('div');
+    holder.className = 'opacity-holder';
+    const label = document.createElement('span');
+    label.textContent = 'Opacity';
+    const value = document.createElement('button');
+    value.type = 'button';
+    value.className = 'opacity-value';
+    // No tooltip: resting the pointer here opens the full control, which a tooltip would cover.
+    value.setAttribute('aria-label', 'Opacity');
+    const popover = document.createElement('div');
+    popover.className = 'opacity-popover';
+    popover.hidden = true;
+    const full = layerSettings(layer, context, ['opacity']);
+    popover.append(full.element);
+    holder.append(label, value, popover);
+    bar.append(blend, holder);
+
+    // Opened by a click, it stays until a click elsewhere or Escape; opened by resting the pointer, until it leaves.
+    let pinned = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const open = (pin: boolean) => {
+      pinned ||= pin;
+      popover.hidden = false;
+      value.classList.add('on');
+    };
+    const close = () => {
+      pinned = false;
+      popover.hidden = true;
+      value.classList.remove('on');
+    };
+    value.addEventListener('click', () => (pinned ? close() : open(true)));
+    // Dragged sideways, the opacity changes, half a percent a pixel; one that follows an expression is not dragged.
+    scrubbable(value, {
+      value: () => (typeof (layer.params.opacity ?? 100) === 'number' ? Number(layer.params.opacity ?? 100) : null),
+      set: (opacity) => context.set('opacity', opacity),
+      perPixel: 0.5,
+      min: 0,
+      max: 100,
+    });
+    holder.addEventListener('mouseenter', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => open(false), 250);
+    });
+    holder.addEventListener('mouseleave', () => {
+      clearTimeout(timer);
+      // A moment's grace, and not while typing in it.
+      timer = setTimeout(() => {
+        if (!pinned && !popover.contains(document.activeElement)) close();
+      }, 350);
+    });
+    const outside = (event: MouseEvent) => {
+      if (!holder.isConnected) return document.removeEventListener('mousedown', outside);
+      if (!popover.hidden && !holder.contains(event.target as Node)) close();
+    };
+    document.addEventListener('mousedown', outside);
+    holder.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        close();
+        value.focus();
+      }
+    });
+
+    const show = () => {
+      const given = layer.params.opacity ?? 100;
+      if (typeof given === 'number') value.textContent = `${Math.round(given)}%`;
+      else {
+        // As drawn: an expression can come to more than 100, or less than nothing, but the picture cannot.
+        const now = context.live()?.opacity;
+        value.textContent = typeof now === 'number' ? `ƒ ${Math.round(Math.max(0, Math.min(100, now)))}%` : 'ƒ';
+      }
+      value.classList.toggle('expression', typeof given !== 'number');
+    };
+    show();
+    return {
+      element: bar,
+      tick() {
+        full.tick();
+        show();
+      },
+    };
+  }
+
+  /** The blend and opacity above the list, greyed, while no layer is selected. */
+  #emptyTop(): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'layer-top-settings empty';
+    const blend = document.createElement('select');
+    blend.className = 'layer-blend';
+    blend.add(new Option('normal'));
+    blend.disabled = true;
+    const holder = document.createElement('div');
+    holder.className = 'opacity-holder';
+    const label = document.createElement('span');
+    label.textContent = 'Opacity';
+    const value = document.createElement('button');
+    value.className = 'opacity-value';
+    value.textContent = '100%';
+    value.disabled = true;
+    holder.append(label, value);
+    box.append(blend, holder);
+    return box;
   }
 
   #addLayer(type: string) {
@@ -279,13 +404,17 @@ export class TemplateEditor {
     const layer = this.#template?.layers[this.#selected] ?? null;
     this.#settingsFor = layer;
     const panel = $('editor-layer');
+    const top = $('editor-layer-top');
     if (!layer || !this.#template) {
       this.#settings = null;
+      this.#top = null;
       panel.replaceChildren();
+      // As in an image editor: there, but with nothing to act on.
+      top.replaceChildren(this.#emptyTop());
       return;
     }
     const kindOf = (key: string) => `param:${this.#template!.layers.indexOf(layer)}:${key}`;
-    this.#settings = layerSettings(layer, {
+    const context: Parameters<typeof layerSettings>[1] = {
       template: () => this.#template!,
       set: (key, value) => this.#change(kindOf(key), () => (layer.params[key] = value)),
       pack: (key, name, data) => this.#change('', (template) => {
@@ -294,7 +423,10 @@ export class TemplateEditor {
       }),
       live: () => this.#options.live(this.#template!.layers.indexOf(layer)),
       pickPicture: () => this.#options.pickPicture(),
-    });
+    };
+    this.#settings = layerSettings(layer, context);
+    this.#top = this.#topBar(layer, context);
+    top.replaceChildren(this.#top.element);
     const title = document.createElement('h3');
     title.className = 'editor-section';
     title.textContent = layer.name || LAYER_TYPES[layer.type].label;

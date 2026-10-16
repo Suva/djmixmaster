@@ -6,6 +6,7 @@
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { ASSET_PREFIX, fieldNameProblem, renameField, TEXT_VARIABLES, type Field, type FieldKind, type Template } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
+import { scrubbableInput } from './scrub.ts';
 
 export interface FieldsEditorContext {
   /** The template as it is now. */
@@ -171,6 +172,8 @@ function defaults(field: Field, set: (kind: string, apply: (field: Field) => voi
     input.addEventListener('input', () => {
       if (input.value !== '' && Number.isFinite(Number(input.value))) onChange(Number(input.value));
     });
+    // A field's numbers have no range to go by: a small step, finer with Shift.
+    scrubbableInput(input, 0.01);
     return input;
   };
 

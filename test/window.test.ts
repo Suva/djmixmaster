@@ -1186,14 +1186,14 @@ test('blends work out as their formulas say, linear burn included', { skip }, as
     const middle = () => picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data[0];
     const levels: Record<string, number> = {};
     for (const blend of ['normal', 'add', 'colour dodge', 'multiply', 'colour burn', 'linear burn']) {
-      const select = document.querySelector<HTMLSelectElement>('#editor-layer .setting[data-key="blend"] select')!;
+      const select = document.querySelector<HTMLSelectElement>('#editor-layer-top .layer-blend')!;
       select.value = blend;
       select.dispatchEvent(new Event('change', { bubbles: true }));
       await page.wait(150);
       levels[blend] = middle();
     }
     // Half as much of the layer: half way from the grey beneath to the burnt.
-    const opacity = document.querySelector<HTMLInputElement>('#editor-layer .setting[data-key="opacity"] input[type="number"]')!;
+    const opacity = document.querySelector<HTMLInputElement>('#editor-layer-top .setting[data-key="opacity"] input[type="number"]')!;
     opacity.value = '50';
     opacity.dispatchEvent(new Event('input', { bubbles: true }));
     await page.wait(150);
@@ -1202,6 +1202,131 @@ test('blends work out as their formulas say, linear burn included', { skip }, as
   });
   const expected: Record<string, number> = { normal: 192, add: 255, 'colour dodge': 255, multiply: 96, 'colour burn': 86, 'linear burn': 65, 'linear burn at half': 96 };
   for (const [blend, level] of Object.entries(expected)) assert.ok(Math.abs(seen[blend] - level) <= 6, `${blend}: ${seen[blend]}, not about ${level}`);
+});
+
+test('blend and opacity sit above the layers, for the selected layer, as in an image editor', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const select = (name: string) => {
+      const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+      row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+    const opacity = () => document.querySelector<HTMLInputElement>('#editor-layer-top .setting[data-key="opacity"] input[type="number"]')!;
+    const box = () => document.querySelector<HTMLButtonElement>('#editor-layer-top .opacity-value')!;
+    const popover = () => document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
+    const blendOf = () => document.querySelector<HTMLSelectElement>('#editor-layer-top .layer-blend')!;
+    select('Logo');
+    // A click opens the full control under the box; Escape closes it.
+    box().click();
+    const opened = !popover().hidden;
+    opacity().value = '40';
+    opacity().dispatchEvent(new Event('input', { bubbles: true }));
+    await page.wait(50);
+    const shown = box().textContent;
+    opacity().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const closed = popover().hidden;
+    // Resting the pointer on it opens it too, and leaving closes it.
+    box().parentElement!.dispatchEvent(new MouseEvent('mouseenter'));
+    await page.wait(400);
+    const hovered = !popover().hidden;
+    box().parentElement!.dispatchEvent(new MouseEvent('mouseleave'));
+    await page.wait(500);
+    const left = popover().hidden;
+    blendOf().value = 'screen';
+    blendOf().dispatchEvent(new Event('change', { bubbles: true }));
+    select('Background');
+    const other = [opacity().value, blendOf().value];
+    select('Logo');
+    const back = [opacity().value, blendOf().value];
+    // An expression shows as ƒ and what it comes to.
+    box().click();
+    document.querySelector<HTMLButtonElement>('#editor-layer-top .setting[data-key="opacity"] .fx:not(.motion-button)')!.click();
+    await page.wait(200);
+    const expression = box().textContent;
+    // The box keeps its size whatever it shows, so nothing beside it moves.
+    const widths = new Set<number>();
+    const expressionInput = document.querySelector<HTMLInputElement>('#editor-layer-top .expr-input')!;
+    for (const text of ['5', '40', '100', '250']) {
+      expressionInput.value = text;
+      expressionInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await page.wait(120);
+      widths.add(Math.round(box().getBoundingClientRect().width * 10));
+    }
+    const atMost = box().textContent;
+    const below = document.querySelectorAll('#editor-layer .setting[data-key="opacity"], #editor-layer .setting[data-key="blend"]').length;
+    // With every layer gone, nothing is selected: the bar is there, greyed.
+    while (document.querySelector('.layer-row')) page.click('editor-delete');
+    const empty = page.element('editor-layer-top').querySelector('.empty') !== null;
+    return { opened, shown, closed, hovered, left, other, back, expression, widths: widths.size, atMost, below, empty };
+  });
+  assert.deepEqual([seen.opened, seen.shown, seen.closed, seen.hovered, seen.left], [true, '40%', true, true, true]);
+  assert.equal(seen.expression, 'ƒ 40%');
+  assert.equal(seen.widths, 1, 'the box keeps its width from ƒ 5% to ƒ 100%');
+  assert.equal(seen.atMost, 'ƒ 100%', 'an expression past 100 shows what is drawn');
+  assert.deepEqual(seen.other, ['100', 'normal']);
+  assert.deepEqual(seen.back, ['40', 'screen']);
+  assert.equal(seen.below, 0, 'not repeated below the list');
+  assert.ok(seen.empty);
+});
+
+test('number boxes change when dragged sideways, and a click is still a click', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Ring')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    // A press, a drag sideways by dx, a release, and the click a browser sends after.
+    const drag = (target: HTMLElement, dx: number, shiftKey = false) => {
+      const box = target.getBoundingClientRect();
+      const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+      target.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, button: 0, bubbles: true }));
+      for (const part of [0.25, 0.5, 1]) window.dispatchEvent(new MouseEvent('mousemove', { clientX: x + dx * part, clientY: y, shiftKey }));
+      window.dispatchEvent(new MouseEvent('mouseup', { clientX: x + dx, clientY: y, bubbles: true }));
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    };
+    const box = document.querySelector<HTMLButtonElement>('#editor-layer-top .opacity-value')!;
+    const popover = document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
+    drag(box, -40);
+    await page.wait(50);
+    // The full control under the box follows, slider and all.
+    const slider = popover.querySelector<HTMLInputElement>('input[type="range"]')!.value;
+    const lowered = { shown: box.textContent, opened: !popover.hidden, slider };
+    drag(box, 400);
+    await page.wait(50);
+    const raised = box.textContent;
+    drag(box, 0);
+    const clicked = !popover.hidden;
+    box.click();
+
+    const rotation = () => document.querySelector<HTMLInputElement>('#editor-layer .setting[data-key="rotation"] input[type="number"]')!;
+    drag(rotation(), 50);
+    const turned = Number(rotation().value);
+    await page.wait(1100);
+    drag(rotation(), -50, true);
+    const finer = Number(rotation().value);
+    drag(rotation(), 0);
+    const typing = document.activeElement === rotation();
+    rotation().blur();
+    await page.wait(1100);
+    page.click('undo');
+    await page.wait(100);
+    const undone = Number(rotation().value);
+    return { lowered, raised, clicked, turned, finer, typing, undone };
+  });
+  assert.deepEqual(seen.lowered, { shown: '80%', opened: false, slider: '80' }, 'a drag is not a click, and the slider follows');
+  assert.equal(seen.raised, '100%', 'opacity stops at 100');
+  assert.ok(seen.clicked, 'a click without a drag opens the full control');
+  assert.equal(seen.turned, 60);
+  assert.equal(seen.finer, 54, 'with Shift, ten times finer');
+  assert.ok(seen.typing, 'a click without a drag is for typing');
+  assert.equal(seen.undone, 60, 'each drag one undo step');
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {

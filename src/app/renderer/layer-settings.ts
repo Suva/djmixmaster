@@ -15,6 +15,7 @@ import {
   type Layer, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
+import { scrubbableInput } from './scrub.ts';
 import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
 
 export interface LayerSettingsContext {
@@ -32,14 +33,16 @@ export interface LayerSettingsContext {
 
 /** Settings shown under the layer's own, folded away until wanted. */
 const GROUPS: [string, string[], boolean][] = [
-  ['Placement', ['opacity', 'blend', 'x', 'y', 'anchor', 'scale', 'rotation'], true],
+  ['Placement', ['x', 'y', 'anchor', 'scale', 'rotation'], true],
   ['Timing', ['from', 'until', 'fadeIn', 'fadeOut'], false],
 ];
+/** The settings above the list of layers, as an image editor has them, and not among the others. */
+export const ABOVE_LAYERS = ['blend', 'opacity'];
 /** Which groups were folded, kept while other layers are selected. */
 const opened = new Map<string, boolean>();
 
 /** Choices shown with more than their stored name: what an image editor would call them too. */
-const SHOWN_AS: Record<string, string> = { add: 'add (linear dodge)' };
+export const SHOWN_AS: Record<string, string> = { add: 'add (linear dodge)' };
 
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 /** Whether a value of a setting is an expression rather than a plain value. */
@@ -58,12 +61,21 @@ const asExpression = new WeakMap<Layer, Set<string>>();
 
 const shown = (value: number) => (Math.abs(value) >= 100 ? value.toFixed(0) : Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2));
 
-export function layerSettings(layer: Layer, context: LayerSettingsContext): { element: HTMLElement; tick(): void } {
+/**
+ * The settings of a layer: all of them in their groups, but for those above
+ * the list of layers; or, given `only`, just those, side by side.
+ */
+export function layerSettings(layer: Layer, context: LayerSettingsContext, only?: string[]): { element: HTMLElement; tick(): void } {
   const spec = LAYER_TYPES[layer.type];
   const element = document.createElement('div');
-  element.className = 'layer-settings';
+  element.className = only ? 'layer-settings some' : 'layer-settings';
   /** Updates of the live values, one per setting that is an expression. */
   const ticks = new Map<string, (live: ResolvedParams) => void>();
+  /**
+   * Plain numbers brought up to date with the setting, when it was changed
+   * elsewhere: the opacity box above the layers, a drag on the picture.
+   */
+  const syncs = new Map<string, () => void>();
 
   const group = (title: string, keys: string[], open: boolean) => {
     const details = document.createElement('details');
@@ -177,6 +189,7 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
         motion = { ...motion, speed: speed.value as MotionSpeed };
         apply();
       });
+      scrubbableInput(period, 0.05, 0.1);
       period.addEventListener('input', () => {
         if (!(Number(period.value) > 0)) return;
         motion = { ...motion, period: Number(period.value) };
@@ -198,6 +211,7 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
       base.step = 'any';
       base.value = String(motion.base);
       base.title = 'The value with nothing moving it';
+      scrubbableInput(base, span / 300);
       base.addEventListener('input', () => {
         if (base.value === '' || !Number.isFinite(Number(base.value))) return;
         motion = { ...motion, base: Number(base.value) };
@@ -239,6 +253,7 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
       problem.textContent = '';
       live.textContent = '';
       ticks.delete(key);
+      syncs.delete(key);
       row.classList.toggle('expression', expressed());
       if (expressed()) body.replaceChildren(expression());
       else body.replaceChildren(plain());
@@ -324,6 +339,17 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
             if (number.value === '' || !Number.isFinite(Number(number.value))) return;
             range.value = number.value;
             change(Number(number.value));
+          });
+          // Dragged sideways, it covers the knob's range in about 300 pixels; free to go past it, as typing is,
+          // but for opacity, which means nothing outside it.
+          const bounded = key === 'opacity';
+          scrubbableInput(number, ((param.max ?? 100) - (param.min ?? 0)) / 300, bounded ? param.min : undefined, bounded ? param.max : undefined);
+          syncs.set(key, () => {
+            const now = layer.params[key];
+            // Not while it is being typed in.
+            if (typeof now !== 'number' || document.activeElement === number || Number(number.value) === now) return;
+            number.value = String(now);
+            range.value = String(now);
           });
           box.append(range, number);
           return box;
@@ -450,12 +476,18 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
     return row;
   }
 
-  const own = Object.keys(spec.params);
-  element.append(group(spec.label, own, true));
-  for (const [title, keys, open] of GROUPS) element.append(group(title, keys, open));
+  if (only) {
+    const all: Record<string, ParamSpec> = { ...COMMON_PARAMS, ...spec.params };
+    for (const key of only) element.append(setting(key, all[key]));
+  } else {
+    const own = Object.keys(spec.params);
+    element.append(group(spec.label, own, true));
+    for (const [title, keys, open] of GROUPS) element.append(group(title, keys, open));
+  }
   return {
     element,
     tick() {
+      for (const sync of syncs.values()) sync();
       const resolved = context.live();
       if (!resolved) return;
       for (const update of ticks.values()) update(resolved);
