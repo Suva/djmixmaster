@@ -229,12 +229,19 @@ export class TemplateEditor {
     this.#showLayers();
   }
 
+  /** Removes the selected layer, as Delete or Backspace does while the editor is open, wherever the layer was selected. */
+  deleteSelected() {
+    this.#deleteLayer();
+  }
+
   #deleteLayer() {
     const index = this.#selected;
     if (!this.#template || index < 0) return;
     this.#change('', (template) => template.layers.splice(index, 1));
     this.#selected = Math.min(index, this.#template.layers.length - 1);
     this.#showLayers();
+    // The layer selected now has the keys, so that pressing Delete again removes it in turn.
+    $('editor-layers').querySelector<HTMLElement>(`[data-index="${this.#selected}"]`)?.focus();
   }
 
   #moveLayer(from: number, to: number) {

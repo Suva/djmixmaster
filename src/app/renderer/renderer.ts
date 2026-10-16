@@ -1829,6 +1829,14 @@ window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
   // While a dialog is up, the keys belong to it.
   if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open) return;
+  // While a template is edited, Delete is for its layers, wherever one was selected; never the mix.
+  // A number box or a list keeps its keys.
+  if (videoView.editing && (event.code === 'Backspace' || event.code === 'Delete')) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) return;
+    event.preventDefault();
+    videoView.deleteLayer();
+    return;
+  }
   if (event.code === 'Space') {
     event.preventDefault();
     // Otherwise a focused button would also act on the same key press.

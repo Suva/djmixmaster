@@ -224,20 +224,25 @@ export class VideoView {
     return templateOf(this.#choice);
   }
 
-  /** The template the pictures packed into it were loaded for: another template's of the same name are different pictures. */
-  #assetsFor: Template | null = null;
+  /**
+   * Pictures packed into templates, decoded, by their data: an edit makes a
+   * new copy of the template, but its pictures are the same, and decoding
+   * them again on every change would leave frames without them meanwhile.
+   */
+  readonly #packed = new Map<string, ImageBitmap>();
 
-  #prepare() {
+  /**
+   * Gets the picture ready to draw with: layers, fonts, pictures. `fresh`
+   * when what is shown is another template or mix, rather than an edit to
+   * the same one: then what layers remember from frame to frame starts over.
+   */
+  #prepare(fresh = true) {
     const template = this.#template();
     this.#layers = prepare(template, this.#choice.fields, MUSIC_NAMES);
     // Until a font is in, its text is drawn in a plain face; the next frame after, in the font.
     loadFonts(fontsOf(template, this.#choice.fields));
-    this.#drawer.reset();
-    if (this.#assetsFor !== template) {
-      for (const name of this.#images.keys()) if (name.startsWith(ASSET_PREFIX)) this.#images.delete(name);
-      this.#assetsFor = template;
-    }
-    for (const name of imagesOf(template, this.#choice.fields)) this.#loadImage(name);
+    if (fresh) this.#drawer.reset();
+    for (const name of imagesOf(template, this.#choice.fields)) this.#loadImage(name, template);
   }
 
   #setField(key: string, value: string | number) {
@@ -249,10 +254,23 @@ export class VideoView {
     this.#options.choose(this.#choice);
   }
 
-  async #loadImage(path: string) {
-    if (this.#images.has(path)) return;
+  async #loadImage(path: string, template = this.#template()) {
     try {
-      this.#images.set(path, await pictureOf(path, this.#template(), this.#options.api));
+      if (path.startsWith(ASSET_PREFIX)) {
+        // The same name can be another picture in another template, or after a change: known by its data.
+        const data = template.assets?.[path.slice(ASSET_PREFIX.length)];
+        if (!data) return;
+        const known = this.#packed.get(data);
+        if (known) return void this.#images.set(path, known);
+        // Until it is decoded, the picture there was keeps showing.
+        const picture = await pictureOf(path, template, this.#options.api);
+        this.#packed.set(data, picture);
+        // Unless the picture of that name was changed again while this one was decoded.
+        if (this.#template().assets?.[path.slice(ASSET_PREFIX.length)] === data) this.#images.set(path, picture);
+        return;
+      }
+      if (this.#images.has(path)) return;
+      this.#images.set(path, await pictureOf(path, template, this.#options.api));
     } catch (error) {
       this.#options.say(`Could not load the picture: ${error instanceof Error ? error.message : error}`);
     }
@@ -331,6 +349,11 @@ export class VideoView {
     return this.#editor.canRedo;
   }
 
+  /** Removes the layer selected in the editor. */
+  deleteLayer() {
+    this.#editor.deleteSelected();
+  }
+
   stepTemplate(direction: 'undo' | 'redo') {
     this.#editor.step(direction);
   }
@@ -389,9 +412,12 @@ export class VideoView {
     if (!id) return;
     // What is saved is what was typed, so that nothing is lost; the picture
     // shows a setting half typed at its last good value meanwhile.
-    USER_TEMPLATES.set(id, this.#lastGood(template, USER_TEMPLATES.get(id)));
+    const before = USER_TEMPLATES.get(id);
+    USER_TEMPLATES.set(id, this.#lastGood(template, before));
     this.#typed.set(id, template);
-    this.#prepare();
+    // What a layer remembers is kept by its place: with layers added, removed or moved, it starts over.
+    const kinds = (t: Template | undefined) => t?.layers.map((layer) => layer.type).join() ?? '';
+    this.#prepare(kinds(before) !== kinds(template));
     const name = $<HTMLInputElement>('template-name');
     if (document.activeElement !== name) name.value = template.name;
     const option = [...$<HTMLSelectElement>('template').options].find((o) => o.value === id);

@@ -935,6 +935,89 @@ test('layers are picked, moved and resized on the picture, each drag one undo st
   assert.match(seen.said, /^Wave: its height follows an expression, so it is set in its settings, not by dragging\.$/);
 });
 
+test('a picture packed into a template stays on screen while its layer is dragged', { skip }, async () => {
+  const red = join(work, 'Red square.png');
+  // As large as a photo: it takes a while to decode, as photos do.
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0xff2020:s=4000x3000', '-frames:v', '1', red]);
+  const seen = await runApp({ recording: mix, data: await fresh(), image: red, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Logo')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    const image = document.querySelector<HTMLSelectElement>('#editor-layer .setting[data-key="image"] select')!;
+    image.value = '+';
+    image.dispatchEvent(new Event('change', { bubbles: true }));
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const outline = document.querySelector<HTMLElement>('.layer-outline')!;
+    // The colour in the middle of the selected layer, as drawn.
+    const middle = () => {
+      const box = outline.getBoundingClientRect();
+      const rect = picture.getBoundingClientRect();
+      const k = picture.width / rect.width;
+      return [...picture.getContext('2d')!.getImageData((box.left + box.width / 2 - rect.left) * k, (box.top + box.height / 2 - rect.top) * k, 1, 1).data];
+    };
+    const isRed = (pixel: number[]) => pixel[0] > 180 && pixel[1] < 90;
+    await page.until(() => !outline.hidden && isRed(middle()), 'the packed picture to be drawn');
+
+    // Dragged across the picture in small steps, a frame for each, looking at every frame.
+    let frames = 0;
+    let missing = 0;
+    const box = outline.getBoundingClientRect();
+    const [x, y] = [box.left + box.width / 2, box.top + box.height / 2];
+    outline.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, button: 0, bubbles: true }));
+    for (let step = 1; step <= 40; step++) {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: x + step * 3, clientY: y + step }));
+      await new Promise((done) => requestAnimationFrame(done));
+      frames++;
+      if (!isRed(middle())) missing++;
+    }
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    return { frames, missing };
+  });
+  assert.equal(seen.frames, 40);
+  assert.equal(seen.missing, 0, 'the picture was missing from some frames');
+});
+
+test('Delete removes the selected layer while editing, however it was selected, and then the next', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    await page.wait(200);
+    const names = () => [...document.querySelectorAll('.layer-row .layer-name')].map((name) => name.textContent);
+    // Pressed as a keyboard would: on whatever has the keys.
+    const press = (code: string) => (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { code, key: code, bubbles: true }));
+
+    // Selected on the picture: the ring round its middle.
+    const picture = page.element('picture').getBoundingClientRect();
+    const overlay = page.element('picture-overlay');
+    overlay.dispatchEvent(new MouseEvent('mousedown', { clientX: picture.left + picture.width / 2, clientY: picture.top + picture.height * 0.44, button: 0, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    const picked = document.querySelector('.layer-row.on .layer-name')!.textContent;
+    const before = names();
+    press('Delete');
+    const first = names();
+    const next = document.querySelector('.layer-row.on .layer-name')!.textContent;
+    press('Backspace');
+    const second = names();
+    // With nothing focused at all, it still goes to the layer, not the mix.
+    (document.activeElement as HTMLElement | null)?.blur();
+    press('Backspace');
+    const third = names();
+    return { picked, before, first, next, second, third, mixes: page.tabs().length };
+  });
+  assert.equal(seen.picked, 'Ring');
+  assert.deepEqual(seen.first, seen.before.filter((name) => name !== 'Ring'));
+  assert.equal(seen.next, 'Logo');
+  assert.deepEqual(seen.second, seen.first.filter((name) => name !== 'Logo'));
+  assert.equal(seen.third.length, seen.second.length - 1);
+  assert.equal(seen.mixes, 1, 'the mix is never deleted while editing');
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');
