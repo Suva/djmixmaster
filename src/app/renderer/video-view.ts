@@ -11,6 +11,7 @@ import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import { ASSET_PREFIX, fontsOf, imagesOf, prepare, type Field, type PreparedLayer, type Template } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
+import { TemplateEditor } from './template-editor.ts';
 import {
   checked, DEFAULT_TEMPLATE, drawVideoFrame, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
 } from './video-frame.ts';
@@ -31,6 +32,8 @@ export interface VideoViewOptions {
   choose(choice: VisualsChoice): void;
   /** A line about what is going on, such as the music values being worked out. */
   say(text: string): void;
+  /** What can be undone has changed: while a template is edited, undo works on the template. */
+  history(): void;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -55,8 +58,17 @@ export class VideoView {
   #choice: VisualsChoice = { template: DEFAULT_TEMPLATE, fields: {} };
   #layers: PreparedLayer[] = [];
 
+  readonly #editor: TemplateEditor;
+  /** The template being edited, by its name in a mix's choice, or null. */
+  #editing: string | null = null;
+  #saveTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor(options: VideoViewOptions) {
     this.#options = options;
+    this.#editor = new TemplateEditor({
+      change: (template) => this.#edited(template),
+      history: () => options.history(),
+    });
     const select = $<HTMLSelectElement>('template');
     this.#fillTemplates();
     // The user's own templates come in from disk a moment after the window is up.
@@ -103,7 +115,11 @@ export class VideoView {
   show(visible: boolean) {
     this.#visible = visible;
     cancelAnimationFrame(this.#frame);
-    if (!visible) return;
+    if (!visible) {
+      // The editor belongs to the Video view; it closes with it.
+      this.#stopEditing();
+      return;
+    }
     this.refresh();
     this.#lastFrame = performance.now();
     this.#frame = requestAnimationFrame(() => this.#draw());
@@ -117,6 +133,8 @@ export class VideoView {
   refresh() {
     const mix = this.#options.mix();
     const choice = mix?.visuals ?? { template: DEFAULT_TEMPLATE, fields: {} };
+    // Another mix selected, or its template changed by an undo: the one being edited is no longer on show.
+    if (this.#editing && choice.template !== this.#editing) this.#stopEditing();
     const key = `${mix?.path}|${mix?.number}|${JSON.stringify(choice)}`;
     if (mix?.path !== this.#featuresFor && this.#featuresFor !== null && !this.#features) {
       // Another recording, opened while this one was still being listened to: its count no longer means anything here.
@@ -213,6 +231,11 @@ export class VideoView {
     const name = $<HTMLInputElement>('template-name');
     if (document.activeElement !== name) name.value = template.name;
     $<HTMLButtonElement>('template-delete').disabled = !own;
+    const edit = $<HTMLButtonElement>('template-edit');
+    edit.textContent = own ? 'Edit' : 'Edit a copy';
+    edit.title = own
+      ? 'Change this template: its layers and their settings'
+      : 'The templates that come with the app stay as they are: this makes a copy of yours to change';
     $('video-fields').replaceChildren(...template.fields.map((field) => this.#control(field)));
   }
 
@@ -255,8 +278,70 @@ export class VideoView {
 
   #renameTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // ---------------------------------------------------------------------------
+  // Editing a template of the user's own
+
+  get editing(): boolean {
+    return this.#editing !== null;
+  }
+
+  get canUndoTemplate(): boolean {
+    return this.#editor.canUndo;
+  }
+
+  get canRedoTemplate(): boolean {
+    return this.#editor.canRedo;
+  }
+
+  stepTemplate(direction: 'undo' | 'redo') {
+    this.#editor.step(direction);
+  }
+
+  async #startEditing() {
+    if (!USER_TEMPLATES.has(this.#choice.template)) {
+      const copy: Template = structuredClone(this.#template());
+      copy.name = this.#freeName(`${copy.name} copy`);
+      await this.#adopt(copy);
+    }
+    this.#editing = this.#choice.template;
+    document.body.classList.add('editing');
+    $('template-editor').hidden = false;
+    $('editor-done').hidden = false;
+    $('video-heading').textContent = 'Editing the template';
+    $('template-name-row').hidden = false;
+    this.#editor.start(this.#template());
+  }
+
+  #stopEditing() {
+    if (!this.#editing) return;
+    this.#editing = null;
+    document.body.classList.remove('editing');
+    $('template-editor').hidden = true;
+    $('editor-done').hidden = true;
+    $('video-heading').textContent = 'Video';
+    this.#editor.stop();
+    this.#fillTemplates();
+    this.#showFields();
+  }
+
+  /** A change made in the editor: shown in the picture at once, and saved once changes pause. */
+  #edited(template: Template) {
+    const id = this.#editing;
+    if (!id) return;
+    USER_TEMPLATES.set(id, template);
+    this.#prepare();
+    const name = $<HTMLInputElement>('template-name');
+    if (document.activeElement !== name) name.value = template.name;
+    const option = [...$<HTMLSelectElement>('template').options].find((o) => o.value === id);
+    if (option) option.text = template.name;
+    clearTimeout(this.#saveTimer);
+    this.#saveTimer = setTimeout(() => this.#options.api.saveTemplate(id.slice(USER_TEMPLATE.length), template), 400);
+  }
+
   #templateActions() {
     const api = this.#options.api;
+    $('template-edit').addEventListener('click', () => this.#startEditing());
+    $('editor-done').addEventListener('click', () => this.#stopEditing());
     $('template-duplicate').addEventListener('click', async () => {
       const copy: Template = structuredClone(this.#template());
       copy.name = this.#freeName(`${copy.name} copy`);
@@ -297,6 +382,8 @@ export class VideoView {
     });
     const name = $<HTMLInputElement>('template-name');
     name.addEventListener('input', () => {
+      // While editing, a new name is a change like any other, and can be undone.
+      if (this.#editing) return this.#editor.rename(name.value.trim() || 'Untitled');
       const id = this.#choice.template;
       const template = USER_TEMPLATES.get(id);
       if (!template) return;

@@ -9,6 +9,8 @@ are under "Not released yet" and appear there once they are.
 - **Templates of your own.** Duplicate a template to make a copy that is
   yours, export it as a file to share, with its pictures packed inside, and
   import templates others shared.
+- **A template editor**, beside the picture: add, hide, reorder, rename and
+  delete a template's layers, and see each change straight away.
 
 ## 0.8.0 — 15 October 2026
 

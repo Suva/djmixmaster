@@ -51,6 +51,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/fonts.ts` | Fonts for a video's text: loading them before drawing, and the ones on this computer |
 | `src/app/renderer/font-picker.ts` | The font list of the Video view, each name in its own face |
 | `src/app/renderer/video-view.ts` | The Video view: a mix's template, its fields and a live picture |
+| `src/app/renderer/template-editor.ts` | The template editor in the Video view's panel, with its own undo |
 | `src/app/renderer/video-frame.ts` | A frame of a mix's video, drawn the same for the view and the export |
 | `src/app/renderer/exporter.ts` | The hidden page that draws and encodes a video export |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |

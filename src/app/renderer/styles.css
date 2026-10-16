@@ -303,6 +303,36 @@ body.video #mastering-settings { display: none; }
 .template-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 16px; }
 .template-actions button { flex: 1 1 calc(50% - 3px); padding: 4px 9px; font-size: 12px; }
 #template-name-row[hidden] { display: none; }
+
+/* The template editor: the panel is wider, and the mix's fields give way to the template's layers. */
+body.editing aside { width: 420px; }
+body.editing #template-row, body.editing .template-actions, body.editing #video-fields, body.editing #video-settings > .note { display: none; }
+.video-head { display: flex; align-items: center; justify-content: space-between; }
+.video-head button { padding: 4px 12px; font-size: 12px; }
+.video-head button[hidden] { display: none; }
+#template-editor[hidden] { display: none; }
+.editor-section { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 0 6px; }
+.editor-section h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.editor-section .note { margin: 0; font-size: 11px; color: var(--muted); }
+#editor-layers { display: flex; flex-direction: column; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--lane); max-height: 260px; overflow-y: auto; }
+.layer-row { display: flex; align-items: center; gap: 8px; padding: 3px 6px 3px 3px; border-radius: 4px; cursor: grab; user-select: none; border-top: 2px solid transparent; border-bottom: 2px solid transparent; }
+.layer-row:hover { background: rgba(255, 255, 255, 0.04); }
+.layer-row.on { background: rgba(61, 220, 151, 0.16); }
+.layer-row:focus { outline: none; }
+.layer-row:focus-visible { outline: 1px solid var(--accent); }
+.layer-row.hidden .layer-name { color: var(--muted); }
+.layer-row.dragging { opacity: 0.5; cursor: grabbing; }
+.layer-row.drop-above { border-top-color: var(--accent); }
+.layer-row.drop-below { border-bottom-color: var(--accent); }
+button.icon.layer-eye { flex: none; width: 24px; height: 22px; padding: 0; background: none; border: none; }
+.layer-row.hidden .layer-eye { opacity: 0.5; }
+.layer-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.layer-kind { flex: none; font-size: 11px; color: var(--muted); }
+.layer-rename { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px; user-select: text; }
+.editor-empty { margin: 8px; color: var(--muted); }
+.editor-actions { display: flex; gap: 6px; margin: 8px 0 16px; }
+.editor-actions select { flex: 1; min-width: 0; }
+.editor-actions button { padding: 4px 10px; font-size: 12px; }
 .image-field { display: flex; align-items: center; gap: 6px; }
 .image-field .file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
 

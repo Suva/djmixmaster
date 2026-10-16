@@ -224,7 +224,11 @@ a strip of the mix stay at hand. Four templates come with the app: Glitter,
 Spectrum ring, Waveform, and Photo, which sets the mix over a photo of your own. What is chosen is kept with the mix.
 
 The templates that come with the app stay as they are. **Duplicate** makes a
-copy that is yours, to rename (and, soon, to change). **Export** saves a
+copy that is yours. **Edit** opens it in the editor, in a wider panel beside
+the picture, which shows every change as it is made: its layers, front-most at
+the top, can be hidden, added, duplicated, deleted, renamed and dragged to
+reorder. While the editor is open, undo works on the template. **Edit a copy**
+on a template that comes with the app duplicates it first. **Export** saves a
 template as a `.djmtemplate` file to share, with any pictures it uses packed
 inside, and **Import** adds one someone shared. **Delete** moves one of yours
 to the Trash.

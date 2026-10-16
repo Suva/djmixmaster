@@ -590,6 +590,74 @@ test('a template from a file brings the pictures packed into it', { skip }, asyn
   assert.equal(seen.said, 'Added Red wall.');
 });
 
+test('the template editor: layers shown and hidden, added, reordered, renamed, deleted and undone', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    await page.wait(100);
+    const panel = page.element('settings');
+    const narrow = panel.offsetWidth;
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const names = () => [...document.querySelectorAll('.layer-row .layer-name')].map((name) => name.textContent);
+    const row = (name: string) => [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+    const opened = { copy: page.element<HTMLSelectElement>('template').value.startsWith('user:'), wider: panel.offsetWidth > narrow, layers: names() };
+
+    // Hide the ring, add a text in front of the selected (top) layer.
+    row('Ring').querySelector<HTMLButtonElement>('.layer-eye')!.click();
+    page.choose('editor-add', 'text');
+    await page.wait(50);
+    const added = names()[0];
+
+    // Drag the background from the bottom to the top.
+    const from = row('Background').getBoundingClientRect();
+    const to = row(names()[0]!).getBoundingClientRect();
+    row('Background').dispatchEvent(new MouseEvent('mousedown', { clientX: from.left + 40, clientY: from.top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: from.left + 40, clientY: from.top - 20, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: from.left + 40, clientY: to.top + 2, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await page.wait(50);
+    const dragged = names()[0];
+
+    // Rename the logo, then delete it with Backspace, which must not delete the mix.
+    row('Logo').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    const field = document.querySelector<HTMLInputElement>('.layer-rename')!;
+    field.value = 'Badge';
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await page.wait(50);
+    const renamed = names().includes('Badge');
+    const badge = row('Badge');
+    badge.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: badge.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    badge.focus();
+    badge.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', bubbles: true }));
+    await page.wait(50);
+    const deleted = !names().includes('Badge');
+    const mixes = page.tabs().length;
+
+    // Undo brings the layer back; the undo button works on the template while editing.
+    page.click('undo');
+    await page.wait(50);
+    const undone = names().includes('Badge');
+    await page.wait(600);
+    page.click('editor-done');
+    return { opened, added, dragged, renamed, deleted, mixes, undone, closed: !document.body.classList.contains('editing'), narrowAgain: panel.offsetWidth === narrow };
+  });
+  assert.deepEqual(seen.opened, { copy: true, wider: true, layers: ['Glow', 'Now playing', 'Mix and time', 'Artist', 'Logo', 'Ring', 'Background'] });
+  assert.equal(seen.added, 'Text');
+  assert.equal(seen.dragged, 'Background');
+  assert.ok(seen.renamed && seen.deleted && seen.undone);
+  assert.equal(seen.mixes, 1, 'Backspace on a layer leaves the mix alone');
+  assert.ok(seen.closed && seen.narrowAgain);
+
+  const [file] = await readdir(join(data, 'templates'));
+  const saved = JSON.parse(readFileSync(join(data, 'templates', file), 'utf8'));
+  assert.deepEqual(saved.layers.map((layer: { name?: string; type: string }) => layer.name ?? layer.type).reverse(),
+    ['Background', 'text', 'glow', 'Now playing', 'Mix and time', 'Artist', 'Badge', 'Ring']);
+  assert.equal(saved.layers.find((layer: { name?: string }) => layer.name === 'Ring').params.visible, false);
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

@@ -123,12 +123,16 @@
     <aside id="settings" inert>
       <p id="settings-for"></p>
       <div id="video-settings">
-        <h2>Video</h2>
-        <div class="control">
+        <div class="video-head">
+          <h2 id="video-heading">Video</h2>
+          <button id="editor-done" class="primary" hidden title="Stop editing the template">Done</button>
+        </div>
+        <div class="control" id="template-row">
           <div class="control-head"><label for="template">Template</label></div>
           <select id="template"></select>
         </div>
         <div class="template-actions">
+          <button id="template-edit" title="Change this template: its layers and their settings">Edit</button>
           <button id="template-duplicate" title="Make a copy of this template that is yours to change">Duplicate</button>
           <button id="template-delete" title="Move this template of yours to the Trash. Mixes that use it go back to the first template.">Delete</button>
           <button id="template-import" title="Add a template from a file someone shared, with the pictures packed into it">Import…</button>
@@ -137,6 +141,18 @@
         <div class="control" id="template-name-row" hidden>
           <div class="control-head"><label for="template-name">Name of the template</label></div>
           <input id="template-name" class="field-text" type="text" spellcheck="false">
+        </div>
+        <div id="template-editor" hidden>
+          <div class="editor-section">
+            <h3>Layers</h3>
+            <span class="note">Front at the top. Drag to reorder.</span>
+          </div>
+          <div id="editor-layers" role="list"></div>
+          <div class="editor-actions">
+            <select id="editor-add" title="Add a layer in front of the selected one"><option value="">Add a layer…</option></select>
+            <button id="editor-duplicate" title="Make a copy of the selected layer, in front of it">Duplicate</button>
+            <button id="editor-delete" title="Remove the selected layer (Backspace)">Delete</button>
+          </div>
         </div>
         <div id="video-fields"></div>
         <p class="note">Kept with this mix. The video uses it when the mix is exported in a video format.</p>

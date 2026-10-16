@@ -160,6 +160,7 @@ const videoView = new VideoView({
   say: (text) => {
     $('readout').textContent = text || ' ';
   },
+  history: () => showHistory(),
 });
 
 /** Switches between the Mastering and the Video view. */
@@ -2351,8 +2352,10 @@ function settleHistory() {
 }
 
 function showHistory() {
-  $<HTMLButtonElement>('undo').disabled = busy || undoSteps.length === 0;
-  $<HTMLButtonElement>('redo').disabled = busy || redoSteps.length === 0;
+  // While a template is edited, undo and redo work on the template.
+  const editing = videoView.editing;
+  $<HTMLButtonElement>('undo').disabled = busy || (editing ? !videoView.canUndoTemplate : undoSteps.length === 0);
+  $<HTMLButtonElement>('redo').disabled = busy || (editing ? !videoView.canRedoTemplate : redoSteps.length === 0);
 }
 
 function applyStep(step: Step) {
@@ -2371,6 +2374,7 @@ function applyStep(step: Step) {
 
 function stepHistory(direction: 'undo' | 'redo') {
   if (!recording || busy) return;
+  if (videoView.editing) return videoView.stepTemplate(direction);
   // Count a change still in progress as done, so that it is what gets undone.
   if (saveTimer !== undefined) saveNow();
   const [from, to] = direction === 'undo' ? [undoSteps, redoSteps] : [redoSteps, undoSteps];
@@ -2455,6 +2459,13 @@ const HELP: [string, [string, string][]][] = [
     ['J, K, L', 'Run backwards, stop, run forwards; press J or L again to go faster'],
     ['Return', 'Jump to the start of the mix'],
     ['End', 'Jump to just before its end'],
+  ]],
+  ['Editing a video template', [
+    ['Drag a layer up or down', 'Put it in front of or behind others'],
+    [`${OPTION}+↑ ↓`, 'Move the selected layer forward or back'],
+    ['Double-click a layer', 'Rename it'],
+    ['Backspace', 'Delete the selected layer'],
+    [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo changes to the template'],
   ]],
   ['Everything else', [
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
