@@ -1,3 +1,4 @@
+import type { Template } from '../visuals/template.ts';
 import type { EncodeOptions } from '../audio-io.ts';
 import type { Features } from '../features.ts';
 import type { Examination, RenderResult } from '../master.ts';
@@ -45,6 +46,11 @@ export interface VideoMixInfo {
   artist: string;
   album: string;
   visuals: VisualsChoice | undefined;
+  /**
+   * The template itself, checked: the export's hidden page does not know the
+   * user's own templates, and is to draw exactly what the view showed.
+   */
+  template: Template;
   /** The tracks played in the mix, timed from its start. */
   tracks: { at: number; name: string }[];
   /** The mix's fades in and out, in seconds, which the picture follows. */
@@ -151,6 +157,15 @@ export interface Api {
   pickImage(): Promise<string | null>;
   /** The bytes of a picture file chosen before. */
   readImage(path: string): Promise<Uint8Array>;
+  /** The templates of the user's own, as stored: each with its id, not yet checked. */
+  templates(): Promise<{ id: string; template: unknown }[]>;
+  saveTemplate(id: string, template: unknown): Promise<void>;
+  /** Moves a template of the user's own to the Trash. */
+  deleteTemplate(id: string): Promise<void>;
+  /** Asks for a template file and gives what is in it, not yet checked; null if none was chosen. */
+  importTemplate(): Promise<unknown | null>;
+  /** Asks where to save a template to share, and saves it there; gives the path, or null if cancelled. */
+  exportTemplate(template: unknown, name: string): Promise<string | null>;
   /** Asks for a track list (a playlist or a table from DJ software, or text) and gives its text, or null if none was chosen. */
   openTracklist(): Promise<string | null>;
   /** The text on the clipboard, and putting text there. */

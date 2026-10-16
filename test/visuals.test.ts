@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { parseHex, toHex, toLch, type Colour } from '../src/visuals/colour.ts';
 import { compile, type Value } from '../src/visuals/expression.ts';
 import { MUSIC_NAMES, MusicReader } from '../src/visuals/music.ts';
-import { checkTemplate, fillText, prepare, TEXT_VARIABLES } from '../src/visuals/template.ts';
+import { checkTemplate, fillText, imagesOf, prepare, TEXT_VARIABLES } from '../src/visuals/template.ts';
 import { BAND_COUNT, FEATURE_RATE, type Features } from '../src/features.ts';
 
 const value = (text: string, values: Record<string, number> = {}) => {
@@ -262,4 +262,21 @@ test('the built-in templates are free of problems', async () => {
     const layers = prepare(template, {}, music);
     for (const layer of layers) layer.resolve({ bass: 0.5, beat: 1, energy: 0.5, highs: 0.3, dt: 1 / 30 }, {});
   }
+});
+
+test('pictures packed into a template are checked, and named by asset:', () => {
+  const { template, problems } = checkTemplate({
+    format: 1,
+    name: 'Packed',
+    fields: [{ key: 'logo', kind: 'image', default: '' }],
+    layers: [
+      { type: 'image', params: { image: 'asset:wall' } },
+      { type: 'image', params: { image: 'asset:missing' } },
+      { type: 'image', params: { image: '%logo%' } },
+    ],
+    assets: { wall: 'data:image/png;base64,iVBORw0KGgo=', script: 'data:text/html;base64,PHA+' },
+  }, MUSIC_NAMES, TEXT_VARIABLES);
+  assert.deepEqual(Object.keys(template.assets ?? {}), ['wall']);
+  assert.deepEqual(problems.map((p) => p.where), ['Picture script', 'Layer 2 (Image), Image']);
+  assert.deepEqual(imagesOf(template, { logo: '/pictures/logo.png' }), ['/pictures/logo.png', 'asset:wall']);
 });

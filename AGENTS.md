@@ -129,6 +129,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
 | `DJMASTER_SHOT_TRACKLIST=<file>` | Answer the dialog for a track list to import with this file |
+| `DJMASTER_SHOT_TEMPLATE=<file>` | Answer the dialog for a template to import with this file. A template exported is saved into `DJMASTER_SHOT_FOLDER`, and one deleted is removed rather than moved to the Trash |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
 
 ```bash
@@ -170,6 +171,7 @@ Linux), the same for `npm start` and the packaged app.
 | `analyses/` | One measurement per recording, keyed on its fingerprint, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
 | `sessions/` | The mixes, settings, hand adjustments and track markers per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
+| `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
@@ -214,6 +216,12 @@ Do not write test data there.
   recording timeline and the transport stay. A mix's template and fields are
   kept with it (`Mix.visuals`), so they are saved and undone like any other
   setting. The view draws only while shown.
+- **Templates come from two places.** The built-in ones (`visuals/templates.ts`)
+  are read only; the user's own are files in the data folder, copied from a
+  built-in one or imported, and known to the window only (`USER_TEMPLATES` in
+  `video-frame.ts`). So a video export is handed the checked template itself,
+  not its name. A template can carry pictures as data URLs in `assets`, named
+  in an image setting as `asset:name`; `pictureOf` loads either kind.
 - **A recording can be several files.** Recorders split long recordings at
   2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
   their numbers, or else by when each was written) and listed in

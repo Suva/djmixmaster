@@ -647,6 +647,65 @@ const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 /** Pictures larger than this are not read; a logo or a photo is far smaller. */
 const IMAGE_MOST_BYTES = 40 * 1024 * 1024;
 
+// Templates of the user's own, one JSON file each in templates/, by an id the
+// window gives. A template file to share is the same JSON, with its pictures
+// packed inside, under the extension .djmtemplate.
+const templatesFolder = () => join(app.getPath('userData'), 'templates');
+const TEMPLATE_ID = /^[A-Za-z0-9-]{1,64}$/;
+/** A template with pictures packed in can be large, but not without end. */
+const TEMPLATE_MOST_BYTES = 100 * 1024 * 1024;
+const templateFile = (id: string) => {
+  if (!TEMPLATE_ID.test(id)) throw new Error('Not a template id');
+  return join(templatesFolder(), `${id}.json`);
+};
+ipcMain.handle('templates', async () => {
+  const files = await readdir(templatesFolder()).catch(() => [] as string[]);
+  const found: { id: string; template: unknown }[] = [];
+  for (const file of files.filter((name) => name.endsWith('.json'))) {
+    // One damaged file must not keep the others from showing.
+    try {
+      found.push({ id: file.slice(0, -5), template: JSON.parse(await readFile(join(templatesFolder(), file), 'utf8')) });
+    } catch {}
+  }
+  return found;
+});
+ipcMain.handle('save-template', async (_event, id: string, template: unknown) => {
+  await mkdir(templatesFolder(), { recursive: true });
+  await writeFile(templateFile(id), JSON.stringify(template, null, 2));
+});
+ipcMain.handle('delete-template', async (_event, id: string) => {
+  // To the Trash, where it can be got back; checks remove theirs outright.
+  if (SCREENSHOT) await rm(templateFile(id), { force: true });
+  else await shell.trashItem(templateFile(id));
+});
+ipcMain.handle('import-template', async () => {
+  const chosen = SCREENSHOT && process.env.DJMASTER_SHOT_TEMPLATE
+    ? process.env.DJMASTER_SHOT_TEMPLATE
+    : (await dialog.showOpenDialog(window!, {
+        properties: ['openFile'],
+        filters: [{ name: 'Video templates', extensions: ['djmtemplate', 'json'] }],
+      })).filePaths[0];
+  if (!chosen) return null;
+  if ((await stat(chosen)).size > TEMPLATE_MOST_BYTES) throw new Error('That file is too large to be a template');
+  try {
+    return JSON.parse(await readFile(chosen, 'utf8'));
+  } catch {
+    throw new Error('That file is not a template');
+  }
+});
+ipcMain.handle('export-template', async (_event, template: unknown, name: string) => {
+  const fileName = `${String(name).replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Template'}.djmtemplate`;
+  const chosen = SCREENSHOT && process.env.DJMASTER_SHOT_FOLDER
+    ? join(process.env.DJMASTER_SHOT_FOLDER, fileName)
+    : (await dialog.showSaveDialog(window!, {
+        defaultPath: join(app.getPath('documents'), fileName),
+        filters: [{ name: 'Video templates', extensions: ['djmtemplate'] }],
+      })).filePath;
+  if (!chosen) return null;
+  await writeFile(chosen, JSON.stringify(template, null, 2));
+  return chosen;
+});
+
 // A track list: from DJ software, which writes UTF-16 as often as UTF-8, or typed.
 ipcMain.handle('open-tracklist', async () => {
   const chosen = SCREENSHOT && process.env.DJMASTER_SHOT_TRACKLIST

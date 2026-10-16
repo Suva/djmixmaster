@@ -300,6 +300,9 @@ body.video #mastering-settings { display: none; }
 #video-settings input[type="color"] { width: 100%; height: 30px; padding: 0 2px; border: 1px solid var(--border); border-radius: 6px; background: #262a33; }
 #video-settings .field-text { width: 100%; font: inherit; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; user-select: text; }
 #video-settings .field-text:focus { outline: 1px solid var(--accent); }
+.template-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 16px; }
+.template-actions button { flex: 1 1 calc(50% - 3px); padding: 4px 9px; font-size: 12px; }
+#template-name-row[hidden] { display: none; }
 .image-field { display: flex; align-items: center; gap: 6px; }
 .image-field .file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
 

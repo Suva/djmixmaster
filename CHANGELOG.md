@@ -4,6 +4,12 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- **Templates of your own.** Duplicate a template to make a copy that is
+  yours, export it as a file to share, with its pictures packed inside, and
+  import templates others shared.
+
 ## 0.8.0 — 15 October 2026
 
 - **Videos for YouTube.** A Video view, beside the mastering view, shows the

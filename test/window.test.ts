@@ -523,6 +523,73 @@ test('a track list from DJ software is spread over the mix, to be dragged into p
   assert.ok(JSON.parse(seen.drawn!).every((track: [number, string, boolean]) => track[2]), 'all marked as guesses');
 });
 
+test('a template of your own: duplicated, renamed, kept, shared and deleted', { skip }, async () => {
+  const data = await fresh();
+  const shared = join(work, 'shared templates');
+  await mkdir(shared);
+  const first = await runApp({ recording: mix, data, exportFolder: shared, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    await page.wait(300);
+    page.click('template-duplicate');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.value.startsWith('user:'), 'the copy to be chosen');
+    const groups = [...select.querySelectorAll('optgroup')].map((group) => [group.label, [...group.querySelectorAll('option')].map((o) => o.text)]);
+    const name = page.element<HTMLInputElement>('template-name');
+    name.value = 'My glitter';
+    name.dispatchEvent(new Event('input', { bubbles: true }));
+    name.dispatchEvent(new Event('change', { bubbles: true }));
+    await page.settle();
+    await page.wait(500);
+    page.click('template-export');
+    await page.wait(500);
+    return { groups, chosen: select.selectedOptions[0].text, deletable: !page.element<HTMLButtonElement>('template-delete').disabled };
+  });
+  assert.deepEqual(first.groups, [['Comes with the app', ['Glitter', 'Spectrum ring', 'Waveform', 'Photo']], ['Yours', ['Glitter copy']]]);
+  assert.equal(first.chosen, 'My glitter');
+  assert.ok(first.deletable);
+  const stored = await readdir(join(data, 'templates'));
+  assert.equal(stored.length, 1);
+  assert.equal(JSON.parse(readFileSync(join(data, 'templates', stored[0]), 'utf8')).name, 'My glitter');
+  assert.equal(JSON.parse(readFileSync(join(shared, 'My glitter.djmtemplate'), 'utf8')).name, 'My glitter');
+
+  // Kept with the mix, and gone with Delete.
+  const second = await runApp({ recording: mix, data }, async (page) => {
+    page.click('view-video');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'My glitter', 'the template to come back');
+    page.click('template-delete');
+    await page.until(() => select.value === 'glitter', 'the mix to go back to the first template');
+    return [...select.querySelectorAll('optgroup')].length;
+  });
+  assert.equal(second, 1);
+  assert.deepEqual(await readdir(join(data, 'templates')), []);
+});
+
+test('a template from a file brings the pictures packed into it', { skip }, async () => {
+  const red = join(work, 'red.png');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0xff2020:s=64x64', '-frames:v', '1', red]);
+  const file = join(work, 'Red wall.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Red wall',
+    fields: [],
+    layers: [{ type: 'image', params: { image: 'asset:wall', fit: 'stretch', width: 100, height: 100 } }],
+    assets: { wall: `data:image/png;base64,${readFileSync(red).toString('base64')}` },
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Red wall', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const middle = () => [...picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data];
+    await page.until(() => middle()[0] > 200 && middle()[1] < 80, 'the packed picture to be drawn');
+    return { middle: middle(), said: page.text('readout') };
+  });
+  assert.ok(seen.middle[0] > 200);
+  assert.equal(seen.said, 'Added Red wall.');
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

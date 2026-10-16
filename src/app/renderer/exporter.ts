@@ -9,8 +9,8 @@ import type { Api, VideoRequest } from '../api.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
-import { fontsOf, prepare } from '../../visuals/template.ts';
-import { drawVideoFrame, templateOf } from './video-frame.ts';
+import { fontsOf, imagesOf, prepare } from '../../visuals/template.ts';
+import { drawVideoFrame, pictureOf } from './video-frame.ts';
 
 declare global {
   interface Window {
@@ -46,18 +46,13 @@ async function run(job: VideoRequest) {
   const { mix } = job;
   const features = await api.features(mix.path);
   const reader = new MusicReader(features, mix.start, mix.end);
-  const template = templateOf(mix.visuals);
+  const { template } = mix;
   const fields = mix.visuals?.fields ?? {};
   const layers = prepare(template, fields, MUSIC_NAMES);
   // Every font in before the first frame: a canvas would draw text in a plain face meanwhile, without a word.
   await loadFonts(fontsOf(template, fields));
   const images = new Map<string, ImageBitmap>();
-  for (const field of template.fields) {
-    const value = fields[field.key];
-    if (field.kind === 'image' && typeof value === 'string' && value) {
-      images.set(value, await createImageBitmap(new Blob([(await api.readImage(value)) as BlobPart])));
-    }
-  }
+  for (const name of imagesOf(template, fields)) images.set(name, await pictureOf(name, template, api));
 
   const canvas = new OffscreenCanvas(job.width, job.height);
   const drawer = new FrameDrawer(canvas);

@@ -225,7 +225,18 @@ export interface Template {
   name: string;
   fields: Field[];
   layers: Layer[];
+  /**
+   * Pictures packed into the template, so that a template file carries
+   * everything it shows: by name, as data URLs. An image setting or an
+   * image field's default uses one as `asset:name`.
+   */
+  assets?: Record<string, string>;
 }
+
+/** What an image setting names to use a picture packed into the template. */
+export const ASSET_PREFIX = 'asset:';
+/** A packed picture: a data URL of one of the formats the app reads. */
+const ASSET_DATA = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 
 export interface TemplateProblem extends Partial<Problem> {
   /** Where, for a person: "Layer 2 (Text), Size". */
@@ -310,6 +321,13 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
     problems.push({ where: 'Template', message: `Made for a newer version of the app (format ${source.format})` });
   }
 
+  const assets: Record<string, string> = {};
+  const givenAssets = typeof source.assets === 'object' && source.assets !== null ? source.assets : {};
+  for (const [name, data] of Object.entries(givenAssets)) {
+    if (typeof data === 'string' && ASSET_DATA.test(data)) assets[name] = data;
+    else problems.push({ where: `Picture ${name}`, message: 'Not a picture the app can show (PNG, JPEG, WebP or GIF)' });
+  }
+
   const fields: Field[] = [];
   for (const [index, item] of (Array.isArray(source.fields) ? source.fields : []).entries()) {
     const where = `Field ${index + 1}`;
@@ -358,7 +376,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
     for (const [key, param] of Object.entries(all)) {
       const where = `${title}, ${param.label}`;
       const value = given[key];
-      const problem = value === undefined ? null : checkValue(value, param, names, fieldOf);
+      const problem = value === undefined ? null : checkValue(value, param, names, fieldOf, assets);
       if (problem) problems.push({ where, ...problem });
       params[key] = value === undefined || problem ? param.default : (value as ParamValue);
     }
@@ -371,6 +389,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
       name: typeof source.name === 'string' && source.name ? source.name : 'Untitled',
       fields,
       layers,
+      ...(Object.keys(assets).length ? { assets } : {}),
     },
     problems,
   };
@@ -378,7 +397,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
 
 /** What is wrong with one parameter's value, if anything. */
 function checkValue(
-  value: unknown, param: ParamSpec, names: Names, fieldOf: (key: string) => Field | undefined,
+  value: unknown, param: ParamSpec, names: Names, fieldOf: (key: string) => Field | undefined, assets: Record<string, string>,
 ): Omit<TemplateProblem, 'where'> | null {
   const whole = typeof value === 'string' ? WHOLE_VARIABLE.exec(value) : null;
   switch (param.kind) {
@@ -414,6 +433,9 @@ function checkValue(
       if (whole) {
         const field = fieldOf(whole[1]);
         return field?.kind === param.kind ? null : { message: `${whole[1]} is not ${param.kind === 'image' ? 'an image' : 'a font'} field of this template` };
+      }
+      if (param.kind === 'image' && value.startsWith(ASSET_PREFIX) && !(value.slice(ASSET_PREFIX.length) in assets)) {
+        return { message: `No picture called ${value.slice(ASSET_PREFIX.length)} is packed into this template` };
       }
       return null;
     }
@@ -514,6 +536,24 @@ export function fontsOf(template: Template, filled: Record<string, string | numb
     fonts.add(field ? String(filled[field.key] ?? field.default) : value);
   }
   return [...fonts];
+}
+
+/**
+ * Every picture a template shows with what was filled in: those of its image
+ * fields, and those its image layers name themselves. Each is a file's path,
+ * or `asset:name` for one packed into the template.
+ */
+export function imagesOf(template: Template, filled: Record<string, string | number>): string[] {
+  const images = new Set<string>();
+  for (const field of template.fields) {
+    const value = String(filled[field.key] ?? field.default);
+    if (field.kind === 'image' && value) images.add(value);
+  }
+  for (const layer of template.layers) {
+    const value = layer.params.image;
+    if (typeof value === 'string' && value && !WHOLE_VARIABLE.test(value)) images.add(value);
+  }
+  return [...images];
 }
 
 /** A resolved colour as a hex code, for drawing with a 2D canvas. */

@@ -223,6 +223,12 @@ fill in, such as a colour and a logo. The recording timeline, the playback contr
 a strip of the mix stay at hand. Four templates come with the app: Glitter,
 Spectrum ring, Waveform, and Photo, which sets the mix over a photo of your own. What is chosen is kept with the mix.
 
+The templates that come with the app stay as they are. **Duplicate** makes a
+copy that is yours, to rename (and, soon, to change). **Export** saves a
+template as a `.djmtemplate` file to share, with any pictures it uses packed
+inside, and **Import** adds one someone shared. **Delete** moves one of yours
+to the Trash.
+
 Exporting a mix as **MP4 video** draws every frame of it at 1920 × 1080, 30
 frames a second, with the sound in AAC. On an M1 Mac it takes about a sixth of
 the mix's length: some 20 minutes for two hours. The first time, the

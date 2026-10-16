@@ -9,9 +9,11 @@ import type { Features } from '../../features.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
-import { fontsOf, prepare, type Field, type PreparedLayer, type Template } from '../../visuals/template.ts';
+import { ASSET_PREFIX, fontsOf, imagesOf, prepare, type Field, type PreparedLayer, type Template } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
-import { DEFAULT_TEMPLATE, drawVideoFrame, TEMPLATES as templates, templateOf, type VideoMix } from './video-frame.ts';
+import {
+  checked, DEFAULT_TEMPLATE, drawVideoFrame, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
+} from './video-frame.ts';
 
 export type { VideoMix } from './video-frame.ts';
 
@@ -56,7 +58,15 @@ export class VideoView {
   constructor(options: VideoViewOptions) {
     this.#options = options;
     const select = $<HTMLSelectElement>('template');
-    for (const [id, template] of templates) select.add(new Option(template.name, id));
+    this.#fillTemplates();
+    // The user's own templates come in from disk a moment after the window is up.
+    options.api.templates().then((stored) => {
+      for (const { id, template } of stored) USER_TEMPLATES.set(USER_TEMPLATE + id, checked(template).template);
+      this.#fillTemplates();
+      this.#shownFor = '';
+      this.refresh();
+    });
+    this.#templateActions();
     select.addEventListener('change', () => {
       // Fields of the same name carry over to the new template: the artist's name, the colour.
       this.#choice = { template: select.value, fields: this.#choice.fields };
@@ -158,15 +168,20 @@ export class VideoView {
     return templateOf(this.#choice);
   }
 
+  /** The template the pictures packed into it were loaded for: another template's of the same name are different pictures. */
+  #assetsFor: Template | null = null;
+
   #prepare() {
-    this.#layers = prepare(this.#template(), this.#choice.fields, MUSIC_NAMES);
+    const template = this.#template();
+    this.#layers = prepare(template, this.#choice.fields, MUSIC_NAMES);
     // Until a font is in, its text is drawn in a plain face; the next frame after, in the font.
-    loadFonts(fontsOf(this.#template(), this.#choice.fields));
+    loadFonts(fontsOf(template, this.#choice.fields));
     this.#drawer.reset();
-    for (const field of this.#template().fields) {
-      const value = this.#choice.fields[field.key];
-      if (field.kind === 'image' && typeof value === 'string' && value) this.#loadImage(value);
+    if (this.#assetsFor !== template) {
+      for (const name of this.#images.keys()) if (name.startsWith(ASSET_PREFIX)) this.#images.delete(name);
+      this.#assetsFor = template;
     }
+    for (const name of imagesOf(template, this.#choice.fields)) this.#loadImage(name);
   }
 
   #setField(key: string, value: string | number) {
@@ -181,8 +196,7 @@ export class VideoView {
   async #loadImage(path: string) {
     if (this.#images.has(path)) return;
     try {
-      const bytes = await this.#options.api.readImage(path);
-      this.#images.set(path, await createImageBitmap(new Blob([bytes as BlobPart])));
+      this.#images.set(path, await pictureOf(path, this.#template(), this.#options.api));
     } catch (error) {
       this.#options.say(`Could not load the picture: ${error instanceof Error ? error.message : error}`);
     }
@@ -192,8 +206,107 @@ export class VideoView {
     const mix = this.#options.mix();
     this.#shownFor = `${mix?.path}|${mix?.number}|${JSON.stringify(this.#choice)}`;
     const template = this.#template();
-    $<HTMLSelectElement>('template').value = templates.has(this.#choice.template) ? this.#choice.template : DEFAULT_TEMPLATE;
+    const known = templates.has(this.#choice.template) || USER_TEMPLATES.has(this.#choice.template);
+    $<HTMLSelectElement>('template').value = known ? this.#choice.template : DEFAULT_TEMPLATE;
+    const own = USER_TEMPLATES.has(this.#choice.template);
+    $('template-name-row').hidden = !own;
+    const name = $<HTMLInputElement>('template-name');
+    if (document.activeElement !== name) name.value = template.name;
+    $<HTMLButtonElement>('template-delete').disabled = !own;
     $('video-fields').replaceChildren(...template.fields.map((field) => this.#control(field)));
+  }
+
+  // ---------------------------------------------------------------------------
+  // The templates: the list, and making, naming, deleting and sharing the user's own.
+
+  #fillTemplates() {
+    const select = $<HTMLSelectElement>('template');
+    const group = (label: string, entries: [string, Template][]) => {
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = label;
+      for (const [id, template] of entries) optgroup.append(new Option(template.name, id));
+      return optgroup;
+    };
+    const own = [...USER_TEMPLATES].sort(([, a], [, b]) => a.name.localeCompare(b.name));
+    select.replaceChildren(group('Comes with the app', [...templates]), ...(own.length ? [group('Yours', own)] : []));
+    select.value = templates.has(this.#choice.template) || USER_TEMPLATES.has(this.#choice.template) ? this.#choice.template : DEFAULT_TEMPLATE;
+  }
+
+  /** A name no template has yet: the one given, or it with a number. */
+  #freeName(wanted: string): string {
+    const taken = new Set([...templates.values(), ...USER_TEMPLATES.values()].map((template) => template.name));
+    if (!taken.has(wanted)) return wanted;
+    let n = 2;
+    while (taken.has(`${wanted} ${n}`)) n++;
+    return `${wanted} ${n}`;
+  }
+
+  /** Keeps a template of the user's own, and makes it the mix's. */
+  async #adopt(template: Template) {
+    const id = crypto.randomUUID();
+    await this.#options.api.saveTemplate(id, template);
+    USER_TEMPLATES.set(USER_TEMPLATE + id, template);
+    this.#fillTemplates();
+    this.#choice = { template: USER_TEMPLATE + id, fields: this.#choice.fields };
+    this.#prepare();
+    this.#showFields();
+    this.#options.choose(this.#choice);
+  }
+
+  #renameTimer: ReturnType<typeof setTimeout> | undefined;
+
+  #templateActions() {
+    const api = this.#options.api;
+    $('template-duplicate').addEventListener('click', async () => {
+      const copy: Template = structuredClone(this.#template());
+      copy.name = this.#freeName(`${copy.name} copy`);
+      await this.#adopt(copy);
+      this.#options.say(`${copy.name} is yours to change.`);
+    });
+    $('template-delete').addEventListener('click', async () => {
+      const id = this.#choice.template;
+      const template = USER_TEMPLATES.get(id);
+      if (!template) return;
+      await api.deleteTemplate(id.slice(USER_TEMPLATE.length));
+      USER_TEMPLATES.delete(id);
+      this.#fillTemplates();
+      this.#choice = { template: DEFAULT_TEMPLATE, fields: this.#choice.fields };
+      this.#prepare();
+      this.#showFields();
+      this.#options.choose(this.#choice);
+      this.#options.say(`${template.name} is in the Trash. Mixes that used it now use ${templates.get(DEFAULT_TEMPLATE)!.name}.`);
+    });
+    $('template-import').addEventListener('click', async () => {
+      try {
+        const raw = await api.importTemplate();
+        if (raw === null) return;
+        const { template, problems } = checked(raw);
+        template.name = this.#freeName(template.name);
+        await this.#adopt(template);
+        this.#options.say(problems.length
+          ? `Added ${template.name}. Some of it could not be used and was left at its default: ${problems[0].where}, ${problems[0].message.toLowerCase()}${problems.length > 1 ? `, and ${problems.length - 1} more` : ''}.`
+          : `Added ${template.name}.`);
+      } catch (error) {
+        this.#options.say(`Could not add that template: ${error instanceof Error ? error.message : error}`);
+      }
+    });
+    $('template-export').addEventListener('click', async () => {
+      const template = this.#template();
+      const saved = await api.exportTemplate(template, template.name);
+      if (saved) this.#options.say(`Saved ${template.name} as ${saved.split(/[\\/]/).pop()}, with its pictures, to share.`);
+    });
+    const name = $<HTMLInputElement>('template-name');
+    name.addEventListener('input', () => {
+      const id = this.#choice.template;
+      const template = USER_TEMPLATES.get(id);
+      if (!template) return;
+      template.name = name.value.trim() || 'Untitled';
+      const option = [...$<HTMLSelectElement>('template').options].find((o) => o.value === id);
+      if (option) option.text = template.name;
+      clearTimeout(this.#renameTimer);
+      this.#renameTimer = setTimeout(() => api.saveTemplate(id.slice(USER_TEMPLATE.length), template), 400);
+    });
+    name.addEventListener('change', () => this.#fillTemplates());
   }
 
   #control(field: Field): HTMLElement {

@@ -363,9 +363,14 @@ values into the ones a frame gets. None draws anything yet.
   will use. A frame follows from its moment in the mix alone, except for the
   spectrum's rise and fall and a text changing, which remember the frame
   before. The view draws only while shown.
-- Not yet: a template file to load or save, the
-  editor, the waveform as a true oscilloscope (it shows the level, not the
-  wave), and the glow's threshold (approximated).
+- Templates of the user's own are copies of a built-in one, or imported, kept
+  as JSON in the data folder. A template file to share (`.djmtemplate`) is the
+  same JSON with its pictures packed in as data URLs (`assets`, named in an
+  image setting as `asset:name`).
+- Not yet: the editor (being built in steps: the layers, their settings with
+  expressions, the fields, "moves with…" for settings that follow the music,
+  dragging on the picture), the waveform as a true oscilloscope (it shows the
+  level, not the wave), and the glow's threshold (approximated).
 
 ## The MP4 export, as built
 
