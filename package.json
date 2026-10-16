@@ -1,6 +1,6 @@
 {
   "name": "djmaster",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Levels the loudness of DJ mixes track by track without pumping the breakdowns",
   "author": "Jaan Pullerits",
   "license": "GPL-3.0-or-later",
