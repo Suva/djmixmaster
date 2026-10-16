@@ -534,16 +534,23 @@ test('a template of your own: duplicated, renamed, kept, shared and deleted', { 
     const select = page.element<HTMLSelectElement>('template');
     await page.until(() => select.value.startsWith('user:'), 'the copy to be chosen');
     const groups = [...select.querySelectorAll('optgroup')].map((group) => [group.label, [...group.querySelectorAll('option')].map((o) => o.text)]);
+    // Renamed in the editor, where all of a template's making is; not in the panel.
+    const nameHidden = page.element('template-name-row').hidden;
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
     const name = page.element<HTMLInputElement>('template-name');
     name.value = 'My glitter';
     name.dispatchEvent(new Event('input', { bubbles: true }));
     name.dispatchEvent(new Event('change', { bubbles: true }));
-    await page.settle();
-    await page.wait(500);
+    await page.wait(600);
+    page.click('editor-done');
+    const shownName = document.querySelector('#template-about .about-name')!.textContent;
     page.click('template-export');
     await page.wait(500);
-    return { groups, chosen: select.selectedOptions[0].text, deletable: !page.element<HTMLButtonElement>('template-delete').disabled };
+    return { groups, chosen: select.selectedOptions[0].text, deletable: !page.element<HTMLButtonElement>('template-delete').disabled, nameHidden, shownName };
   });
+  assert.ok(first.nameHidden, 'no name field outside the editor');
+  assert.equal(first.shownName, 'My glitter', 'the name shown under the list');
   assert.deepEqual(first.groups, [['Comes with the app', ['Glitter', 'Spectrum ring', 'Waveform', 'Photo']], ['Yours', ['Glitter copy']]]);
   assert.equal(first.chosen, 'My glitter');
   assert.ok(first.deletable);
@@ -606,7 +613,8 @@ test('the template editor: layers shown and hidden, added, reordered, renamed, d
 
     // Hide the ring, add a text in front of the selected (top) layer.
     row('Ring').querySelector<HTMLButtonElement>('.layer-eye')!.click();
-    page.choose('editor-add', 'text');
+    page.click('editor-add');
+    document.querySelector<HTMLButtonElement>('#editor-add-menu button[data-type="text"]')!.click();
     await page.wait(50);
     const added = names()[0];
 
@@ -1047,7 +1055,9 @@ test('effects change the picture beneath them: a colour split, shown and hidden'
     const split = red();
     page.click('template-edit');
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
-    const offered = [...page.element<HTMLSelectElement>('editor-add').options].map((option) => option.text);
+    page.click('editor-add');
+    const offered = [...document.querySelectorAll('#editor-add-menu button')].map((button) => button.textContent);
+    page.click('editor-add');
     [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Split')!
       .querySelector<HTMLButtonElement>('.layer-eye')!.click();
     await page.wait(300);
@@ -1327,6 +1337,359 @@ test('number boxes change when dragged sideways, and a click is still a click', 
   assert.equal(seen.finer, 54, 'with Shift, ten times finer');
   assert.ok(seen.typing, 'a click without a drag is for typing');
   assert.equal(seen.undone, 60, 'each drag one undo step');
+});
+
+test('a group draws its layers as one: faded together, effects kept inside it, hidden together', { skip }, async () => {
+  const file = join(work, 'Grouped.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Grouped',
+    fields: [],
+    layers: [
+      { type: 'gradient', params: { colour1: '#0000ff', colour2: '#0000ff' } },
+      { type: 'group', name: 'Half', size: 1, params: { opacity: 50 } },
+      { type: 'gradient', params: { colour1: '#ffffff', colour2: '#ffffff', x: 50, y: 50 } },
+      { type: 'group', name: 'Turned', size: 2, params: {} },
+      { type: 'text', params: { text: 'XXXX', size: 30, weight: 900, colour: '#ff0000', boxColour: '#ff0000', y: 50 } },
+      { type: 'hue', params: { hue: 120 } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Grouped', 'the template to be added');
+    await page.wait(500);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const at = (x: number, y: number) => [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), Math.floor(picture.height * y), 1, 1).data].slice(0, 3);
+    // The corner: blue beneath, white at half over it. The middle: the text, red turned green inside its group.
+    const corner = at(0.02, 0.02);
+    const middle = at(0.5, 0.5);
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const row = (name: string) => [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+    const list = [...document.querySelectorAll<HTMLElement>('.layer-row')].map((r) => `${r.style.paddingLeft} ${r.querySelector('.layer-name')!.textContent}`);
+    row('Half').querySelector<HTMLButtonElement>('.layer-eye')!.click();
+    await page.wait(200);
+    const hidden = at(0.02, 0.02);
+    return { corner, middle, list, hidden };
+  });
+  assert.ok(Math.abs(seen.corner[0] - 128) < 8 && Math.abs(seen.corner[2] - 255) < 8, `white at half over blue: ${seen.corner}`);
+  assert.ok(seen.middle[1] > 80 && seen.middle[1] > seen.middle[0] * 3 && seen.middle[1] > seen.middle[2] * 3, `the red text turned green: ${seen.middle}`);
+  assert.deepEqual(seen.list, ['3px Turned', '19px Hue and saturation', '19px Text', '3px Half', '19px Gradient', '3px Gradient']);
+  assert.deepEqual(seen.hidden, [0, 0, 255], 'the hidden group takes its layers with it');
+});
+
+test('layers grouped with ⌘G, moved into groups, duplicated with ⌘J, ungrouped and deleted as groups', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const rows = () => [...document.querySelectorAll<HTMLElement>('.layer-row')];
+    const row = (name: string) => rows().find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+    const list = () => rows().map((r) => `${r.style.paddingLeft === '3px' ? '' : '  '}${r.querySelector('.layer-name')!.textContent}`);
+    const select = (name: string) => {
+      row(name).dispatchEvent(new MouseEvent('mousedown', { clientX: 60, clientY: row(name).getBoundingClientRect().top + 5, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+    const shortcut = (code: string, shiftKey = false) => window.dispatchEvent(new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase(), metaKey: true, ctrlKey: true, shiftKey, bubbles: true }));
+    const drag = (name: string, onto: string, share: number) => {
+      const from = row(name).getBoundingClientRect();
+      const to = row(onto).getBoundingClientRect();
+      row(name).dispatchEvent(new MouseEvent('mousedown', { clientX: 60, clientY: from.top + 5, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 60, clientY: from.top + 20 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 60, clientY: to.top + to.height * share }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+
+    select('Logo');
+    shortcut('KeyG');
+    const grouped = list();
+    drag('Artist', 'Group 1', 0.5);
+    const moved = list();
+    select('Group 1');
+    shortcut('KeyJ');
+    const duplicated = list();
+    shortcut('KeyG', true);
+    const ungrouped = list();
+    select('Group 1');
+    page.click('editor-delete');
+    const deleted = list();
+    page.click('undo');
+    await page.wait(100);
+    const undone = list();
+    await page.wait(600);
+    return { grouped, moved, duplicated, ungrouped, deleted, undone, mixes: page.tabs().length };
+  });
+  assert.deepEqual(seen.grouped, ['Glow', 'Now playing', 'Mix and time', 'Artist', 'Group 1', '  Logo', 'Ring', 'Background']);
+  assert.deepEqual(seen.moved, ['Glow', 'Now playing', 'Mix and time', 'Group 1', '  Artist', '  Logo', 'Ring', 'Background']);
+  // The copy, in front, holds copies of what the group holds; it is the one selected after.
+  assert.deepEqual(seen.duplicated, ['Glow', 'Now playing', 'Mix and time', 'Group 1', '  Artist', '  Logo', 'Group 1', '  Artist', '  Logo', 'Ring', 'Background']);
+  assert.deepEqual(seen.ungrouped, ['Glow', 'Now playing', 'Mix and time', 'Artist', 'Logo', 'Group 1', '  Artist', '  Logo', 'Ring', 'Background']);
+  assert.deepEqual(seen.deleted, ['Glow', 'Now playing', 'Mix and time', 'Artist', 'Logo', 'Ring', 'Background'], 'the group went with all in it');
+  assert.deepEqual(seen.undone, seen.ungrouped);
+  assert.equal(seen.mixes, 1);
+
+  const [file] = await readdir(join(data, 'templates'));
+  const saved = JSON.parse(readFileSync(join(data, 'templates', file), 'utf8'));
+  assert.deepEqual(saved.layers.map((layer: { name?: string; type: string; size?: number }) => `${layer.name ?? layer.type}${layer.size === undefined ? '' : `[${layer.size}]`}`),
+    ['Background', 'Ring', 'Group 1[2]', 'Logo', 'Artist', 'Logo', 'Artist', 'Mix and time', 'Now playing', 'glow']);
+});
+
+test('the + menu fits the window, scrolls, and finds a kind of layer by typing', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const listHeight = page.element('editor-layers').offsetHeight;
+    const menu = page.element('editor-add-menu');
+    const search = menu.querySelector<HTMLInputElement>('.add-menu-search')!;
+    const names = () => [...menu.querySelectorAll<HTMLButtonElement>('.add-menu-items button')].map((b) => b.textContent);
+    const inside = () => {
+      const box = menu.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= window.innerHeight;
+    };
+    page.click('editor-add');
+    const opened = { fits: inside(), focused: document.activeElement === search, kinds: names().length };
+    search.value = 'glit';
+    search.dispatchEvent(new Event('input'));
+    const found = names();
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    const added = document.querySelector('.layer-row.on .layer-name')!.textContent;
+    page.click('editor-add');
+    search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const closed = menu.hidden;
+    // With the button half way down the window (the list made shorter, as its edge can be dragged), neither
+    // side has room for all of it: it still fits the window, and what does not fit scrolls.
+    const list = page.element('editor-layers');
+    const button = () => page.element('editor-add').getBoundingClientRect();
+    list.style.height = `${list.offsetHeight + (window.innerHeight / 2 - button().top)}px`;
+    await page.wait(100);
+    page.click('editor-add');
+    const items = menu.querySelector<HTMLElement>('.add-menu-items')!;
+    const short = { fits: inside(), scrolls: items.scrollHeight > items.clientHeight };
+    return { listHeight, opened, found, added, closed, short };
+  });
+  assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 14 });
+  assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
+  assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
+  assert.ok(seen.closed);
+  assert.deepEqual(seen.short, { fits: true, scrolls: true }, 'with little room either side, it fits and scrolls');
+});
+
+test('an effect in a group replaces the group\'s layers, rather than leaving them showing through', { skip }, async () => {
+  const file = join(work, 'Grouped kaleidoscope.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Grouped kaleidoscope',
+    fields: [],
+    layers: [
+      { type: 'gradient', params: { colour1: '#000000', colour2: '#000000' } },
+      { type: 'group', name: 'G', size: 2, params: {} },
+      // On the left; the kaleidoscope takes its slice from the right, where there is nothing.
+      { type: 'text', params: { text: 'XX', size: 20, colour: '#ff0000', boxColour: '#ff0000', x: 20, y: 50 } },
+      { type: 'kaleidoscope', params: { segments: 4, angle: 0, mirrored: false } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Grouped kaleidoscope', 'the template to be added');
+    await page.wait(500);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    return [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * 0.2), Math.floor(picture.height * 0.5), 1, 1).data].slice(0, 3);
+  });
+  assert.deepEqual(seen, [0, 0, 0], 'the text the pattern was made from does not show through it');
+});
+
+test('paused, the picture is drawn only when something changes; playing, all the time', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const frames = () => Number(picture.dataset.frames ?? 0);
+    // Once the music has been listened to: its coming in draws the picture again, as it should.
+    await page.until(() => picture.dataset.music === 'true', 'the picture to be drawn from the music', 60_000);
+    await page.wait(500);
+    // How many frames are drawn while `during` runs and a moment after.
+    const count = async (during: () => void | Promise<void>, ms: number) => {
+      const before = frames();
+      await during();
+      await page.wait(ms);
+      return frames() - before;
+    };
+    const paused = await count(() => {}, 1000);
+    const typed = await count(() => page.type('mix-artist', 'Suva'), 300);
+    const after = await count(() => {}, 1000);
+    const moved = await count(() => page.key('ArrowRight'), 300);
+    page.key('Space');
+    await page.until(() => page.element('play').classList.contains('playing'), 'playback to start');
+    const playing = await count(() => {}, 1000);
+    page.key('Space');
+    return { paused, typed, after, moved, playing };
+  });
+  assert.equal(seen.paused, 0, 'nothing drawn while nothing changes');
+  assert.ok(seen.typed >= 1, 'drawn again for a change');
+  assert.equal(seen.after, 0, 'and still again after it');
+  assert.ok(seen.moved >= 1, 'drawn again when the playhead moves');
+  assert.ok(seen.playing >= 10, `drawn all the time while playing: ${seen.playing}`);
+});
+
+test('several layers selected with ⌘-click and Shift-click are grouped, deleted, duplicated and dragged together', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const rows = () => [...document.querySelectorAll<HTMLElement>('.layer-row')];
+    const row = (name: string) => rows().find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+    const list = () => rows().map((r) => `${r.style.paddingLeft === '3px' ? '' : '  '}${r.querySelector('.layer-name')!.textContent}`);
+    const picked = () => rows().filter((r) => r.classList.contains('on')).map((r) => r.querySelector('.layer-name')!.textContent);
+    const click = (name: string, keys: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean } = {}) => {
+      row(name).dispatchEvent(new MouseEvent('mousedown', { clientX: 60, clientY: row(name).getBoundingClientRect().top + 5, bubbles: true, ...keys }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+    const shortcut = (code: string) => window.dispatchEvent(new KeyboardEvent('keydown', { code, key: code.slice(3).toLowerCase(), metaKey: true, ctrlKey: true, bubbles: true }));
+
+    click('Artist');
+    click('Logo', { metaKey: true, ctrlKey: true });
+    const two = { picked: picked(), title: document.getElementById('editor-layer-title')!.textContent };
+    shortcut('KeyG');
+    const grouped = list();
+
+    click('Glow');
+    click('Mix and time', { shiftKey: true });
+    const run = picked();
+    page.click('editor-delete');
+    const deleted = list();
+
+    click('Ring');
+    click('Background', { metaKey: true, ctrlKey: true });
+    shortcut('KeyJ');
+    const duplicated = { list: list(), picked: picked() };
+
+    // The two copies, dragged together onto the group.
+    const from = row('Ring').getBoundingClientRect();
+    const onto = row('Group 1').getBoundingClientRect();
+    row('Ring').dispatchEvent(new MouseEvent('mousedown', { clientX: 60, clientY: from.top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 60, clientY: from.top - 20 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 60, clientY: onto.top + onto.height / 2 }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    const dragged = list();
+    page.click('undo');
+    await page.wait(100);
+    return { two, grouped, run, deleted, duplicated, dragged, undone: list(), mixes: page.tabs().length };
+  });
+  assert.deepEqual(seen.two, { picked: ['Artist', 'Logo'], title: 'Logo and 1 more selected' });
+  assert.deepEqual(seen.grouped, ['Glow', 'Now playing', 'Mix and time', 'Group 1', '  Artist', '  Logo', 'Ring', 'Background']);
+  assert.deepEqual(seen.run, ['Glow', 'Now playing', 'Mix and time']);
+  assert.deepEqual(seen.deleted, ['Group 1', '  Artist', '  Logo', 'Ring', 'Background']);
+  assert.equal(seen.mixes, 1);
+  assert.deepEqual(seen.duplicated, { list: ['Group 1', '  Artist', '  Logo', 'Ring', 'Ring', 'Background', 'Background'], picked: ['Ring', 'Background'] });
+  assert.deepEqual(seen.dragged, ['Group 1', '  Ring', '  Background', '  Artist', '  Logo', 'Ring', 'Background']);
+  assert.deepEqual(seen.undone, seen.duplicated.list);
+});
+
+test('a layer not selected is renamed with a double-click, as a real one arrives', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Logo')!;
+    const box = row.getBoundingClientRect();
+    const [x, y] = [box.left + 80, box.top + box.height / 2];
+    // Each event goes to whatever is under the pointer then; the browser sends a double-click
+    // only when both presses landed on the same element.
+    const press = () => {
+      const target = document.elementFromPoint(x, y)!;
+      target.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, button: 0, bubbles: true }));
+      document.elementFromPoint(x, y)!.dispatchEvent(new MouseEvent('mouseup', { clientX: x, clientY: y, button: 0, bubbles: true }));
+      document.elementFromPoint(x, y)!.dispatchEvent(new MouseEvent('click', { clientX: x, clientY: y, button: 0, bubbles: true }));
+      return target;
+    };
+    const first = press();
+    const second = press();
+    const same = first === second;
+    if (same) second.dispatchEvent(new MouseEvent('dblclick', { clientX: x, clientY: y, bubbles: true }));
+    const field = document.querySelector<HTMLInputElement>('.layer-rename');
+    if (field) {
+      field.value = 'Badge';
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    }
+    return { same, field: !!field, names: [...document.querySelectorAll('.layer-row .layer-name')].map((name) => name.textContent) };
+  });
+  assert.ok(seen.same, 'both presses landed on the same row');
+  assert.ok(seen.field, 'the name opened for typing');
+  assert.ok(seen.names.includes('Badge'));
+});
+
+test('a template says who made it, in the About tab and under the list of templates', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    const builtIn = page.text('template-about');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    page.click('editor-tab-about');
+    const set = (key: string, value: string) => {
+      const input = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`.about-input[data-key="${key}"]`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return input.parentElement!.querySelector('.setting-problem')!.textContent;
+    };
+    const kept = document.querySelector<HTMLTextAreaElement>('.about-input[data-key="description"]')!.value;
+    set('author', 'Suva');
+    const wrong = set('email', 'suva');
+    set('email', 'suva@example.com');
+    set('website', 'https://example.com/suva/');
+    set('description', 'A ring for the late hours.');
+    await page.wait(600);
+    page.click('editor-done');
+    const about = page.element('template-about');
+    return {
+      builtIn,
+      kept,
+      wrong,
+      shown: about.textContent,
+      links: [...about.querySelectorAll('a')].map((a) => a.getAttribute('href')),
+    };
+  });
+  assert.match(seen.builtIn, /^Spectrum ringBy DJ Mix MasterThe spectrum as a ring/);
+  assert.match(seen.kept, /^The spectrum as a ring/, 'a copy keeps what the original said, to change');
+  assert.equal(seen.wrong, 'An email address, such as name@example.com');
+  assert.equal(seen.shown, 'Spectrum ring copyBy Suva · example.com/suva · suva@example.comA ring for the late hours.');
+  assert.deepEqual(seen.links, ['https://example.com/suva/', 'mailto:suva@example.com']);
+  const [file] = await readdir(join(data, 'templates'));
+  assert.deepEqual(JSON.parse(readFileSync(join(data, 'templates', file), 'utf8')).about, {
+    author: 'Suva', email: 'suva@example.com', website: 'https://example.com/suva/', description: 'A ring for the late hours.',
+  });
+});
+
+test('the ⋯ menu beside the templates opens, closes, and leaves Delete for templates of your own', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    page.click('view-video');
+    const menu = page.element('template-menu');
+    page.element('template-more').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const opened = !menu.hidden;
+    const items = [...menu.querySelectorAll('button')].map((b) => `${b.textContent}${(b as HTMLButtonElement).disabled ? ' (off)' : ''}`);
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const escaped = menu.hidden;
+    page.element('template-more').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    const outside = menu.hidden;
+    return { opened, items, escaped, outside, pencil: page.element('template-edit').getAttribute('aria-label') };
+  });
+  assert.deepEqual(seen, {
+    opened: true,
+    items: ['Duplicate', 'Import…', 'Export…', 'Delete (off)'],
+    escaped: true,
+    outside: true,
+    pencil: 'Edit a copy of the template',
+  });
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {

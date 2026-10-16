@@ -99,9 +99,10 @@ function anchored(anchor: string, x: number, y: number, w: number, h: number): [
 
 export class FrameDrawer {
   readonly #canvas: Canvas;
-  /** Where layers draw: the picture's own context, or a layer's canvas while one with a blend done by hand is drawn. */
+  /** Where layers draw: the picture's own context, a group's, or a layer's canvas while one with a blend done by hand is drawn. */
   #ctx: Context;
-  readonly #main: Context;
+  /** The picture so far that an effect changes: the frame, or the canvas of the group being drawn. */
+  #surface: Canvas;
   /** Scratch canvases for effects and images, kept between frames. */
   #scratch: OffscreenCanvas | null = null;
   /** More scratch canvases, for effects that take the picture apart by colour. */
@@ -113,7 +114,7 @@ export class FrameDrawer {
   constructor(canvas: Canvas) {
     this.#canvas = canvas;
     this.#ctx = canvas.getContext('2d') as Context;
-    this.#main = this.#ctx;
+    this.#surface = canvas;
   }
 
   /** Where each layer was drawn in the last frame, by its place in the template; null for a layer not drawn, or without a box. */
@@ -149,43 +150,7 @@ export class FrameDrawer {
     ctx.fillRect(0, 0, width, height);
 
     this.boxes = layers.map(() => null);
-    layers.forEach((layer, index) => {
-      this.#index = index;
-      const params = layer.resolve(frame.music, frame.text);
-      if (params.visible === false) return;
-      const appear = this.#appearance(params, frame);
-      const opacity = (num(params, 'opacity') / 100) * appear;
-      if (opacity <= 0) return;
-      const memory = (this.#memories[index] ??= {});
-      // Linear burn, which the canvas has not: the layer is drawn on its own, then burnt in.
-      const burn = str(params, 'blend') === 'linear burn';
-      if (burn) this.#ctx = this.#layerCanvas();
-      const into = this.#ctx;
-      into.save();
-      // A burnt layer is drawn whole, and mixed in at its opacity once burnt.
-      into.globalAlpha = burn ? 1 : Math.min(1, opacity);
-      into.globalCompositeOperation = burn ? 'source-over' : BLENDS[str(params, 'blend')] ?? 'source-over';
-      switch (layer.type) {
-        case 'gradient': this.#gradient(params, frame); break;
-        case 'particles': this.#particles(params, frame); break;
-        case 'image': this.#image(params, frame); break;
-        case 'text': this.#text(params, frame, memory); break;
-        case 'spectrum': this.#spectrum(params, frame, memory); break;
-        case 'waveform': this.#waveform(params, frame); break;
-        case 'glow': this.#glow(params, opacity); break;
-        case 'split': this.#split(params); break;
-        case 'glitch': this.#glitch(params, frame); break;
-        case 'adjust': this.#filtered(`brightness(${Math.max(0, num(params, 'brightness'))}%) contrast(${Math.max(0, num(params, 'contrast'))}%)`); break;
-        case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
-        case 'kaleidoscope': this.#kaleidoscope(params); break;
-        case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#canvas.height); break;
-      }
-      into.restore();
-      if (burn) {
-        this.#ctx = this.#main;
-        this.#linearBurn(Math.min(1, opacity));
-      }
-    });
+    this.#drawRange(layers, 0, layers.length, frame);
     // The picture follows the sound's fades: black where it is silent, by the same curve.
     const shown = frame.shown ?? 1;
     if (shown < 1) {
@@ -196,6 +161,89 @@ export class FrameDrawer {
       ctx.fillRect(0, 0, width, height);
       ctx.globalAlpha = 1;
     }
+  }
+
+  /** Draws layers `start` to `end` of the list, a group's with its layers in it. */
+  #drawRange(layers: PreparedLayer[], start: number, end: number, frame: Frame) {
+    for (let index = start; index < end;) {
+      const inside = layers[index].type === 'group' ? Math.max(0, Math.min(layers[index].size, end - index - 1)) : 0;
+      this.#drawLayer(layers, index, inside, frame);
+      index += 1 + inside;
+    }
+  }
+
+  #drawLayer(layers: PreparedLayer[], index: number, inside: number, frame: Frame) {
+    const layer = layers[index];
+    this.#index = index;
+    const params = layer.resolve(frame.music, frame.text);
+    if (params.visible === false) return;
+    const appear = this.#appearance(params, frame);
+    const opacity = (num(params, 'opacity') / 100) * appear;
+    if (opacity <= 0) return;
+    const memory = (this.#memories[index] ??= {});
+    // A group's layers are drawn first, on a canvas of their own, which is then laid on the picture as one layer.
+    const group = layer.type === 'group' ? this.#drawGroup(layers, index + 1, index + 1 + inside, frame) : null;
+    this.#index = index;
+    // Linear burn, which the canvas has not: the layer is drawn on its own, then burnt in.
+    const burn = str(params, 'blend') === 'linear burn';
+    const [beneath, onto] = [this.#surface, this.#ctx];
+    if (burn) this.#ctx = this.#layerCanvas();
+    const into = this.#ctx;
+    into.save();
+    // A burnt layer is drawn whole, and mixed in at its opacity once burnt.
+    into.globalAlpha = burn ? 1 : Math.min(1, opacity);
+    into.globalCompositeOperation = burn ? 'source-over' : BLENDS[str(params, 'blend')] ?? 'source-over';
+    switch (layer.type) {
+      case 'group': into.drawImage(group!, 0, 0); break;
+      case 'gradient': this.#gradient(params, frame); break;
+      case 'particles': this.#particles(params, frame); break;
+      case 'image': this.#image(params, frame); break;
+      case 'text': this.#text(params, frame, memory); break;
+      case 'spectrum': this.#spectrum(params, frame, memory); break;
+      case 'waveform': this.#waveform(params, frame); break;
+      case 'glow': this.#glow(params, opacity); break;
+      case 'split': this.#split(params); break;
+      case 'glitch': this.#glitch(params, frame); break;
+      case 'adjust': this.#filtered(`brightness(${Math.max(0, num(params, 'brightness'))}%) contrast(${Math.max(0, num(params, 'contrast'))}%)`); break;
+      case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
+      case 'kaleidoscope': this.#kaleidoscope(params); break;
+      case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#canvas.height); break;
+    }
+    into.restore();
+    if (burn) {
+      this.#ctx = onto;
+      this.#linearBurn(Math.min(1, opacity), beneath, onto);
+    }
+  }
+
+  /** How deep in groups the drawing is; each depth has its own canvas. */
+  #depth = 0;
+  #groupCanvases: OffscreenCanvas[] = [];
+
+  /**
+   * Draws a group's layers on a clear canvas of their own and gives it. While
+   * they are drawn, that canvas is the picture: effects in the group change
+   * the group's layers beneath them, and nothing outside it.
+   */
+  #drawGroup(layers: PreparedLayer[], start: number, end: number, frame: Frame): OffscreenCanvas {
+    const { width, height } = this.#canvas;
+    const depth = this.#depth++;
+    let canvas = this.#groupCanvases[depth];
+    if (!canvas || canvas.width !== width || canvas.height !== height) canvas = this.#groupCanvases[depth] = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d')!;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none';
+    ctx.clearRect(0, 0, width, height);
+    const [surface, before] = [this.#surface, this.#ctx];
+    this.#surface = canvas;
+    this.#ctx = ctx;
+    this.#drawRange(layers, start, end, frame);
+    this.#surface = surface;
+    this.#ctx = before;
+    this.#depth--;
+    return canvas;
   }
 
   /** How far a layer is shown at this moment: its time on screen, and its fades in and out. */
@@ -237,7 +285,7 @@ export class FrameDrawer {
     s.globalCompositeOperation = 'copy';
     s.globalAlpha = 1;
     s.filter = 'none';
-    s.drawImage(this.#canvas, 0, 0);
+    s.drawImage(this.#surface, 0, 0);
     return copy;
   }
 
@@ -745,12 +793,33 @@ export class FrameDrawer {
     const copy = this.#copyOfPicture();
     const result = this.#extraCanvas(0);
     this.#blurInto(copy, result, radius);
-    this.#ctx.drawImage(result, 0, 0);
+    this.#putBack(result);
+  }
+
+  /**
+   * Lays an effect's result down. At the normal blend it takes the place of
+   * the picture beneath, mixed in by the layer's opacity: what was beneath is
+   * faded by as much as the result is added. Laid over it instead, the
+   * picture beneath would show wherever the result is see-through, as it is
+   * in a group: the spectrum a kaleidoscope was made from, under its pattern.
+   * With any other blend, the result is blended with what is beneath.
+   */
+  #putBack(result: OffscreenCanvas) {
+    const ctx = this.#ctx;
+    if (ctx.globalCompositeOperation !== 'source-over') return void ctx.drawImage(result, 0, 0);
+    const { width, height } = this.#canvas;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.drawImage(result, 0, 0);
+    ctx.restore();
   }
 
   /** The picture beneath, through one of the canvas's filters. */
   #filtered(filter: string) {
-    const ctx = this.#ctx;
     const copy = this.#copyOfPicture();
     const result = this.#extraCanvas(0);
     const r = result.getContext('2d')!;
@@ -760,7 +829,7 @@ export class FrameDrawer {
     r.filter = filter;
     r.drawImage(copy, 0, 0);
     r.filter = 'none';
-    ctx.drawImage(result, 0, 0);
+    this.#putBack(result);
   }
 
   /**
@@ -773,26 +842,27 @@ export class FrameDrawer {
     const one = this.#extraCanvas(1);
     const c = one.getContext('2d')!;
     const r = result.getContext('2d')!;
+    // From clear, not black: in a group, where nothing is drawn stays see-through.
     r.setTransform(1, 0, 0, 1, 0, 0);
     r.globalAlpha = 1;
-    r.globalCompositeOperation = 'copy';
-    r.fillStyle = '#000000';
-    r.fillRect(0, 0, width, height);
+    r.globalCompositeOperation = 'source-over';
+    r.clearRect(0, 0, width, height);
     r.globalCompositeOperation = 'lighter';
     ['#ff0000', '#00ff00', '#0000ff'].forEach((only, channel) => {
       c.setTransform(1, 0, 0, 1, 0, 0);
       c.globalAlpha = 1;
-      c.globalCompositeOperation = 'copy';
-      c.fillStyle = '#000000';
-      c.fillRect(0, 0, width, height);
       c.globalCompositeOperation = 'source-over';
+      c.clearRect(0, 0, width, height);
       place(c, channel);
       c.drawImage(source, 0, 0);
-      // Keeps this channel alone.
+      // Keeps this channel alone, and only where the picture is.
       c.setTransform(1, 0, 0, 1, 0, 0);
       c.globalCompositeOperation = 'multiply';
       c.fillStyle = only;
       c.fillRect(0, 0, width, height);
+      c.globalCompositeOperation = 'destination-in';
+      place(c, channel);
+      c.drawImage(source, 0, 0);
       r.drawImage(one, 0, 0);
     });
   }
@@ -822,7 +892,7 @@ export class FrameDrawer {
         c.setTransform(1, 0, 0, 1, Math.cos(angle) * amount * sign, Math.sin(angle) * amount * sign);
       }
     });
-    this.#ctx.drawImage(result, 0, 0);
+    this.#putBack(result);
   }
 
   /**
@@ -864,7 +934,7 @@ export class FrameDrawer {
       const dx = Math.round((random(12 + i * 3) * 2 - 1) * shift);
       r.drawImage(torn, 0, y, width, h, dx, y, width, h);
     }
-    this.#ctx.drawImage(result, 0, 0);
+    this.#putBack(result);
   }
 
   /**
@@ -890,10 +960,8 @@ export class FrameDrawer {
     const reach = Math.hypot(width, height) * 2;
     r.setTransform(1, 0, 0, 1, 0, 0);
     r.globalAlpha = 1;
-    r.globalCompositeOperation = 'copy';
-    r.fillStyle = '#000000';
-    r.fillRect(0, 0, width, height);
     r.globalCompositeOperation = 'source-over';
+    r.clearRect(0, 0, width, height);
     // The picture mirrored past its edges, without end: a slice reaching further than the picture does
     // goes on into its reflection rather than into black.
     const tile = this.#extraCanvas(5, width * 2, height * 2);
@@ -926,7 +994,7 @@ export class FrameDrawer {
       r.fillRect(cx - reach / zoom, cy - reach / zoom, (reach * 2) / zoom, (reach * 2) / zoom);
       r.restore();
     }
-    this.#ctx.drawImage(result, 0, 0);
+    this.#putBack(result);
   }
 
   /** A clear canvas the size of the picture for a layer to draw on alone, to be blended by hand. */
@@ -947,7 +1015,7 @@ export class FrameDrawer {
    * layer's inverse added where the layer is, and the sum inverted back,
    * 1 - ((1 - beneath) + (1 - layer)).
    */
-  #linearBurn(amount: number) {
+  #linearBurn(amount: number, beneath: Canvas, onto: Context) {
     const { width, height } = this.#canvas;
     const layer = this.#extraCanvas(6);
     // The layer's inverse, where the layer is: white with the layer taken away by difference, then cut to its shape.
@@ -967,7 +1035,7 @@ export class FrameDrawer {
     b.setTransform(1, 0, 0, 1, 0, 0);
     b.globalAlpha = 1;
     b.globalCompositeOperation = 'copy';
-    b.drawImage(this.#canvas, 0, 0);
+    b.drawImage(beneath, 0, 0);
     b.fillStyle = '#ffffff';
     b.globalCompositeOperation = 'difference';
     b.fillRect(0, 0, width, height);
@@ -975,7 +1043,7 @@ export class FrameDrawer {
     b.drawImage(inverse, 0, 0);
     b.globalCompositeOperation = 'difference';
     b.fillRect(0, 0, width, height);
-    const ctx = this.#main;
+    const ctx = onto;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = amount;

@@ -48,6 +48,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/music.ts` | The music values a video frame gets, read from `features.ts`'s output |
 | `src/visuals/draw.ts` | Draws a frame of a template on a 2D canvas, for the preview and the export alike |
 | `src/visuals/templates.ts` | The templates that come with the app |
+| `src/visuals/layer-tree.ts` | Layer groups: a template's flat list of layers as a tree, and back |
 | `src/visuals/motion.ts` | "Moves with…": a choice of what a setting follows, written as an expression and read back |
 | `src/visuals/fonts.ts` | Fonts for a video's text: loading them before drawing, and the ones on this computer |
 | `src/app/renderer/font-picker.ts` | The font list of the Video view, each name in its own face |
@@ -220,7 +221,9 @@ Do not write test data there.
   the picture and the levelling settings with the template's fields; the
   recording timeline and the transport stay. A mix's template and fields are
   kept with it (`Mix.visuals`), so they are saved and undone like any other
-  setting. The view draws only while shown.
+  setting. The view draws only while shown, and while the music is paused
+  only when what it shows has changed (`#stale` in `video-view.ts`, set by
+  edits and by pictures, fonts and the music's analysis coming in).
 - **Templates come from two places.** The built-in ones (`visuals/templates.ts`)
   are read only; the user's own are files in the data folder, copied from a
   built-in one or imported, and known to the window only (`USER_TEMPLATES` in

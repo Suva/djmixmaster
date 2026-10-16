@@ -129,15 +129,22 @@
         </div>
         <div class="control" id="template-row">
           <div class="control-head"><label for="template">Template</label></div>
-          <select id="template"></select>
+          <div class="template-line">
+            <select id="template"></select>
+            <button id="template-edit" class="icon" title="Edit this template: its layers and their settings" aria-label="Edit the template"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3-8 8H2.5v-3zM9 4l3 3"/></svg></button>
+            <div class="template-more-holder">
+              <button id="template-more" class="icon" title="More: duplicate, import, export or delete templates" aria-label="More for templates" aria-haspopup="menu"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg></button>
+              <div id="template-menu" class="template-menu" role="menu" hidden>
+                <button id="template-duplicate" role="menuitem" title="Make a copy of this template that is yours to change">Duplicate</button>
+                <button id="template-import" role="menuitem" title="Add a template from a file someone shared, with the pictures packed into it">Import…</button>
+                <button id="template-export" role="menuitem" title="Save this template as a file to share, with its pictures packed into it">Export…</button>
+                <hr>
+                <button id="template-delete" role="menuitem" title="Move this template of yours to the Trash. Mixes that use it go back to the first template.">Delete</button>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="template-actions">
-          <button id="template-edit" title="Change this template: its layers and their settings">Edit</button>
-          <button id="template-duplicate" title="Make a copy of this template that is yours to change">Duplicate</button>
-          <button id="template-delete" title="Move this template of yours to the Trash. Mixes that use it go back to the first template.">Delete</button>
-          <button id="template-import" title="Add a template from a file someone shared, with the pictures packed into it">Import…</button>
-          <button id="template-export" title="Save this template as a file to share, with its pictures packed into it">Export…</button>
-        </div>
+        <div id="template-about"></div>
         <div class="control" id="template-name-row" hidden>
           <div class="control-head"><label for="template-name">Name of the template</label></div>
           <input id="template-name" class="field-text" type="text" spellcheck="false">
@@ -146,6 +153,7 @@
           <div class="toggle editor-tabs" role="tablist">
             <button id="editor-tab-layers" class="on" role="tab" title="What the template draws, layer on layer">Layers</button>
             <button id="editor-tab-fields" role="tab" title="What someone using the template fills in">Fields</button>
+            <button id="editor-tab-about" role="tab" title="Who made the template, and what it is">About</button>
           </div>
           <div id="editor-layers-pane">
           <div class="editor-section">
@@ -154,12 +162,21 @@
           </div>
           <div id="editor-layer-top"></div>
           <div id="editor-layers" role="list"></div>
-          <div class="editor-actions">
-            <select id="editor-add" title="Add a layer in front of the selected one"><option value="">Add a layer…</option></select>
-            <button id="editor-duplicate" title="Make a copy of the selected layer, in front of it">Duplicate</button>
-            <button id="editor-delete" title="Remove the selected layer (Backspace)">Delete</button>
+          <div class="editor-actions layer-actions">
+            <div class="add-holder">
+              <button id="editor-add" class="icon" title="Add a layer, in front of the selected one" aria-label="Add a layer"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button>
+              <div id="editor-add-menu" class="add-menu" hidden></div>
+            </div>
+            <button id="editor-group" class="icon" title="Group (⌘G): put the selected layer in a group of its own" aria-label="Group"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 4.25v8h12.5v-6.5H8L6.5 4.25z"/></svg></button>
+            <button id="editor-ungroup" class="icon" hidden title="Ungroup (Shift+⌘G): take the layers out of this group, and the group away" aria-label="Ungroup"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.75 4.25v8h12.5v-6.5H8L6.5 4.25zM5.5 9h5"/></svg></button>
+            <button id="editor-duplicate" class="icon" title="Duplicate (⌘J): a copy of the selected layer, in front of it" aria-label="Duplicate"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 5.5h8v8h-8zM10.5 5.5v-3h-8v8h3"/></svg></button>
+            <button id="editor-delete" class="icon" title="Delete the selected layer (Backspace); a group with all in it" aria-label="Delete"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5h11M6.25 4.5V2.75h3.5V4.5M4 4.5l.6 9h6.8l.6-9M6.75 7.25v3.5M9.25 7.25v3.5"/></svg></button>
           </div>
           <div id="editor-layer"></div>
+          </div>
+          <div id="editor-about-pane" hidden>
+            <p class="note">Shown under the list of templates, and kept with the template when it is shared.</p>
+            <div id="editor-about"></div>
           </div>
           <div id="editor-fields-pane" hidden>
             <p class="note">What someone using the template fills in, in this order. A setting uses a number or a colour by its name in an expression, anything else between percent signs.</p>

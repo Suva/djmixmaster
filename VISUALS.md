@@ -285,6 +285,17 @@ values into the ones a frame gets. None draws anything yet.
   a kaleidoscope (a slice round the layer's position repeated all the way
   round, filled from the picture mirrored past its edges so that no corner is
   left black).
+- **Groups** are layers of the kind `group` whose `size` says how many of the
+  layers after it are theirs, so that the list stays flat and everything that
+  knows a layer by its place in it (outlines on the picture, what a layer
+  remembers between frames, the editor's selection) works as before
+  (`layer-tree.ts`). A group's layers are drawn on a clear canvas of its own,
+  which effects in it then take as the picture, and laid on the picture with
+  the group's opacity and blend. Effects start from clear rather than black,
+  so that inside a group what is not drawn stays see-through; and at the
+  normal blend an effect's result takes the place of the picture beneath
+  (`#putBack`), rather than being laid over it, where the layers it was made
+  from would show through what is see-through in it.
 - **Blends** are the canvas's own, by their names in an image editor (add is
   linear dodge), except linear burn, which the canvas has not: such a layer
   is drawn on a canvas of its own and burnt in by inverting, adding and

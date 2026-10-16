@@ -890,6 +890,13 @@ function recentMenu(): MenuItemConstructorOptions[] {
 }
 
 ipcMain.on('open-download-page', () => shell.openExternal(DOWNLOAD_PAGE));
+// A template's website or email, on a click: given to the browser or the mail program, and nothing else
+// is, as a template from anywhere could name anything.
+ipcMain.on('open-link', (_event, url: string) => {
+  try {
+    if (['https:', 'http:', 'mailto:'].includes(new URL(String(url)).protocol)) shell.openExternal(String(url));
+  } catch {}
+});
 ipcMain.on('skip-version', (_event, version: string) => skipVersion(String(version)));
 
 function buildMenu() {

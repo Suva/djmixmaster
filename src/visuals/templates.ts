@@ -25,6 +25,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
     template: {
       format: 1,
       name: 'Glitter',
+      about: { author: 'DJ Mix Master', description: 'A glow in your colour and glitter that thickens with the energy and bursts on the kick, round your logo and the artist\'s name.' },
       fields: [
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#b43cff' },
         { key: 'font', label: 'Font', kind: 'font', default: 'Unbounded' },
@@ -81,6 +82,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
     template: {
       format: 1,
       name: 'Spectrum ring',
+      about: { author: 'DJ Mix Master', description: 'The spectrum as a ring round your logo, from your colour to its opposite, over a soft background in both.' },
       fields: [
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#3ddc97' },
         { key: 'font', label: 'Font', kind: 'font', default: 'Orbitron' },
@@ -132,6 +134,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
     template: {
       format: 1,
       name: 'Waveform',
+      about: { author: 'DJ Mix Master', description: 'The level of the last seconds as a wave across the picture, a larger one behind, a spectrum underneath, and the time.' },
       fields: [
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#ff6a3d' },
         { key: 'font', label: 'Font', kind: 'font', default: 'Bebas Neue' },
@@ -189,6 +192,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
     template: {
       format: 1,
       name: 'Photo',
+      about: { author: 'DJ Mix Master', description: 'Your photo, drifting a little and swelling with the bass, faint dust falling, the artist in the corner and the spectrum along the bottom.' },
       fields: [
         { key: 'photo', label: 'Photo', kind: 'image', default: '' },
         { key: 'colour1', label: 'Colour', kind: 'colour', default: '#f4efe6' },

@@ -19,6 +19,15 @@ are under "Not released yet" and appear there once they are.
 - **New effects for videos:** a colour split, straight or growing towards the
   edges like a lens; a digital glitch; brightness and contrast; hue and
   saturation; blur; and a kaleidoscope.
+- **Templates say who made them:** an author, email, website and description,
+  set in the editor's About tab and shown under the list of templates. The
+  website and email open in your browser and mail program.
+- **The video's picture stands still while the music is paused**, and is drawn
+  again only when something changes, sparing the computer.
+- **Layer groups** in the template editor: group layers to fade, blend or hide
+  them together, or to keep an effect to just them. ⌘J duplicates a layer,
+  ⌘G groups it, as in an image editor, and the buttons under the layers are
+  icons now.
 - **More ways to blend a layer** into what is beneath it: colour dodge and
   burn, linear burn, lighten and darken, soft and hard light, exclusion, and
   hue, saturation, colour and luminosity. Like everything else, they can follow the music.

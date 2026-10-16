@@ -11,7 +11,7 @@
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { toHex, type Colour } from '../../visuals/colour.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, LAYER_TYPES, TEXT_VARIABLES,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, LAYER_TYPES, TEXT_VARIABLES,
   type Layer, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
@@ -84,8 +84,8 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
     const summary = document.createElement('summary');
     summary.textContent = title;
     details.append(summary);
-    const all: Record<string, ParamSpec> = { ...COMMON_PARAMS, ...spec.params };
-    for (const key of keys) details.append(setting(key, all[key]));
+    const all = settingsOf(spec);
+    for (const key of keys) if (all[key]) details.append(setting(key, all[key]));
     return details;
   };
 
@@ -477,12 +477,14 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
   }
 
   if (only) {
-    const all: Record<string, ParamSpec> = { ...COMMON_PARAMS, ...spec.params };
+    const all = settingsOf(spec);
     for (const key of only) element.append(setting(key, all[key]));
   } else {
+    // A group of settings with none that apply (a layer group has no placement) is left out.
+    const all = settingsOf(spec);
     const own = Object.keys(spec.params);
-    element.append(group(spec.label, own, true));
-    for (const [title, keys, open] of GROUPS) element.append(group(title, keys, open));
+    if (own.length) element.append(group(spec.label, own, true));
+    for (const [title, keys, open] of GROUPS) if (keys.some((key) => all[key])) element.append(group(title, keys, open));
   }
   return {
     element,

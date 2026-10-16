@@ -222,12 +222,24 @@ template drawn to the music, showing the mix's artist, with a few things to
 fill in, such as a colour and a logo. The recording timeline, the playback controls and
 a strip of the mix stay at hand. Four templates come with the app: Glitter,
 Spectrum ring, Waveform, and Photo, which sets the mix over a photo of your own. What is chosen is kept with the mix.
+While the music is paused the picture stands still, and is drawn again only
+when something in it changes, so a template heavy with effects costs nothing
+while you stop to think.
 
-The templates that come with the app stay as they are. **Duplicate** makes a
-copy that is yours. **Edit** opens it in the editor, in a wider panel beside
+Under the list of templates are the chosen one's name, who made it and what it
+is. The templates that come with the app stay as they are. The **⋯** beside
+the list has **Duplicate**, which makes a copy that is yours, Import, Export and
+Delete. The **pencil** opens a template of yours in the editor, in a wider panel beside
 the picture, which shows every change as it is made: its layers, front-most at
-the top, can be hidden, added, duplicated, deleted, renamed and dragged to
-reorder. Above the list are the selected layer's blend and opacity, as in an
+the top, can be hidden, added, duplicated (⌘J), deleted, renamed and dragged to
+reorder. Layers can be put in **groups** (⌘G, or dragged onto one; Shift+⌘G
+takes them out again): a group's layers are drawn together and laid on the
+picture as one, with the group's opacity and blend, an effect in a group
+changes only what is beneath it in the group, and hiding or deleting the group
+takes all of it. Several layers can be selected at once, with ⌘-click or
+Shift-click, to group, delete, duplicate or drag together. The **+** under the list adds a layer of any kind, with a
+search to find one by name; the list's bottom edge can be dragged to make it
+taller or shorter. Above the list are the selected layer's blend and opacity, as in an
 image editor: the opacity is a value in a box, which opens its full control on
 a click or while the pointer rests on it. Below the list are the rest of its
 settings. Any number box can be dragged sideways to change it (with Shift, ten
@@ -252,9 +264,13 @@ or a corner to resize it (with Shift, keeping its proportions). A click on the
 picture selects the layer there. The **Fields** tab lists what someone using the template
 fills in: each field's label, kind (colour, number, text, picture, font or a
 list), the name settings use it by, and its default. Renaming a field renames
-it wherever the template uses it. While the editor is open, undo works on the
-template. **Edit a copy**
-on a template that comes with the app duplicates it first. **Export** saves a
+it wherever the template uses it. The **About** tab says who made the template
+and what it is (author, email, website, description); that shows under the list
+of templates, and goes with the template when it is shared, where the website
+and email open in your own browser and mail program when clicked (the app
+itself still contacts nothing). While the editor is open, undo works on the
+template. The pencil on a template that comes with the app edits a copy of
+it. The editor is also where a template is renamed. **Export** saves a
 template as a `.djmtemplate` file to share, with any pictures it uses packed
 inside, and **Import** adds one someone shared. **Delete** moves one of yours
 to the Trash.

@@ -300,13 +300,11 @@ body.video #mastering-settings { display: none; }
 #video-settings input[type="color"] { width: 100%; height: 30px; padding: 0 2px; border: 1px solid var(--border); border-radius: 6px; background: #262a33; }
 #video-settings .field-text { width: 100%; font: inherit; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; user-select: text; }
 #video-settings .field-text:focus { outline: 1px solid var(--accent); }
-.template-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 16px; }
-.template-actions button { flex: 1 1 calc(50% - 3px); padding: 4px 9px; font-size: 12px; }
 #template-name-row[hidden] { display: none; }
 
 /* The template editor: the panel is wider, and the mix's fields give way to the template's layers. */
 body.editing aside { width: 420px; }
-body.editing #template-row, body.editing .template-actions, body.editing #video-fields, body.editing #video-settings > .note { display: none; }
+body.editing #template-row, body.editing #video-fields, body.editing #video-settings > .note { display: none; }
 .video-head { display: flex; align-items: center; justify-content: space-between; }
 .video-head button { padding: 4px 12px; font-size: 12px; }
 .video-head button[hidden] { display: none; }
@@ -314,7 +312,8 @@ body.editing #template-row, body.editing .template-actions, body.editing #video-
 .editor-section { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 0 6px; }
 .editor-section h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .editor-section .note { margin: 0; font-size: 11px; color: var(--muted); }
-#editor-layers { display: flex; flex-direction: column; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--lane); max-height: 260px; overflow-y: auto; }
+/* Tall from the start, as an image editor's; its bottom edge can be dragged to make it taller or shorter. */
+#editor-layers { display: flex; flex-direction: column; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--lane); height: max(220px, 40vh); min-height: 120px; overflow-y: auto; resize: vertical; }
 .layer-row { display: flex; align-items: center; gap: 8px; padding: 3px 6px 3px 3px; border-radius: 4px; cursor: grab; user-select: none; border-top: 2px solid transparent; border-bottom: 2px solid transparent; }
 .layer-row:hover { background: rgba(255, 255, 255, 0.04); }
 .layer-row.on { background: rgba(61, 220, 151, 0.16); }
@@ -510,3 +509,59 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
 /* Number boxes that change when dragged sideways. */
 input.scrub:not(:focus), button.scrub { cursor: ew-resize; }
 body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
+
+/* Under the list of layers: icons, as an image editor has them; the + opens a menu of kinds. */
+.layer-actions { align-items: center; gap: 2px; }
+.layer-actions button.icon { width: 32px; height: 28px; padding: 0; }
+.layer-actions button.icon[hidden] { display: none; }
+.add-holder { position: relative; }
+/* Placed against the window (by the editor), so the panel's scrolling cannot cut it off. */
+.add-menu {
+  position: fixed; z-index: 20; width: 230px; display: flex; flex-direction: column; padding: 4px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.add-menu-search { flex: none; margin: 2px 2px 4px; font: inherit; font-size: 12px; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; user-select: text; }
+.add-menu-search:focus { outline: 1px solid var(--accent); }
+.add-menu-items { flex: 1; min-height: 0; overflow-y: auto; }
+.add-menu-none { margin: 8px; font-size: 12px; color: var(--muted); }
+#editor-add.on { color: var(--accent); }
+.add-menu[hidden] { display: none; }
+.add-menu-heading { margin: 6px 8px 2px; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.add-menu button { display: block; width: 100%; text-align: left; padding: 5px 8px; font-size: 12px; background: none; border: none; border-radius: 4px; }
+.add-menu button:hover, .add-menu button:focus { background: rgba(61, 220, 151, 0.16); outline: none; }
+/* Groups in the list: a fold, their layers indented under them; a layer dragged onto one goes in. */
+button.icon.layer-fold { flex: none; width: 16px; height: 22px; margin-left: -4px; padding: 0; background: none; border: none; }
+button.icon.layer-fold svg { width: 10px; height: 10px; }
+.layer-row.group .layer-name { font-weight: 600; }
+.layer-row.drop-into { outline: 1px solid var(--accent); outline-offset: -1px; background: rgba(61, 220, 151, 0.1); }
+
+/* Who made a template and what it is: under the list of templates, and the editor's About tab. */
+#template-about { margin: 2px 0 14px; font-size: 12px; color: var(--muted); }
+#template-about p { margin: 0 0 4px; line-height: 1.45; }
+#template-about .about-description { color: var(--text); opacity: 0.85; }
+#template-about a { color: var(--accent); cursor: pointer; text-decoration: none; }
+#template-about a:hover { text-decoration: underline; }
+body.editing #template-about { display: none; }
+#editor-about-pane[hidden] { display: none; }
+#editor-about-pane > .note { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.about-line { display: block; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+.about-line > span { display: block; margin-bottom: 3px; }
+.about-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; user-select: text; }
+textarea.about-input { resize: vertical; line-height: 1.45; }
+.about-input:focus { outline: 1px solid var(--accent); }
+
+/* The template line: the list, a pencil to edit, and ⋯ for the rest; under it, its name, author and description. */
+.template-line { display: flex; align-items: center; gap: 4px; }
+.template-line select { flex: 1; min-width: 0; }
+.template-line button.icon { flex: none; width: 32px; height: 30px; }
+.template-line button.icon.on { color: var(--accent); }
+.template-more-holder { position: relative; }
+.template-menu {
+  position: absolute; z-index: 20; top: calc(100% + 4px); right: 0; width: 170px; padding: 4px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.template-menu[hidden] { display: none; }
+.template-menu button { display: block; width: 100%; text-align: left; padding: 6px 9px; font-size: 12px; background: none; border: none; border-radius: 4px; }
+.template-menu button:hover:not(:disabled), .template-menu button:focus { background: rgba(61, 220, 151, 0.16); outline: none; }
+.template-menu hr { margin: 4px 2px; border: none; border-top: 1px solid var(--border); }
+#template-about .about-name { margin: 2px 0 2px; font-size: 13px; font-weight: 600; color: var(--text); }

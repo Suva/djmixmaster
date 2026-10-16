@@ -21,6 +21,7 @@ const api: Api = {
   onProgress: (listener) => ipcRenderer.on('progress', (_event, fraction: number) => listener(fraction)),
   onUpdateAvailable: (listener) => ipcRenderer.on('update-available', (_event, version: string) => listener(version)),
   openDownloadPage: () => ipcRenderer.send('open-download-page'),
+  openLink: (url) => ipcRenderer.send('open-link', url),
   skipVersion: (version) => ipcRenderer.send('skip-version', version),
   onMenu: (listener) => ipcRenderer.on('menu', (_event, command: MenuCommand) => listener(command)),
   onOpenFiles: (listener) => ipcRenderer.on('open-files', (_event, paths: string[]) => listener(paths)),

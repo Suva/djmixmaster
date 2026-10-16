@@ -134,6 +134,7 @@ const videoView = new VideoView({
   api,
   mix: () => (recording ? videoMixOf(mix) : null),
   playhead: () => player.time,
+  playing: () => !player.paused,
   seek: (seconds) => seek(clamp(seconds, edges(mix).start * HOP_SECONDS, edges(mix).end * HOP_SECONDS)),
   levels: (points) => {
     // The loudest moment in each step of the mix, as the recording timeline
@@ -1829,6 +1830,12 @@ window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
   // While a dialog is up, the keys belong to it.
   if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open) return;
+  // While a template is edited, as in an image editor: ⌘J duplicates a layer, ⌘G groups it, Shift+⌘G ungroups.
+  if (videoView.editing && (event.metaKey || event.ctrlKey) && (event.code === 'KeyJ' || event.code === 'KeyG')) {
+    event.preventDefault();
+    videoView.layerCommand(event.code === 'KeyJ' ? 'duplicate' : event.shiftKey ? 'ungroup' : 'group');
+    return;
+  }
   // While a template is edited, Delete is for its layers, wherever one was selected; never the mix.
   // A number box or a list keeps its keys.
   if (videoView.editing && (event.code === 'Backspace' || event.code === 'Delete')) {
@@ -2476,6 +2483,10 @@ const HELP: [string, [string, string][]][] = [
     ['Click the picture', 'Select the layer there'],
     ['Drag a layer\'s outline, or a corner', 'Move it, or resize it; with Shift, keeping its proportions'],
     ['Backspace', 'Delete the selected layer'],
+    [`${COMMAND}J`, 'Duplicate the selected layer'],
+    [`${COMMAND}G, Shift+${COMMAND}G`, 'Group the selected layer, ungroup a group'],
+    ['Drag a layer onto a group', 'Put it in the group'],
+    [`${COMMAND}-click, Shift-click a layer`, 'Select several, or a run of them, to group, delete, duplicate or drag together'],
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo changes to the template'],
   ]],
   ['Everything else', [
@@ -2536,7 +2547,8 @@ api.onMenu(async (command) => {
   }
   // While typing in a field, undo belongs to the text.
   const field = document.activeElement;
-  if (field instanceof HTMLInputElement && field.type === 'text') document.execCommand(command);
+  const typing = field instanceof HTMLTextAreaElement || (field instanceof HTMLInputElement && ['text', 'email', 'url', 'search', 'number'].includes(field.type));
+  if (typing) document.execCommand(command);
   else if (command === 'undo') undo();
   else redo();
 });

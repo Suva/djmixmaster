@@ -18,6 +18,7 @@
 // Kept free of Node imports: the window checks templates and draws from them.
 
 import { parseHex, toHex, type Colour } from './colour.ts';
+import { flatten, treeOf, type LayerNode } from './layer-tree.ts';
 import { compile, type Compiled, type Kind, type Problem, type Value } from './expression.ts';
 
 export const TEMPLATE_FORMAT = 1;
@@ -69,6 +70,8 @@ export interface LayerSpec {
   /** Layers that change what is beneath them instead of drawing their own picture. */
   effect?: boolean;
   params: Record<string, ParamSpec>;
+  /** Which of the settings every layer has apply; all of them when not given. */
+  common?: string[];
 }
 
 /** The kinds of layer, with the parameters of each besides the common ones. The first set; see VISUALS.md for more. */
@@ -190,6 +193,12 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       tint: colour('Tint', '#ffffff'),
     },
   },
+  group: {
+    label: 'Group',
+    // Its layers are drawn together, then laid on the picture as one: shown or not, faded, mixed in.
+    params: {},
+    common: ['visible', 'opacity', 'blend', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
   split: {
     label: 'Colour split',
     effect: true,
@@ -246,6 +255,15 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
 };
 
 /**
+ * Every setting a layer of this kind has: those every layer has that apply to
+ * it, then its own.
+ */
+export function settingsOf(spec: LayerSpec): Record<string, ParamSpec> {
+  const common = spec.common ? Object.fromEntries(spec.common.map((key) => [key, COMMON_PARAMS[key]])) : COMMON_PARAMS;
+  return { ...common, ...spec.params };
+}
+
+/**
  * The fonts a template can name, and what each stands for. Only fonts every
  * system has, under one name or another, so a template looks the same
  * wherever it is used.
@@ -277,6 +295,8 @@ export interface Layer {
   type: string;
   name?: string;
   params: Record<string, ParamValue>;
+  /** For a group: how many of the layers right after it are in it (see layer-tree.ts). */
+  size?: number;
 }
 
 export interface Template {
@@ -290,6 +310,35 @@ export interface Template {
    * image field's default uses one as `asset:name`.
    */
   assets?: Record<string, string>;
+  /** Who made it and what it is, shown under the list of templates; it travels with a template file. */
+  about?: TemplateAbout;
+}
+
+export interface TemplateAbout {
+  author?: string;
+  email?: string;
+  /** An http or https address. */
+  website?: string;
+  description?: string;
+}
+
+/** The parts of a template's about, with the most each may hold. */
+export const ABOUT_LIMITS: Record<keyof TemplateAbout, number> = { author: 100, email: 200, website: 300, description: 2000 };
+
+/** What is wrong with a value for a part of a template's about, if anything. */
+export function aboutProblem(key: keyof TemplateAbout, value: string): string | null {
+  if (!value) return null;
+  if (value.length > ABOUT_LIMITS[key]) return `At most ${ABOUT_LIMITS[key]} characters`;
+  if (key === 'website') {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'A web address, starting with https://';
+    } catch {
+      return 'A web address, starting with https://';
+    }
+  }
+  if (key === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'An email address, such as name@example.com';
+  return null;
 }
 
 /** What an image setting names to use a picture packed into the template. */
@@ -387,6 +436,17 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
     else problems.push({ where: `Picture ${name}`, message: 'Not a picture the app can show (PNG, JPEG, WebP or GIF)' });
   }
 
+  const about: TemplateAbout = {};
+  const givenAbout = (typeof source.about === 'object' && source.about !== null ? source.about : {}) as Record<string, unknown>;
+  for (const key of Object.keys(ABOUT_LIMITS) as (keyof TemplateAbout)[]) {
+    const value = givenAbout[key];
+    if (value === undefined || value === '') continue;
+    const text = typeof value === 'string' ? value.trim() : '';
+    const problem = typeof value === 'string' ? aboutProblem(key, text) : 'Should be text';
+    if (problem) problems.push({ where: `About, ${key}`, message: problem });
+    else if (text) about[key] = text;
+  }
+
   const fields: Field[] = [];
   for (const [index, item] of (Array.isArray(source.fields) ? source.fields : []).entries()) {
     const where = `Field ${index + 1}`;
@@ -417,17 +477,21 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
   };
   const fieldOf = (key: string) => fields.find((field) => field.key === key);
 
-  const layers: Layer[] = [];
+  // One entry per layer given, a stand-in for one that cannot be used, so that the groups'
+  // counts still mean what they meant; the stand-ins are taken out once the groups are known.
+  const DROPPED = '';
+  const entries: Layer[] = [];
   for (const [index, item] of (Array.isArray(source.layers) ? source.layers : []).entries()) {
     const layer = (typeof item === 'object' && item !== null ? item : {}) as Partial<Layer>;
     const spec = LAYER_TYPES[layer.type as string];
     const title = `Layer ${index + 1}${spec ? ` (${layer.name || spec.label})` : ''}`;
     if (!spec) {
       problems.push({ where: `Layer ${index + 1}`, message: `Unknown kind of layer: ${String(layer.type)}` });
+      entries.push({ type: DROPPED, params: {} });
       continue;
     }
     const given = (typeof layer.params === 'object' && layer.params !== null ? layer.params : {}) as Record<string, unknown>;
-    const all = { ...COMMON_PARAMS, ...spec.params };
+    const all = settingsOf(spec);
     for (const key of Object.keys(given)) {
       if (!(key in all)) problems.push({ where: title, message: `${spec.label} has no setting called ${key}` });
     }
@@ -439,8 +503,16 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
       if (problem) problems.push({ where, ...problem });
       params[key] = value === undefined || problem ? param.default : (value as ParamValue);
     }
-    layers.push({ type: layer.type!, ...(typeof layer.name === 'string' && layer.name ? { name: layer.name } : {}), params });
+    entries.push({
+      type: layer.type!,
+      ...(typeof layer.name === 'string' && layer.name ? { name: layer.name } : {}),
+      params,
+      ...(layer.type === 'group' ? { size: Number.isFinite(layer.size) ? Number(layer.size) : 0 } : {}),
+    });
   }
+  const usable = (nodes: LayerNode[]): LayerNode[] =>
+    nodes.filter((node) => node.layer.type !== DROPPED).map((node) => (node.children ? { ...node, children: usable(node.children) } : node));
+  const layers = flatten(usable(treeOf(entries)));
 
   return {
     template: {
@@ -449,6 +521,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
       fields,
       layers,
       ...(Object.keys(assets).length ? { assets } : {}),
+      ...(Object.keys(about).length ? { about } : {}),
     },
     problems,
   };
@@ -531,6 +604,8 @@ export interface PreparedLayer {
   resolve(music: Record<string, Value>, text: TextValues): ResolvedParams;
   /** What the last call of `resolve` gave, for the editor to show; null before the first. */
   readonly last: ResolvedParams | null;
+  /** For a group: how many of the layers after it are in it; 0 for any other layer. */
+  size: number;
   /** Forgets what smoothing functions remember, after a jump in time. */
   reset(): void;
 }
@@ -554,7 +629,7 @@ export function prepare(template: Template, filled: Record<string, string | numb
 
   return template.layers.map((layer) => {
     const spec = LAYER_TYPES[layer.type];
-    const all = { ...COMMON_PARAMS, ...spec.params };
+    const all = settingsOf(spec);
     const expressions: [string, Compiled, ParamKind][] = [];
     const fixed: ResolvedParams = {};
     const texts: [string, string][] = [];
@@ -584,6 +659,7 @@ export function prepare(template: Template, filled: Record<string, string | numb
     return {
       type: layer.type,
       spec,
+      size: layer.type === 'group' ? Math.max(0, Math.floor(layer.size ?? 0)) : 0,
       resolve(music, text) {
         const values = { ...music, ...fieldNumbers };
         const resolved: ResolvedParams = { ...fixed };
@@ -660,7 +736,7 @@ export function renameField(template: Template, from: string, to: string): void 
   for (const layer of template.layers) {
     const spec = LAYER_TYPES[layer.type];
     if (!spec) continue;
-    const all = { ...COMMON_PARAMS, ...spec.params };
+    const all = settingsOf(spec);
     for (const [key, value] of Object.entries(layer.params)) {
       if (typeof value !== 'string' || !all[key]) continue;
       const kind = all[key].kind;

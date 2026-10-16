@@ -135,6 +135,8 @@ export interface Api {
   onUpdateAvailable(listener: (version: string) => void): void;
   /** Opens the download page in the browser. */
   openDownloadPage(): void;
+  /** Opens a web or email address in the browser or mail program; anything else is ignored. */
+  openLink(url: string): void;
   /** Stops the notice about this version from coming back. */
   skipVersion(version: string): void;
   /** A command chosen from the menu bar or by its keyboard shortcut. */

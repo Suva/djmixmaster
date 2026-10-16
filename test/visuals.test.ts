@@ -302,3 +302,34 @@ test('renaming a field renames it wherever a setting uses it', () => {
   assert.equal(fieldNameProblem(template, '2nd', MUSIC_NAMES, TEXT_VARIABLES), 'Letters and digits only, starting with a letter');
   assert.equal(fieldNameProblem(template, 'accent', MUSIC_NAMES, TEXT_VARIABLES, 'accent'), null);
 });
+
+test('a template with groups is checked layer by layer, and a layer that cannot be used leaves the groups right', () => {
+  const { template, problems } = checkTemplate({
+    format: 1,
+    layers: [
+      { type: 'gradient', params: {} },
+      { type: 'group', name: 'G', size: 3, params: { opacity: 50, x: 10 } },
+      { type: 'text', params: {} },
+      { type: 'sparkler', params: {} },
+      { type: 'text', name: 'last in G', params: {} },
+      { type: 'text', name: 'top', params: {} },
+    ],
+  }, MUSIC_NAMES, TEXT_VARIABLES);
+  assert.deepEqual(template.layers.map((layer) => `${layer.name ?? layer.type}${layer.size === undefined ? '' : `[${layer.size}]`}`), ['gradient', 'G[2]', 'text', 'last in G', 'top']);
+  // A group has no place of its own: its x is not one of its settings.
+  assert.deepEqual(problems.map((p) => p.where), ['Layer 2 (G)', 'Layer 4']);
+  assert.equal(template.layers[1].params.opacity, 50);
+  assert.equal('x' in template.layers[1].params, false);
+});
+
+test('a template says who made it and what it is, and what will not do is left out', () => {
+  const { template, problems } = checkTemplate({
+    format: 1,
+    about: { author: ' Suva ', email: 'not an address', website: 'javascript:alert(1)', description: 'Glitter for acid techno.' },
+    layers: [],
+  }, MUSIC_NAMES, TEXT_VARIABLES);
+  assert.deepEqual(template.about, { author: 'Suva', description: 'Glitter for acid techno.' });
+  assert.deepEqual(problems.map((p) => p.where), ['About, email', 'About, website']);
+  const fine = checkTemplate({ format: 1, about: { email: 'a@b.ee', website: 'https://example.com/x' }, layers: [] }, MUSIC_NAMES, TEXT_VARIABLES);
+  assert.deepEqual(fine.template.about, { email: 'a@b.ee', website: 'https://example.com/x' });
+});

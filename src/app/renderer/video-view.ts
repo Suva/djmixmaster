@@ -10,7 +10,7 @@ import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, fontsOf, imagesOf, LAYER_TYPES, prepare, TEXT_VARIABLES,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, LAYER_TYPES, prepare, TEXT_VARIABLES,
   type Field, type PreparedLayer, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
@@ -28,6 +28,8 @@ export interface VideoViewOptions {
   mix(): VideoMix | null;
   /** The playhead, in seconds into the recording. */
   playhead(): number;
+  /** Whether the music is playing; paused, the picture is drawn only when something changes. */
+  playing(): boolean;
   /** Moves the playhead to this many seconds into the recording. */
   seek(seconds: number): void;
   /** How loud the selected mix is along its length, in this many steps, 0 to 1, from the analysis. */
@@ -159,6 +161,7 @@ export class VideoView {
       return;
     }
     this.refresh();
+    this.#stale = true;
     this.#lastFrame = performance.now();
     this.#frame = requestAnimationFrame(() => this.#draw());
   }
@@ -196,6 +199,7 @@ export class VideoView {
       const features = await this.#options.api.features(path);
       if (this.#featuresFor !== path) return;
       this.#features = features;
+      this.#stale = true;
       this.#listening(1, true);
     } catch (error) {
       if (this.#featuresFor !== path) return;
@@ -240,7 +244,8 @@ export class VideoView {
     const template = this.#template();
     this.#layers = prepare(template, this.#choice.fields, MUSIC_NAMES);
     // Until a font is in, its text is drawn in a plain face; the next frame after, in the font.
-    loadFonts(fontsOf(template, this.#choice.fields));
+    loadFonts(fontsOf(template, this.#choice.fields)).then(() => (this.#stale = true));
+    this.#stale = true;
     if (fresh) this.#drawer.reset();
     for (const name of imagesOf(template, this.#choice.fields)) this.#loadImage(name, template);
   }
@@ -261,16 +266,22 @@ export class VideoView {
         const data = template.assets?.[path.slice(ASSET_PREFIX.length)];
         if (!data) return;
         const known = this.#packed.get(data);
-        if (known) return void this.#images.set(path, known);
+        if (known) {
+          this.#images.set(path, known);
+          this.#stale = true;
+          return;
+        }
         // Until it is decoded, the picture there was keeps showing.
         const picture = await pictureOf(path, template, this.#options.api);
         this.#packed.set(data, picture);
         // Unless the picture of that name was changed again while this one was decoded.
         if (this.#template().assets?.[path.slice(ASSET_PREFIX.length)] === data) this.#images.set(path, picture);
+        this.#stale = true;
         return;
       }
       if (this.#images.has(path)) return;
       this.#images.set(path, await pictureOf(path, template, this.#options.api));
+      this.#stale = true;
     } catch (error) {
       this.#options.say(`Could not load the picture: ${error instanceof Error ? error.message : error}`);
     }
@@ -283,16 +294,58 @@ export class VideoView {
     const known = templates.has(this.#choice.template) || USER_TEMPLATES.has(this.#choice.template);
     $<HTMLSelectElement>('template').value = known ? this.#choice.template : DEFAULT_TEMPLATE;
     const own = USER_TEMPLATES.has(this.#choice.template);
-    $('template-name-row').hidden = !own;
+    // Renaming is for the editor, as all of a template's making is.
+    $('template-name-row').hidden = !this.#editing;
     const name = $<HTMLInputElement>('template-name');
     if (document.activeElement !== name) name.value = template.name;
     $<HTMLButtonElement>('template-delete').disabled = !own;
     const edit = $<HTMLButtonElement>('template-edit');
-    edit.textContent = own ? 'Edit' : 'Edit a copy';
     edit.title = own
-      ? 'Change this template: its layers and their settings'
-      : 'The templates that come with the app stay as they are: this makes a copy of yours to change';
+      ? 'Edit this template: its layers and their settings'
+      : 'Edit a copy: the templates that come with the app stay as they are, so this makes one of yours to change';
+    edit.setAttribute('aria-label', own ? 'Edit the template' : 'Edit a copy of the template');
     $('video-fields').replaceChildren(...template.fields.map((field) => this.#control(field)));
+    this.#showAbout(template);
+  }
+
+  /** Who made the template and what it is, under the list: the description, the author, a website and email to click. */
+  #showAbout(template: Template) {
+    const about = template.about ?? {};
+    const box = $('template-about');
+    const name = document.createElement('p');
+    name.className = 'about-name';
+    name.textContent = template.name;
+    box.replaceChildren(name);
+    if (about.description) {
+      const text = document.createElement('p');
+      text.className = 'about-description';
+      text.textContent = about.description;
+      box.append(text);
+    }
+    const by = document.createElement('p');
+    by.className = 'about-by';
+    if (about.author) by.append(`By ${about.author}`);
+    const link = (text: string, url: string, title: string) => {
+      const a = document.createElement('a');
+      a.textContent = text;
+      a.href = url;
+      a.title = title;
+      a.addEventListener('click', (event) => {
+        // Opened by the browser or the mail program, never in the app.
+        event.preventDefault();
+        this.#options.api.openLink(url);
+      });
+      return a;
+    };
+    for (const [part, url, title] of [
+      [about.website?.replace(/^https?:\/\//, '').replace(/\/$/, ''), about.website, 'Opens in your browser'],
+      [about.email, about.email && `mailto:${about.email}`, 'Writes an email to the author'],
+    ] as const) {
+      if (!part || !url) continue;
+      if (by.childNodes.length) by.append(' · ');
+      by.append(link(part, url, title));
+    }
+    if (by.childNodes.length) name.after(by);
   }
 
   // ---------------------------------------------------------------------------
@@ -352,6 +405,13 @@ export class VideoView {
   /** Removes the layer selected in the editor. */
   deleteLayer() {
     this.#editor.deleteSelected();
+  }
+
+  /** The editor's shortcuts: ⌘J duplicates the selected layer, ⌘G groups it, Shift+⌘G ungroups. */
+  layerCommand(command: 'duplicate' | 'group' | 'ungroup') {
+    if (command === 'duplicate') this.#editor.duplicateSelected();
+    else if (command === 'group') this.#editor.groupSelected();
+    else this.#editor.ungroupSelected();
   }
 
   stepTemplate(direction: 'undo' | 'redo') {
@@ -435,7 +495,7 @@ export class VideoView {
     usable.layers.forEach((layer, index) => {
       const spec = LAYER_TYPES[layer.type];
       if (!spec) return;
-      const all = { ...COMMON_PARAMS, ...spec.params };
+      const all = settingsOf(spec);
       const old = before?.layers[index]?.type === layer.type ? before.layers[index] : undefined;
       for (const [key, value] of Object.entries(layer.params)) {
         const param = all[key];
@@ -447,6 +507,37 @@ export class VideoView {
 
   #templateActions() {
     const api = this.#options.api;
+    // The ⋯ menu: opened by its button, closed by a choice, a click elsewhere or Escape.
+    const menu = $('template-menu');
+    const more = $('template-more');
+    const close = () => {
+      menu.hidden = true;
+      more.classList.remove('on');
+    };
+    more.addEventListener('click', (event) => {
+      event.stopPropagation();
+      menu.hidden = !menu.hidden;
+      more.classList.toggle('on', !menu.hidden);
+      if (!menu.hidden) menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    });
+    menu.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('button')) close();
+    });
+    menu.addEventListener('keydown', (event) => {
+      const items = [...menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+      const at = items.indexOf(document.activeElement as HTMLButtonElement);
+      if (event.key === 'Escape') {
+        close();
+        more.focus();
+      } else if (event.key === 'ArrowDown') items[Math.min(items.length - 1, at + 1)]?.focus();
+      else if (event.key === 'ArrowUp') items[Math.max(0, at - 1)]?.focus();
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    document.addEventListener('mousedown', (event) => {
+      if (!menu.hidden && !menu.contains(event.target as Node) && !more.contains(event.target as Node)) close();
+    });
     $('template-edit').addEventListener('click', () => this.#startEditing());
     $('editor-done').addEventListener('click', () => this.#stopEditing());
     $('template-duplicate').addEventListener('click', async () => {
@@ -598,11 +689,16 @@ export class VideoView {
     return control;
   }
 
+  /** Something that needs the picture drawn anew even while paused: an edit, a picture or a font that came in. */
+  #stale = true;
+  /** What the frame last drawn showed: the playhead, the picture's size, the mix. */
+  #lastShown = '';
+
   #draw() {
     if (!this.#visible) return;
     this.#frame = requestAnimationFrame(() => this.#draw());
     const now = performance.now();
-    const dt = Math.min(0.25, (now - this.#lastFrame) / 1000);
+    const elapsed = Math.min(0.25, (now - this.#lastFrame) / 1000);
     this.#lastFrame = now;
     const mix = this.#options.mix();
     const canvas = this.#canvas;
@@ -638,7 +734,19 @@ export class VideoView {
     }
     this.#lastPlayhead = playhead;
     const seconds = Math.max(0, Math.min(length, playhead - mix.start));
+    // Paused, the picture stands still, and is drawn again only when something it shows has changed:
+    // it costs nothing to leave a template heavy with effects on screen.
+    const playing = this.#options.playing();
+    const { template, ...details } = mix;
+    const shown = `${playhead}|${width}x${height}|${JSON.stringify(details)}`;
+    if (!playing && !this.#stale && shown === this.#lastShown) return;
+    this.#stale = false;
+    this.#lastShown = shown;
+    // Time moves on only while playing: drawn again paused, glitter and fades stay where they were.
+    const dt = playing ? elapsed : 0;
     drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images);
+    // For scripted checks: how many frames have been drawn.
+    canvas.dataset.frames = String(Number(canvas.dataset.frames ?? 0) + 1);
     if (this.#editing) {
       this.#editor.tick();
       this.#handles.update();
