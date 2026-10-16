@@ -15,6 +15,7 @@ import {
   type Layer, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
+import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
 
 export interface LayerSettingsContext {
   /** The template as it is now, for what fields and pictures it has, and for checking. */
@@ -95,6 +96,115 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext): { el
     asExpression.set(layer, chosen);
     const expressed = () => chosen.has(key) || isExpression(value(), param);
     const canExpress = param.kind === 'number' || param.kind === 'switch' || param.kind === 'colour';
+    // A number can be set to follow the music without writing the expression: "Moves with…".
+    const motionPanel = document.createElement('div');
+    motionPanel.className = 'motion';
+    motionPanel.hidden = true;
+    row.append(motionPanel);
+    if (param.kind === 'number') {
+      const wave = document.createElement('button');
+      wave.type = 'button';
+      wave.className = 'fx motion-button';
+      wave.textContent = '∿';
+      wave.title = 'Moves with…: make this follow the bass, the beat or a slow wave, without writing an expression';
+      wave.setAttribute('aria-label', `${param.label} moves with the music`);
+      wave.addEventListener('click', () => {
+        motionPanel.hidden = !motionPanel.hidden;
+        wave.classList.toggle('on', !motionPanel.hidden);
+        if (!motionPanel.hidden) showMotion();
+      });
+      head.append(wave);
+    }
+    /** The motion's controls, from the expression if it was written by them, else starting from the value now. */
+    function showMotion() {
+      const current = value();
+      const nowValue = typeof current === 'number' ? current : Number(context.live()?.[key] ?? param.default);
+      const span = (param.max ?? 100) - (param.min ?? 0);
+      let motion: Motion = (typeof current === 'string' ? parseMotion(current) : null)
+        ?? { base: Number(shown(nowValue)), amount: Number(shown(span / 10)), source: 'bass', speed: 'smooth', period: 8 };
+      const apply = () => {
+        chosen.add(key);
+        context.set(key, motionExpression(motion));
+        build();
+      };
+      const line = (title: string, ...controls: HTMLElement[]) => {
+        const box = document.createElement('label');
+        box.className = 'motion-line';
+        const text = document.createElement('span');
+        text.textContent = title;
+        box.append(text, ...controls);
+        return box;
+      };
+      const source = document.createElement('select');
+      for (const [id, label] of MOTION_SOURCES) source.add(new Option(label, id));
+      source.value = motion.source;
+      const amount = document.createElement('input');
+      amount.type = 'range';
+      amount.min = String(-span);
+      amount.max = String(span);
+      amount.step = String(span / 200);
+      amount.value = String(motion.amount);
+      const amountShown = document.createElement('output');
+      amountShown.textContent = shown(motion.amount);
+      const speed = document.createElement('select');
+      for (const [id, label] of MOTION_SPEEDS) speed.add(new Option(label, id));
+      speed.value = motion.speed;
+      const period = document.createElement('input');
+      period.type = 'number';
+      period.min = '0.1';
+      period.step = 'any';
+      period.value = String(motion.period);
+      const speedLine = line('Speed', speed);
+      const periodLine = line('Seconds', period);
+      const showKind = () => {
+        speedLine.hidden = timed(motion.source);
+        periodLine.hidden = !timed(motion.source);
+      };
+      source.addEventListener('change', () => {
+        motion = { ...motion, source: source.value as MotionSource };
+        showKind();
+        apply();
+      });
+      amount.addEventListener('input', () => {
+        motion = { ...motion, amount: Number(amount.value) };
+        amountShown.textContent = shown(motion.amount);
+        apply();
+      });
+      speed.addEventListener('change', () => {
+        motion = { ...motion, speed: speed.value as MotionSpeed };
+        apply();
+      });
+      period.addEventListener('input', () => {
+        if (!(Number(period.value) > 0)) return;
+        motion = { ...motion, period: Number(period.value) };
+        apply();
+      });
+      const stop = document.createElement('button');
+      stop.type = 'button';
+      stop.textContent = 'Stop moving';
+      stop.title = 'Keep the value it moves from, standing still';
+      stop.addEventListener('click', () => {
+        chosen.delete(key);
+        context.set(key, motion.base);
+        motionPanel.hidden = true;
+        head.querySelector('.motion-button')?.classList.remove('on');
+        build();
+      });
+      const base = document.createElement('input');
+      base.type = 'number';
+      base.step = 'any';
+      base.value = String(motion.base);
+      base.title = 'The value with nothing moving it';
+      base.addEventListener('input', () => {
+        if (base.value === '' || !Number.isFinite(Number(base.value))) return;
+        motion = { ...motion, base: Number(base.value) };
+        apply();
+      });
+      showKind();
+      motionPanel.replaceChildren(line('Moves with', source), line('From', base), line('Amount', amount, amountShown), speedLine, periodLine, stop);
+      // Opening it sets the setting moving at once, so that what it does is seen.
+      if (typeof current !== 'string' || !parseMotion(current)) apply();
+    }
     if (canExpress) {
       const fx = document.createElement('button');
       fx.type = 'button';

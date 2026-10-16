@@ -821,6 +821,59 @@ test('a template\'s fields in the editor: renamed everywhere, added, changed, re
   assert.match(background.colour1, /^darken\(accent, /);
 });
 
+test('"Moves with…" makes a setting follow the music, and is read back from what it wrote', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const select = (name: string) => {
+      const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+      row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+    const radius = () => document.querySelector<HTMLElement>('#editor-layer .setting[data-key="radius"]')!;
+    const expression = () => radius().querySelector<HTMLInputElement>('.expr-input')?.value;
+
+    select('Ring');
+    radius().querySelector<HTMLButtonElement>('.motion-button')!.click();
+    const opened = expression();
+    const source = radius().querySelector<HTMLSelectElement>('.motion select')!;
+    source.value = 'wave';
+    source.dispatchEvent(new Event('change', { bubbles: true }));
+    const seconds = radius().querySelector<HTMLInputElement>('.motion-line:not([hidden]) input[type="number"][min]')!;
+    seconds.value = '4';
+    seconds.dispatchEvent(new Event('input', { bubbles: true }));
+    const amount = radius().querySelector<HTMLInputElement>('.motion input[type="range"]')!;
+    amount.value = '3';
+    amount.dispatchEvent(new Event('input', { bubbles: true }));
+    const waving = expression();
+    await page.wait(1100);
+
+    // Away and back: the panel reads its choice back from the expression.
+    select('Logo');
+    select('Ring');
+    radius().querySelector<HTMLButtonElement>('.motion-button')!.click();
+    const readBack = [radius().querySelector<HTMLSelectElement>('.motion select')!.value, radius().querySelector<HTMLInputElement>('.motion input[type="range"]')!.value];
+
+    // Stop moving, then undo.
+    [...radius().querySelectorAll<HTMLButtonElement>('.motion button')].find((b) => b.textContent === 'Stop moving')!.click();
+    const stopped = radius().querySelector<HTMLInputElement>('input[type="number"]')?.value;
+    await page.wait(1100);
+    page.click('undo');
+    await page.wait(100);
+    const undone = expression();
+    await page.wait(600);
+    return { opened, waving, readBack, stopped, undone };
+  });
+  assert.equal(seen.opened, '17 + 5 * smooth(bass, 0.05, 0.5)');
+  assert.equal(seen.waving, '17 + 3 * sine(time / 4)');
+  assert.deepEqual(seen.readBack, ['wave', '3']);
+  assert.equal(seen.stopped, '17');
+  assert.equal(seen.undone, '17 + 3 * sine(time / 4)');
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

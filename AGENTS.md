@@ -48,6 +48,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/music.ts` | The music values a video frame gets, read from `features.ts`'s output |
 | `src/visuals/draw.ts` | Draws a frame of a template on a 2D canvas, for the preview and the export alike |
 | `src/visuals/templates.ts` | The templates that come with the app |
+| `src/visuals/motion.ts` | "Moves with…": a choice of what a setting follows, written as an expression and read back |
 | `src/visuals/fonts.ts` | Fonts for a video's text: loading them before drawing, and the ones on this computer |
 | `src/app/renderer/font-picker.ts` | The font list of the Video view, each name in its own face |
 | `src/app/renderer/video-view.ts` | The Video view: a mix's template, its fields and a live picture |

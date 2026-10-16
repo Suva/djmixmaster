@@ -465,3 +465,15 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
 .field-line input[type="text"], .field-line input[type="number"], .field-line select { flex: 1; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; user-select: text; }
 .field-line input[type="color"] { width: 44px; height: 24px; padding: 0 2px; border: 1px solid var(--border); border-radius: 5px; background: #262a33; }
 .field-line .font-picker { flex: 1; min-width: 0; }
+
+/* "Moves with…" under a number setting. */
+.setting-head .motion-button { font-family: inherit; font-style: normal; font-size: 13px; }
+.setting-head .motion-button.on { background: rgba(61, 220, 151, 0.18); border-color: var(--accent); color: var(--accent); }
+.motion { margin-top: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--lane); display: flex; flex-direction: column; gap: 6px; }
+.motion[hidden], .motion-line[hidden] { display: none; }
+.motion-line { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.motion-line > span { width: 72px; flex: none; }
+.motion-line select, .motion-line input[type="number"] { flex: 1; min-width: 0; font: inherit; font-size: 12px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; }
+.motion-line input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.motion-line output { width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+.motion button { align-self: flex-start; padding: 3px 10px; font-size: 12px; }

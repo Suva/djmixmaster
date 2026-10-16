@@ -12,7 +12,8 @@ are under "Not released yet" and appear there once they are.
 - **A template editor**, beside the picture: add, hide, reorder, rename and
   delete a template's layers, set each one's colours, sizes, texts, fonts and
   pictures, and make any number or colour follow the music with an
-  expression, checked as you type. The fields a template asks for can be
+  expression, checked as you type, or by choosing what it moves with (the
+  bass, the beat, a slow wave) and how much. The fields a template asks for can be
   added, renamed, reordered and given defaults. Every change shows straight
   away.
 

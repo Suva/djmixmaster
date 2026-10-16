@@ -231,8 +231,11 @@ reorder. Below the list are the selected layer's settings. A number, a switch
 or a colour can instead be an **expression** (the ƒ button) that follows the
 music, such as `100 + 8 * smooth(bass, 0.02, 0.4)`. A mistake is underlined
 as you type, with what is wrong beneath it, and while the mix plays the value
-the expression comes to shows beside it. A picture chosen for a layer is packed
-into the template. The **Fields** tab lists what someone using the template
+the expression comes to shows beside it. For a number, **∿** (moves with…)
+writes the expression for you: pick what it follows (the bass, the highs, the
+level, the beat, or a slow wave or a wander that needs no music), from what
+value, by how much and how quickly, and the panel writes it, and reads it back
+later to be changed. A picture chosen for a layer is packed into the template. The **Fields** tab lists what someone using the template
 fills in: each field's label, kind (colour, number, text, picture, font or a
 list), the name settings use it by, and its default. Renaming a field renames
 it wherever the template uses it. While the editor is open, undo works on the
