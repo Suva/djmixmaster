@@ -131,7 +131,7 @@ export async function render(
 
   const limiter = options.ceilingDb === null ? null : new Limiter(sampleRate, CHANNELS, options.ceilingDb - headroomDb);
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
-  const encoder = encode(output, sampleRate, options.encode);
+  const encoder = encode(output, sampleRate, options.encode, totalFrames);
 
   // The fades come last, after the limiter, so nothing downstream works against them.
   const fadeIn = Math.round((options.fadeInSeconds ?? 0) * sampleRate);

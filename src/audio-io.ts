@@ -188,7 +188,14 @@ export async function* decode(file: string, region: Region = {}, background = fa
   if (code !== 0) throw new Error(`ffmpeg decode failed: ${err.trim() || `exit code ${code}`}`);
 }
 
-function codecArgs(output: string, sampleRate: number, options: EncodeOptions): string[] {
+/**
+ * The most a plain WAV may hold: its sizes are 32-bit. Less a margin, for the
+ * header and tags, and for a little more audio than reckoned after converting
+ * the sample rate.
+ */
+const PLAIN_WAV_BYTES = 2 ** 32 - 1 - 64 * 1024 * 1024;
+
+function codecArgs(output: string, sampleRate: number, options: EncodeOptions, frames?: number): string[] {
   const extension = extname(output).toLowerCase();
   const lossless = extension === '.wav' || extension === '.flac';
   const sixteen = lossless && (options.bitDepth ?? DEFAULT_BIT_DEPTH) === 16;
@@ -202,8 +209,13 @@ function codecArgs(output: string, sampleRate: number, options: EncodeOptions): 
   const filter = convert.length ? ['-af', `aresample=${convert.join(':')}`] : [];
 
   switch (extension) {
-    case '.wav':
-      return [...filter, '-c:a', sixteen ? 'pcm_s16le' : 'pcm_s24le', '-rf64', 'auto'];
+    case '.wav': {
+      // A WAV past 4 GB has to be RF64, and ffmpeg can make one only if it set space aside at the start (a
+      // JUNK chunk), in case. Some services, SoundCloud for one, refuse a WAV with that chunk, though it is
+      // allowed; so the space is set aside only when the file might need it, or its size is not known.
+      const bytes = frames === undefined ? Infinity : (frames / sampleRate) * (options.sampleRate ?? sampleRate) * CHANNELS * (sixteen ? 2 : 3);
+      return [...filter, '-c:a', sixteen ? 'pcm_s16le' : 'pcm_s24le', '-rf64', bytes < PLAIN_WAV_BYTES ? 'never' : 'auto'];
+    }
     case '.flac':
       return [...filter, '-c:a', 'flac', ...(sixteen ? ['-sample_fmt', 's16'] : ['-sample_fmt', 's32', '-bits_per_raw_sample', '24'])];
     case '.mp3':
@@ -249,14 +261,18 @@ function chapterFile(output: string, options: EncodeOptions): string | null {
   return path;
 }
 
-/** Encodes interleaved stereo float32 at `sampleRate` to a file, picking the codec from the extension. */
-export function encode(output: string, sampleRate: number, options: EncodeOptions = {}): Encoder {
+/**
+ * Encodes interleaved stereo float32 at `sampleRate` to a file, picking the
+ * codec from the extension. `frames`, how much audio will come if known,
+ * lets a WAV that will stay under 4 GB be written as a plain one.
+ */
+export function encode(output: string, sampleRate: number, options: EncodeOptions = {}, frames?: number): Encoder {
   const chapters = chapterFile(output, options);
   const args = [
     '-v', 'error', '-y',
     '-f', 'f32le', '-ar', String(sampleRate), '-ac', String(CHANNELS), '-i', '-',
     ...(chapters ? ['-f', 'ffmetadata', '-i', chapters, '-map', '0:a', '-map_chapters', '1'] : []),
-    ...codecArgs(output, sampleRate, options),
+    ...codecArgs(output, sampleRate, options, frames),
     ...tagArgs(output, options),
     output,
   ];

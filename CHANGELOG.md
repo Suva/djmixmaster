@@ -4,6 +4,14 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- **WAV exports upload to SoundCloud.** A WAV under 4 GB, which is nearly
+  every one, is now written as a plain WAV. Before, it carried a placeholder
+  that lets a WAV grow past 4 GB, which is allowed but which SoundCloud
+  refused, failing to process the upload. Only a WAV that may be larger keeps
+  it.
+
 ## 0.9.0 — 16 October 2026
 
 - **Make your own video templates.** A template editor opens beside the
