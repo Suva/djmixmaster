@@ -367,10 +367,14 @@ values into the ones a frame gets. None draws anything yet.
   as JSON in the data folder. A template file to share (`.djmtemplate`) is the
   same JSON with its pictures packed in as data URLs (`assets`, named in an
   image setting as `asset:name`).
-- Not yet: the editor (being built in steps: the layers, their settings with
-  expressions, the fields, "moves with…" for settings that follow the music,
-  dragging on the picture), the waveform as a true oscilloscope (it shows the
-  level, not the wave), and the glow's threshold (approximated).
+- The editor, in the Video view's panel while a template of the user's own is
+  edited: the layers, each layer's settings (any number, switch or colour as an
+  expression, checked as it is typed; "moves with…" writes one for a number
+  from a choice of source, amount and speed), the fields, and dragging layers
+  on the picture. It keeps its own undo history and saves the template as
+  typed.
+- Not yet: "moves with…" for colours, the waveform as a true oscilloscope (it
+  shows the level, not the wave), and the glow's threshold (approximated).
 
 ## The MP4 export, as built
 

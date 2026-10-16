@@ -136,6 +136,39 @@ export class TemplateEditor {
     this.#options.history();
   }
 
+  /** The selected layer, by its place in the template, or -1. */
+  get selected(): number {
+    return this.#template ? this.#selected : -1;
+  }
+
+  /** Selects a layer, as a click on it in the list does. */
+  select(index: number) {
+    if (!this.#template || index < 0 || index >= this.#template.layers.length) return;
+    this.#selected = index;
+    this.#showLayers();
+  }
+
+  /** A layer as being edited: settings half typed, expressions as text. */
+  layer(index: number): Layer | null {
+    return this.#template?.layers[index] ?? null;
+  }
+
+  /**
+   * Sets a layer's setting from elsewhere, such as a drag on the picture.
+   * Quick changes of the same `kind` undo as one: a drag sets two settings by
+   * turns, and is one step.
+   */
+  set(index: number, key: string, value: ParamValue, kind = `param:${index}:${key}`) {
+    const layer = this.#template?.layers[index];
+    if (!layer) return;
+    this.#change(kind, () => (layer.params[key] = value));
+  }
+
+  /** Makes the settings shown anew, after a change made elsewhere. */
+  refresh() {
+    this.#showSettings();
+  }
+
   /** Brings the live values of the selected layer's expressions up to date: once a frame. */
   tick() {
     this.#settings?.tick();

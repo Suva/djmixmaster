@@ -874,6 +874,67 @@ test('"Moves with…" makes a setting follow the music, and is read back from wh
   assert.equal(seen.undone, '17 + 3 * sine(time / 4)');
 });
 
+test('layers are picked, moved and resized on the picture, each drag one undo step', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'waveform');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    await page.wait(200);
+    const overlay = page.element('picture-overlay');
+    const picture = page.element('picture').getBoundingClientRect();
+    const selected = () => document.querySelector('.layer-row.on .layer-name')!.textContent;
+    const value = (key: string) => Number(document.querySelector<HTMLInputElement>(`#editor-layer .setting[data-key="${key}"] input[type="number"]`)!.value.replace(',', '.'));
+    const drag = (target: Element, x: number, y: number, dx: number, dy: number, shiftKey = false) => {
+      target.dispatchEvent(new MouseEvent('mousedown', { clientX: x, clientY: y, button: 0, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: x + dx / 4, clientY: y + dy / 4, shiftKey }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: x + dx, clientY: y + dy, shiftKey }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+
+    // A click low in the picture picks the spectrum there; dragged up a tenth of the picture.
+    drag(overlay, picture.left + picture.width / 2, picture.top + picture.height * 0.92, 0, 0);
+    const picked = selected();
+    const outline = document.querySelector<HTMLElement>('.layer-outline')!;
+    const box = outline.getBoundingClientRect();
+    drag(outline, box.left + box.width / 2, box.top + box.height / 2, 0, -picture.height / 10);
+    await page.wait(100);
+    const moved = value('y');
+
+    // Its top left corner, out with Shift: width and height grow alike.
+    const corner = document.querySelector<HTMLElement>('.layer-outline .corner.nw')!.getBoundingClientRect();
+    drag(document.querySelector('.layer-outline .corner.nw')!, corner.left + 4, corner.top + 4, -40, -20, true);
+    await page.wait(100);
+    const grown = { width: value('width'), height: value('height') };
+
+    // Each drag undoes in one step.
+    await page.wait(1100);
+    page.click('undo');
+    await page.wait(100);
+    const firstUndo = { width: value('width'), y: value('y') };
+    page.click('undo');
+    await page.wait(100);
+    const secondUndo = value('y');
+
+    // A layer whose size follows an expression is not resized by dragging, and says so.
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Wave')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await page.wait(100);
+    const waveCorner = document.querySelector<HTMLElement>('.layer-outline .corner.se')!;
+    const wc = waveCorner.getBoundingClientRect();
+    drag(waveCorner, wc.left + 4, wc.top + 4, -30, 0);
+    return { picked, moved, grown, firstUndo, secondUndo, said: page.text('readout') };
+  });
+  assert.equal(seen.picked, 'Bars');
+  assert.ok(Math.abs(seen.moved - 86) < 1, `moved to ${seen.moved}`);
+  assert.ok(seen.grown.width > 92 && seen.grown.height > 10, JSON.stringify(seen.grown));
+  assert.ok(Math.abs(seen.grown.width / 92 - seen.grown.height / 10) < 0.05, 'grown alike');
+  assert.deepEqual([seen.firstUndo.width, Math.round(seen.firstUndo.y)], [92, 86]);
+  assert.equal(seen.secondUndo, 96);
+  assert.match(seen.said, /^Wave: its height follows an expression, so it is set in its settings, not by dragging\.$/);
+});
+
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     page.click('view-video');

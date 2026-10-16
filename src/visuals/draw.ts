@@ -35,6 +35,25 @@ export interface Frame {
   shown?: number;
 }
 
+/**
+ * Where a layer was drawn in the last frame, in the canvas's pixels: its
+ * anchor point, and its box around that point before scale and rotation.
+ * For the editor, which draws an outline over the picture to drag.
+ */
+export interface LayerBox {
+  x: number;
+  y: number;
+  left: number;
+  top: number;
+  w: number;
+  h: number;
+  scale: number;
+  /** Degrees. */
+  rotation: number;
+  /** A ring rather than a box: its size is a radius. */
+  circle: boolean;
+}
+
 /** What a layer remembers from frame to frame. */
 interface Memory {
   bars?: Float32Array;
@@ -88,6 +107,23 @@ export class FrameDrawer {
     this.#ctx = canvas.getContext('2d') as Context;
   }
 
+  /** Where each layer was drawn in the last frame, by its place in the template; null for a layer not drawn, or without a box. */
+  boxes: (LayerBox | null)[] = [];
+  #index = 0;
+
+  /** Notes where the layer being drawn lies, in its own coordinates after `#place`. */
+  #record(params: ResolvedParams, left: number, top: number, w: number, h: number, circle = false) {
+    const { width, height } = this.#canvas;
+    this.boxes[this.#index] = {
+      x: (num(params, 'x') / 100) * width,
+      y: (num(params, 'y') / 100) * height,
+      left, top, w, h,
+      scale: num(params, 'scale') / 100,
+      rotation: num(params, 'rotation'),
+      circle,
+    };
+  }
+
   /** Forgets what layers remember, after a jump in time or a change of template. */
   reset() {
     this.#memories = [];
@@ -103,7 +139,9 @@ export class FrameDrawer {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
 
+    this.boxes = layers.map(() => null);
     layers.forEach((layer, index) => {
+      this.#index = index;
       const params = layer.resolve(frame.music, frame.text);
       if (params.visible === false) return;
       const appear = this.#appearance(params, frame);
@@ -307,6 +345,7 @@ export class FrameDrawer {
     else if (fit === 'cover') [w, h] = w / h > ratio ? [w, w / ratio] : [h * ratio, h];
     this.#place(params);
     const [left, top] = anchored(str(params, 'anchor'), 0, 0, w, h);
+    this.#record(params, left, top, w, h);
 
     // Drawn on its own first, so that tint and rounding touch the picture only.
     const scratch = this.#scratchCanvas();
@@ -400,6 +439,7 @@ export class FrameDrawer {
       const blockWidth = Math.max(...rows.map((row) => ctx.measureText(row).width), 0);
       const blockHeight = lineHeight * rows.length;
       const [left, top] = anchored(str(params, 'anchor'), 0, 0, blockWidth, blockHeight);
+      this.#record(params, left, top, blockWidth, blockHeight);
       const x = ctx.textAlign === 'left' ? left : ctx.textAlign === 'right' ? left + blockWidth : left + blockWidth / 2;
       const opacity = ctx.globalAlpha;
       ctx.globalAlpha = opacity * alpha;
@@ -490,6 +530,7 @@ export class FrameDrawer {
 
     if (str(params, 'form') === 'circle') {
       const radius = (num(params, 'radius') / 100) * height;
+      this.#record(params, -radius, -radius, radius * 2, radius * 2, true);
       const step = (Math.PI * 2) / bars;
       ctx.lineCap = rounded ? 'round' : 'butt';
       for (let i = 0; i < bars; i++) {
@@ -507,6 +548,7 @@ export class FrameDrawer {
       return;
     }
     const [left, top] = anchored(str(params, 'anchor'), 0, 0, w, h);
+    this.#record(params, left, top, w, h);
     const slot = w / bars;
     const barWidth = Math.max(1, slot * (1 - gap));
     const base = mirrored ? top + h / 2 : top + h;
@@ -544,6 +586,7 @@ export class FrameDrawer {
 
     if (str(params, 'form') === 'circle') {
       const radius = (num(params, 'radius') / 100) * height;
+      this.#record(params, -radius, -radius, radius * 2, radius * 2, true);
       ctx.beginPath();
       for (let p = 0; p <= points; p++) {
         const value = levels[p % points];
@@ -558,6 +601,7 @@ export class FrameDrawer {
       return;
     }
     const [left, top] = anchored(str(params, 'anchor'), 0, 0, w, h);
+    this.#record(params, left, top, w, h);
     const middle = top + h / 2;
     const xOf = (p: number) => left + (p / (points - 1)) * w;
     ctx.beginPath();

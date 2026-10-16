@@ -235,7 +235,10 @@ the expression comes to shows beside it. For a number, **∿** (moves with…)
 writes the expression for you: pick what it follows (the bass, the highs, the
 level, the beat, or a slow wave or a wander that needs no music), from what
 value, by how much and how quickly, and the panel writes it, and reads it back
-later to be changed. A picture chosen for a layer is packed into the template. The **Fields** tab lists what someone using the template
+later to be changed. A picture chosen for a layer is packed into the template.
+On the picture, the selected layer has an outline: drag it to move the layer,
+or a corner to resize it (with Shift, keeping its proportions). A click on the
+picture selects the layer there. The **Fields** tab lists what someone using the template
 fills in: each field's label, kind (colour, number, text, picture, font or a
 list), the name settings use it by, and its default. Renaming a field renames
 it wherever the template uses it. While the editor is open, undo works on the

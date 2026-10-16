@@ -2464,6 +2464,8 @@ const HELP: [string, [string, string][]][] = [
     ['Drag a layer up or down', 'Put it in front of or behind others'],
     [`${OPTION}+↑ ↓`, 'Move the selected layer forward or back'],
     ['Double-click a layer', 'Rename it'],
+    ['Click the picture', 'Select the layer there'],
+    ['Drag a layer\'s outline, or a corner', 'Move it, or resize it; with Shift, keeping its proportions'],
     ['Backspace', 'Delete the selected layer'],
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo changes to the template'],
   ]],

@@ -477,3 +477,16 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
 .motion-line input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .motion-line output { width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
 .motion button { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
+
+/* Dragging layers on the picture while a template is edited. */
+#picture-overlay { position: absolute; inset: 0; overflow: hidden; cursor: default; }
+#picture-overlay[hidden] { display: none; }
+.layer-outline { position: absolute; left: 0; top: 0; transform-origin: 0 0; border: 1px solid var(--accent); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5); cursor: move; }
+.layer-outline.circle { border-radius: 50%; }
+.layer-outline[hidden], .layer-point[hidden] { display: none; }
+.layer-outline .corner { position: absolute; width: 9px; height: 9px; background: var(--accent); border: 1px solid #0b0c10; }
+.layer-outline .corner.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.layer-outline .corner.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.layer-outline .corner.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.layer-outline .corner.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.layer-point { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); background: rgba(11, 12, 16, 0.6); cursor: move; }

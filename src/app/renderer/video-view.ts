@@ -15,6 +15,7 @@ import {
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
 import { TemplateEditor } from './template-editor.ts';
+import { PictureHandles } from './picture-handles.ts';
 import {
   checked, DEFAULT_TEMPLATE, drawVideoFrame, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
 } from './video-frame.ts';
@@ -62,6 +63,7 @@ export class VideoView {
   #layers: PreparedLayer[] = [];
 
   readonly #editor: TemplateEditor;
+  readonly #handles: PictureHandles;
   /** The user's templates as saved: with settings that were left half typed, which checking replaces. */
   readonly #typed = new Map<string, unknown>();
   /** The template being edited, by its name in a mix's choice, or null. */
@@ -91,6 +93,16 @@ export class VideoView {
         for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         return { name: file.replace(/\.[^.]+$/, ''), data: `data:image/${type};base64,${btoa(binary)}` };
       },
+    });
+    this.#handles = new PictureHandles($('picture-overlay'), {
+      canvas: this.#canvas,
+      boxes: () => this.#drawer.boxes,
+      layer: (index) => this.#editor.layer(index),
+      selected: () => this.#editor.selected,
+      select: (index) => this.#editor.select(index),
+      set: (index, key, value, kind) => this.#editor.set(index, key, value, kind),
+      done: () => this.#editor.refresh(),
+      say: (text) => options.say(text),
     });
     const select = $<HTMLSelectElement>('template');
     this.#fillTemplates();
@@ -335,6 +347,7 @@ export class VideoView {
     $('editor-done').hidden = false;
     $('video-heading').textContent = 'Editing the template';
     $('template-name-row').hidden = false;
+    this.#handles.show(true);
     this.#editor.start(this.#asTyped(this.#template(), this.#typed.get(this.#editing)));
   }
 
@@ -361,6 +374,7 @@ export class VideoView {
     if (!this.#editing) return;
     this.#editing = null;
     document.body.classList.remove('editing');
+    this.#handles.show(false);
     $('template-editor').hidden = true;
     $('editor-done').hidden = true;
     $('video-heading').textContent = 'Video';
@@ -599,7 +613,10 @@ export class VideoView {
     this.#lastPlayhead = playhead;
     const seconds = Math.max(0, Math.min(length, playhead - mix.start));
     drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images);
-    if (this.#editing) this.#editor.tick();
+    if (this.#editing) {
+      this.#editor.tick();
+      this.#handles.update();
+    }
     // For scripted checks: whether the picture is drawn from the music yet.
     canvas.dataset.music = String(!!reader);
     this.#drawStrip(mix, seconds);

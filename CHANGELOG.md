@@ -14,8 +14,8 @@ are under "Not released yet" and appear there once they are.
   pictures, and make any number or colour follow the music with an
   expression, checked as you type, or by choosing what it moves with (the
   bass, the beat, a slow wave) and how much. The fields a template asks for can be
-  added, renamed, reordered and given defaults. Every change shows straight
-  away.
+  added, renamed, reordered and given defaults. Layers can be picked, moved
+  and resized on the picture itself. Every change shows straight away.
 
 ## 0.8.0 — 15 October 2026
 
