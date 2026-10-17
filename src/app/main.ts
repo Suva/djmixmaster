@@ -17,6 +17,7 @@ import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
 import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import { nameForParts, orderParts } from './parts.ts';
+import { VIDEO_EXTENSIONS } from './video-files.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
 import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
 
@@ -49,6 +50,7 @@ const APP_FILES = ['index.html', 'styles.css', 'renderer.js', 'limiter-worklet.j
 const MEDIA_TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.m4a': 'audio/mp4',
   '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.aif': 'audio/aiff', '.aiff': 'audio/aiff',
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.webm': 'video/webm',
 };
 
 protocol.registerSchemesAsPrivileged([
@@ -271,7 +273,11 @@ ipcMain.handle('pick-file', async () => {
   const result = await dialog.showOpenDialog(window!, {
     // Several files are the parts of one recording.
     properties: ['openFile', 'multiSelections'],
-    filters: [{ name: 'Audio', extensions: AUDIO_EXTENSIONS }],
+    filters: [
+      { name: 'Audio and video', extensions: [...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS] },
+      { name: 'Audio', extensions: AUDIO_EXTENSIONS },
+      { name: 'Video', extensions: VIDEO_EXTENSIONS },
+    ],
   });
   return result.canceled ? null : result.filePaths;
 });
@@ -302,9 +308,10 @@ ipcMain.handle('confirm', async (_event, message: string, detail: string, action
 });
 
 ipcMain.handle('media-url', async (_event, path: string): Promise<MediaSource> => {
-  const [streamed, info] = await Promise.all([needsStreaming(path), probe(path)]);
+  const info = await probe(path);
+  const streamed = await needsStreaming(path, info.codec);
   media = { id: media.id + 1, path, sampleRate: info.sampleRate };
-  return { url: `${ORIGIN}/${streamed ? 'stream' : 'media'}/${media.id}`, streamed };
+  return { url: `${ORIGIN}/${streamed ? 'stream' : 'media'}/${media.id}`, streamed, video: info.video };
 });
 
 // The analysis keeps one value per 100 ms, which is too coarse to show a beat.
@@ -541,6 +548,7 @@ ipcMain.handle('render', async (_event, request: RenderRequest) => {
     throw new Error('Choose a different name: this would overwrite the recording itself');
   }
   if (request.video) return renderVideo(request);
+  if (request.originalPicture) return renderOriginalPicture(request);
   try {
     return await runJob({ kind: 'render', ...request });
   } catch (error) {
@@ -556,6 +564,7 @@ ipcMain.handle('render', async (_event, request: RenderRequest) => {
 ipcMain.on('cancel', () => {
   running?.terminate();
   videoExport?.finish(CANCELLED);
+  cancelPacking?.();
 });
 
 // ---------------------------------------------------------------------------
@@ -642,6 +651,67 @@ async function renderVideo(request: RenderRequest): Promise<unknown> {
     await rm(sound, { force: true, maxRetries: 20, retryDelay: 250 }).catch(() => {});
   }
 }
+
+/**
+ * A video export that keeps the recording's own picture: the sound is
+ * exported as for any other format, then the picture of the same stretch is
+ * copied from the recording and packed with it, without being encoded again.
+ * That takes little longer than the sound alone.
+ *
+ * A copied picture can only begin on a keyframe, which may be seconds before
+ * the mix. ffmpeg copies from there and marks the frames before the mix to be
+ * skipped (an edit list), so players start on the right frame, in time with
+ * the sound. The end is not cut as finely: the picture may run a few frames
+ * past the sound.
+ */
+async function renderOriginalPicture(request: RenderRequest): Promise<unknown> {
+  const sound = join(app.getPath('temp'), `djmaster-${process.pid}-${Date.now()}.m4a`);
+  try {
+    const result = await runJob(
+      { kind: 'render', ...request, originalPicture: undefined, output: sound },
+      (fraction) => window?.webContents.send('progress', 0.9 * fraction),
+    );
+    const picture = (await probe(request.input)).video;
+    if (!picture) throw new Error('The recording has no picture');
+    await new Promise<void>((done, fail) => {
+      const packer = spawn(ffmpeg(), [
+        '-y', '-v', 'error', '-nostdin',
+        '-ss', String(request.start), '-t', String(request.end - request.start), ...inputArgs(request.input),
+        '-i', sound,
+        '-map', '0:v:0', '-map', '1:a', '-c', 'copy',
+        // The tags and the chapters were written into the sound; they carry over.
+        '-map_metadata', '1', '-map_chapters', '1',
+        // Apple's players and QuickTime show HEVC in an MP4 only under this name.
+        ...(picture.codec === 'hevc' ? ['-tag:v', 'hvc1'] : []),
+        '-movflags', '+faststart',
+        request.output,
+      ], { stdio: ['ignore', 'ignore', 'pipe'] });
+      let complaint = '';
+      let cancelled = false;
+      packer.stderr.on('data', (data) => (complaint += data));
+      packer.on('error', fail);
+      packer.on('close', (code) => {
+        if (cancelled) fail(new Error(CANCELLED));
+        else if (code === 0) done();
+        else fail(new Error(`Packing the video failed: ${complaint.trim() || `exit code ${code}`}`));
+      });
+      cancelPacking = () => {
+        cancelled = true;
+        packer.kill();
+      };
+    });
+    window?.webContents.send('progress', 1);
+    return result;
+  } catch (error) {
+    await rm(request.output, { force: true, maxRetries: 20, retryDelay: 250 }).catch(() => {});
+    throw error;
+  } finally {
+    cancelPacking = null;
+    await rm(sound, { force: true, maxRetries: 20, retryDelay: 250 }).catch(() => {});
+  }
+}
+/** Stops the packing of a video that keeps the recording's picture, while it runs. */
+let cancelPacking: (() => void) | null = null;
 
 ipcMain.on('reveal', (_event, path: string) => shell.showItemInFolder(path));
 

@@ -18,6 +18,13 @@ are under "Not released yet" and appear there once they are.
   is, with a button to turn it off. Before, the A key could switch to the original unnoticed, and
   the settings then seemed to do nothing.
 
+- **Videos open as recordings.** Open or drop an MP4, MOV, MKV or WebM of
+  a set and master its sound as you would a recording.
+- **Export with the original picture.** For a video, the export dialog
+  offers "Original video": the video's own picture with the mastered sound.
+  The picture is copied rather than encoded again, so it is quick and loses
+  nothing, and it starts on the very frame the mix does.
+
 ## 0.9.1 — 16 October 2026
 
 - **WAV exports upload to SoundCloud.** A WAV under 4 GB, which is nearly

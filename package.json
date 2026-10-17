@@ -70,6 +70,18 @@
           "name": "Audio recording",
           "role": "Viewer",
           "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "mp4",
+            "m4v",
+            "mov",
+            "mkv",
+            "webm"
+          ],
+          "name": "Video recording",
+          "role": "Viewer",
+          "rank": "Alternate"
         }
       ],
       "hardenedRuntime": false,

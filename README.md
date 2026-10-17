@@ -54,6 +54,8 @@ There is no build for Intel Macs yet. On those, the tool can be run
    4 GB) is no problem: select all the parts, or drop them together, and they
    open as one recording. Parts numbered by the recorder are joined in the
    order of their numbers; others in the order they were written.
+   A video of the set (MP4, MOV, MKV or WebM) opens like a recording: its
+   sound is mastered, and its picture can go with the export.
 2. **Mark the mix.** The whole recording starts out as one mix. Drag its edges
    in, or press "Split at gaps" to cut a night apart at the silences. Drag
    across a free part to mark another mix.
@@ -254,11 +256,19 @@ for two hours; a template heavy with effects takes about three times as long.
 The first time, the recording is also listened to for the beats and the
 spectrum the template moves to, which takes about as long as its analysis.
 
+A recording that is a video can also be exported as **Original video**: its
+own picture with the mastered sound. The picture is copied as it is, not
+encoded again, so this is about as quick as exporting the sound alone and
+loses nothing. Players start it on the very frame the mix starts on; at the
+end, the picture may run a few frames past the sound. A picture an MP4 can
+hold (H.264, HEVC, AV1) goes into an MP4; any other, such as ProRes, into a
+MOV.
+
 ### Exporting
 
 The export dialog asks for:
 
-- **Format**: WAV, FLAC, MP3, AAC, or MP4 video.
+- **Format**: WAV, FLAC, MP3, AAC, MP4 video, or, for a video, Original video.
 - **Bit depth** for WAV and FLAC: 16-bit, which is dithered and the usual
   choice for sharing and playing, or 24-bit.
 - **Bitrate** for MP3 and AAC, and for the sound of a video.
@@ -272,7 +282,9 @@ A mix you have named is exported under that name. MP3 and AAC exports are made
 ### Formats it reads
 
 Anything ffmpeg can decode, including MP3, WAV, FLAC, AAC/M4A, AIFF, Ogg and
-Opus. Variable-bitrate MP3s and AIFF files take a moment longer to start
+Opus, and the sound of videos: MP4, MOV, MKV and WebM. Variable-bitrate MP3s,
+AIFF files and videos whose sound the player cannot play itself (MKV, and
+the PCM sound of many cameras' MOV files) take a moment longer to start
 playing after each jump, because they are decoded on the fly to keep the
 preview exactly in step.
 

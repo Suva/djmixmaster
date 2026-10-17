@@ -81,10 +81,22 @@ async function isConstantBitrate(path: string): Promise<boolean> {
   }
 }
 
-/** Whether a recording has to be decoded by ffmpeg for playback instead of handed to the built-in player. */
-export async function needsStreaming(path: string): Promise<boolean> {
+/**
+ * Videos the built-in player plays the sound of, when it is in one of these
+ * codecs. A camera's MOV often holds PCM, which it does not play, and
+ * Matroska it does not know; those are streamed.
+ */
+const EXACT_VIDEO = new Set(['.mp4', '.m4v', '.webm']);
+const PLAYED_CODECS = new Set(['aac', 'opus', 'vorbis', 'mp3', 'flac']);
+
+/**
+ * Whether a recording has to be decoded by ffmpeg for playback instead of
+ * handed to the built-in player. `codec` is its sound's, as ffmpeg names it.
+ */
+export async function needsStreaming(path: string, codec?: string): Promise<boolean> {
   const extension = extname(path).toLowerCase();
   if (EXACT.has(extension)) return false;
+  if (EXACT_VIDEO.has(extension)) return !PLAYED_CODECS.has(codec ?? '');
   if (extension !== '.mp3') return true;
   try {
     return !(await isConstantBitrate(path));

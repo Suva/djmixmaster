@@ -1,5 +1,5 @@
 import type { Template } from '../visuals/template.ts';
-import type { EncodeOptions } from '../audio-io.ts';
+import type { EncodeOptions, VideoInfo } from '../audio-io.ts';
 import type { Features } from '../features.ts';
 import type { Examination, RenderResult } from '../master.ts';
 
@@ -21,6 +21,11 @@ export interface RenderRequest {
   ceilingDb: number | null;
   /** For an MP4: the picture to go with the sound. */
   video?: VideoRequest;
+  /**
+   * For a recording that is a video: put its own picture with the sound,
+   * copied as it is rather than drawn and encoded again.
+   */
+  originalPicture?: boolean;
 }
 
 /** The picture of a video export. */
@@ -75,6 +80,8 @@ export interface MediaSource {
    * given as `?t=<seconds>` onwards.
    */
   streamed: boolean;
+  /** The recording's picture, when it is a video. */
+  video: VideoInfo | null;
 }
 
 /** A recording opened lately that is still where it was. */

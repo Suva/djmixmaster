@@ -69,6 +69,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/worker.ts` | Runs one measure or render job off the main thread |
 | `src/app/parts.ts` | The order and the name of a recording that came in several files |
 | `src/app/playback.ts` | Decides whether a recording must be streamed for playback |
+| `src/app/video-files.ts` | Which files are videos, and the container an export keeps their picture in |
 | `src/app/updates.ts` | The background check for a newer version |
 | `src/app/api.ts` | The interface between the window and the main process |
 | `src/app/renderer/renderer.ts` | The window: state, mixes, interaction, undo, export |
@@ -205,7 +206,16 @@ Do not write test data there.
 - **Playback has two paths.** The audio element plays most formats straight
   from the file. Variable-bitrate MP3s (where it lands tens of seconds off)
   and formats it cannot play are decoded by ffmpeg from the playhead and
-  streamed. `needsStreaming` in `playback.ts` decides.
+  streamed. `needsStreaming` in `playback.ts` decides A video's sound is played
+  straight from an MP4 or WebM when it is in a codec the element knows;
+  anything else is streamed.
+- **A recording can be a video.** Its sound is read with `-map a:0`
+  everywhere, so nothing that reads audio notices. `probe` also describes its
+  picture (`VideoInfo`), which the window is given with the media address.
+  "Original video" exports (`renderOriginalPicture` in `main.ts`) copy the
+  picture of the mix's stretch with `-c copy` beside the exported sound;
+  ffmpeg starts the copy on the keyframe before and writes an edit list, so
+  players start on the right frame.
 - **The window is served from `djm://app/`**, not `file://`, so that audio can
   pass through Web Audio. Only files listed in `APP_FILES` in `main.ts` are
   served; a new file in `dist/` has to be added there.

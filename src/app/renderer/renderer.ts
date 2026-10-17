@@ -6,6 +6,7 @@ import { level } from '../../level.ts';
 import { HOP_SECONDS, integratedLoudness } from '../../loudness.ts';
 import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
+import type { VideoInfo } from '../../audio-io.ts';
 import type { Api, FineWave, VideoMixInfo, VisualsChoice } from '../api.ts';
 import { clock, detailLanes, displayGain, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type MarkerBox, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
@@ -14,6 +15,7 @@ import { templateOf } from './video-frame.ts';
 import { Player } from './player.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
+import { originalPictureExtension } from '../video-files.ts';
 
 declare global {
   interface Window {
@@ -43,6 +45,8 @@ interface Recording {
   body: Float32Array;
   /** Silences between sets, in blocks. */
   gaps: Region[];
+  /** The picture, when the recording is a video. */
+  video: VideoInfo | null;
 }
 
 /** One stretch of the recording that is levelled and exported on its own. */
@@ -2169,6 +2173,7 @@ async function open(files: string[]) {
     $('progress-label').textContent = progressLabel;
     const measured = await api.measure(path);
     if (measured.peaks.length === 0) throw new Error('The recording is too short to analyse');
+    const source = await api.mediaUrl(path);
     recording = {
       path,
       name,
@@ -2176,11 +2181,12 @@ async function open(files: string[]) {
       body: Float32Array.from(measured.blocks, (energy) => Math.sqrt(energy / 2)),
       gaps: findGaps(measured.blocks),
       checkup: checkup(measured),
+      video: source.video,
     };
     finePieces.clear();
     showCheckup();
     overviewShown = { start: 0, end: measured.peaks.length };
-    player.load(await api.mediaUrl(path));
+    player.load(source);
     $('file-name').textContent = name;
     $('file-name').classList.add('loaded');
     $('empty').hidden = true;
@@ -2343,7 +2349,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
   const savedDefaults = remembered.defaults as (Partial<Defaults> & { export?: Partial<ExportSettings> }) | null;
   const saved = savedDefaults?.export ?? {};
   exportSettings = {
-    format: (['wav', 'flac', 'mp3', 'm4a', 'mp4'] as const).find((format) => format === saved.format) ?? DEFAULT_EXPORT_SETTINGS.format,
+    format: EXPORT_FORMATS.find((format) => format === saved.format) ?? DEFAULT_EXPORT_SETTINGS.format,
     bitDepth: saved.bitDepth === 24 ? 24 : 16,
     mp3Kbps: BITRATES.mp3.find((kbps) => kbps === saved.mp3Kbps) ?? DEFAULT_EXPORT_SETTINGS.mp3Kbps,
     aacKbps: BITRATES.m4a.find((kbps) => kbps === saved.aacKbps) ?? DEFAULT_EXPORT_SETTINGS.aacKbps,
@@ -2643,7 +2649,9 @@ function exportName(m: Mix): string {
 // ---------------------------------------------------------------------------
 // Export settings and the dialog that asks for them
 
-type ExportFormat = 'wav' | 'flac' | 'mp3' | 'm4a' | 'mp4';
+/** `original` is a video with the recording's own picture, for a recording that is a video. */
+type ExportFormat = 'wav' | 'flac' | 'mp3' | 'm4a' | 'mp4' | 'original';
+const EXPORT_FORMATS: ExportFormat[] = ['wav', 'flac', 'mp3', 'm4a', 'mp4', 'original'];
 
 /** A video export's picture: 1080p at 30 frames a second, at the bitrate YouTube asks for. */
 const VIDEO = { width: 1920, height: 1080, fps: 30, kbps: 8000 };
@@ -2662,7 +2670,9 @@ interface ExportSettings {
 const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
   format: 'wav', bitDepth: 16, mp3Kbps: 320, aacKbps: 256, sampleRate: null, lossyHeadroom: true,
 };
-const BITRATES: Record<'mp3' | 'm4a' | 'mp4', number[]> = { mp3: [320, 256, 192, 128], m4a: [320, 256, 192, 128], mp4: [320, 256, 192, 128] };
+const BITRATES: Record<'mp3' | 'm4a' | 'mp4' | 'original', number[]> = {
+  mp3: [320, 256, 192, 128], m4a: [320, 256, 192, 128], mp4: [320, 256, 192, 128], original: [320, 256, 192, 128],
+};
 const SAMPLE_RATES = [44100, 48000];
 /** Above this a WAV has to be written in an extended form that not every player reads. */
 const WAV_LIMIT_BYTES = 4 * 1024 ** 3;
@@ -2681,6 +2691,7 @@ function estimatedBytes(m: Mix, settings: ExportSettings): number {
   if (settings.format === 'mp3') return (seconds * settings.mp3Kbps * 1000) / 8;
   if (settings.format === 'm4a') return (seconds * settings.aacKbps * 1000) / 8;
   if (settings.format === 'mp4') return (seconds * (settings.aacKbps + VIDEO.kbps) * 1000) / 8;
+  if (settings.format === 'original') return (seconds * (settings.aacKbps + (recording!.video?.bitrateKbps ?? VIDEO.kbps)) * 1000) / 8;
   const rate = settings.sampleRate ?? recording!.measured.sampleRate;
   const pcm = seconds * rate * 2 * (settings.bitDepth / 8);
   // FLAC typically packs dense dance music to around two thirds.
@@ -2693,7 +2704,10 @@ function size(bytes: number): string {
 
 /** Shows the dialog's controls for the current settings. */
 function showExportSettings() {
+  // A recording that is not a video has no picture of its own to keep.
+  if (exportSettings.format === 'original' && !recording!.video) exportSettings.format = 'mp4';
   const settings = exportSettings;
+  $('export-original').hidden = !recording!.video;
   const lossless = settings.format === 'wav' || settings.format === 'flac';
   for (const button of $('export-format').querySelectorAll('button')) {
     button.classList.toggle('on', button.dataset.format === settings.format);
@@ -2706,7 +2720,7 @@ function showExportSettings() {
   $('export-headroom-field').hidden = lossless;
   $<HTMLInputElement>('export-headroom').checked = settings.lossyHeadroom;
   if (!lossless) {
-    const format = settings.format as 'mp3' | 'm4a' | 'mp4';
+    const format = settings.format as 'mp3' | 'm4a' | 'mp4' | 'original';
     const chosen = format === 'mp3' ? settings.mp3Kbps : settings.aacKbps;
     $('export-bitrate').replaceChildren(
       ...BITRATES[format].map((kbps) => new Option(`${kbps} kbps`, String(kbps), false, kbps === chosen)),
@@ -2729,6 +2743,10 @@ function showExportSettings() {
     const named = exportingMixes.map((m) => templateOf(m.visuals).name);
     const which = new Set(named).size === 1 ? `the ${named[0]} template` : 'each mix\'s template';
     note += ` A 1920 × 1080 picture of ${which}, chosen in the Video view, with the sound in AAC. Drawing the picture takes a while.`;
+  } else if (settings.format === 'original') {
+    const { width, height } = recording!.video!;
+    note += ` The recording's own ${width} × ${height} picture with the mastered sound in AAC, as ${originalPictureExtension(recording!.video!.codec).toUpperCase()}.`
+      + ' The picture is copied, not encoded again, so this is about as quick as exporting the sound.';
   } else if (lossless && settings.bitDepth === 16) {
     note += ' 16-bit is dithered, so quiet passages and fades stay clean.';
   }
@@ -2850,10 +2868,15 @@ function encodeOptions(m: Mix, track?: string): EncodeOptions {
     track,
     sampleRate: sampleRate ?? undefined,
     bitDepth: format === 'wav' || format === 'flac' ? bitDepth : undefined,
-    bitrateKbps: format === 'mp3' ? mp3Kbps : format === 'm4a' || format === 'mp4' ? aacKbps : undefined,
+    bitrateKbps: format === 'mp3' ? mp3Kbps : format === 'm4a' || format === 'mp4' || format === 'original' ? aacKbps : undefined,
     // Players that know chapters show the tracks; formats that cannot carry them ignore this.
     chapters: mixTracks(m).length ? chaptersOf(mixTracks(m), mixSeconds(m).end - mixSeconds(m).start) : undefined,
   };
+}
+
+/** The extension of the files the export settings make. */
+function exportExtension(): string {
+  return exportSettings.format === 'original' ? originalPictureExtension(recording!.video!.codec) : exportSettings.format;
 }
 
 function renderMix(m: Mix, output: string, track?: string) {
@@ -2872,6 +2895,7 @@ function renderMix(m: Mix, output: string, track?: string) {
     fadeInSeconds: fades(m).in * HOP_SECONDS,
     fadeOutSeconds: fades(m).out * HOP_SECONDS,
     ...(exportSettings.format === 'mp4' ? { video: { ...VIDEO, mix: videoMixOf(m) } } : {}),
+    ...(exportSettings.format === 'original' ? { originalPicture: true } : {}),
   });
 }
 
@@ -2889,7 +2913,7 @@ async function exportMix() {
   player.pause();
   if (!(await askExportSettings(`Export “${exportName(mix)}”`, [mix]))) return;
   const folder = recording.path.replace(/[^\\/]+$/, '');
-  const output = await api.pickOutput(`${folder}${fileName(exportName(mix))}.${exportSettings.format}`);
+  const output = await api.pickOutput(`${folder}${fileName(exportName(mix))}.${exportExtension()}`);
   if (!output) return;
   $('export-status').textContent = '';
   progressLabel = `Exporting ${mix.name}`;
@@ -2913,7 +2937,7 @@ async function exportAll() {
   if (!(await askExportSettings(`Export all ${mixes.length} mixes`, mixes))) return;
   const folder = await api.pickFolder();
   if (!folder) return;
-  const extension = exportSettings.format;
+  const extension = exportExtension();
   // Named mixes become files of that name; the rest are numbered in order.
   const taken = new Set<string>();
   const outputs = mixes.map((m, index) => {

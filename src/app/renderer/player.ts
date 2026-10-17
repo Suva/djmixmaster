@@ -20,7 +20,7 @@ export class Player {
 
   readonly #audio = new Audio();
   readonly #silent: boolean;
-  #source: MediaSource = { url: '', streamed: false };
+  #source: MediaSource = { url: '', streamed: false, video: null };
   #playing = false;
   /** For a streamed recording: where the current stream starts, and whether one is loaded. */
   #streamStart = 0;
@@ -80,7 +80,7 @@ export class Player {
 
   /** Lets go of the recording, when it is closed. */
   unload() {
-    this.load({ url: '', streamed: true });
+    this.load({ url: '', streamed: true, video: null });
   }
 
   seek(seconds: number) {

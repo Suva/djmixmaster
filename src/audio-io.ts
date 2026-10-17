@@ -27,6 +27,22 @@ export interface AudioInfo {
   /** Channel layout as ffmpeg names it, such as "stereo" or "mono". */
   channels: string;
   bitrateKbps: number | null;
+  /** The picture, when the file is a video; a cover picture in an audio file does not count. */
+  video: VideoInfo | null;
+}
+
+/** The picture of a video file, as ffmpeg describes its first video stream. */
+export interface VideoInfo {
+  /** ffmpeg's name for the codec, such as "h264" or "prores". */
+  codec: string;
+  /** As stored; a phone's upright video is stored on its side and turned by `rotation`. */
+  width: number;
+  height: number;
+  /** Frames a second; 0 if ffmpeg does not say. */
+  fps: number;
+  bitrateKbps: number | null;
+  /** Degrees the picture is turned when shown: 0, 90, 180 or 270. */
+  rotation: number;
 }
 
 /** Where Homebrew and friends put ffmpeg; shells started outside a login session often lack these. */
@@ -142,9 +158,41 @@ function probeFile(file: string): Promise<AudioInfo> {
         codec: stream?.[1] ?? 'unknown',
         channels: stream?.[2].trim() ?? 'stereo',
         bitrateKbps: bitrate ? Number(bitrate[1]) : null,
+        video: videoOf(described),
       });
     });
   });
+}
+
+/** The first real video stream in what ffmpeg says about a file, or null. */
+export function videoOf(described: string): VideoInfo | null {
+  const lines = described.split('\n');
+  // Cover art in an MP3 or M4A is a video stream too, of one picture: "(attached pic)".
+  const at = lines.findIndex((line) => /Stream #.*: Video: /.test(line) && !/attached pic/.test(line));
+  if (at < 0) return null;
+  // For example: "Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive),
+  // 1920x1080 [SAR 1:1 DAR 16:9], 4999 kb/s, 30 fps, 30 tbr, 15360 tbn (default)"
+  const line = lines[at];
+  const size = /, (\d{2,5})x(\d{2,5})/.exec(line);
+  if (!size) return null;
+  const fps = /, ([\d.]+)(k?) fps/.exec(line) ?? /, ([\d.]+)(k?) tbr/.exec(line);
+  const bitrate = /, (\d+) kb\/s/.exec(line);
+  // The turn is noted under the stream, in its side data: "displaymatrix: rotation of -90.00 degrees".
+  let rotation = 0;
+  for (const next of lines.slice(at + 1)) {
+    if (/Stream #/.test(next)) break;
+    const turned = /rotation of (-?[\d.]+) degrees/.exec(next);
+    // ffmpeg gives the turn counterclockwise; a player turns it back the other way.
+    if (turned) rotation = (((Math.round(-Number(turned[1]) / 90) * 90) % 360) + 360) % 360;
+  }
+  return {
+    codec: /: Video: ([^\s,]+)/.exec(line)![1],
+    width: Number(size[1]),
+    height: Number(size[2]),
+    fps: fps ? Number(fps[1]) * (fps[2] ? 1000 : 1) : 0,
+    bitrateKbps: bitrate ? Number(bitrate[1]) : null,
+    rotation,
+  };
 }
 
 /**
