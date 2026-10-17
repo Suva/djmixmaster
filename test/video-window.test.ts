@@ -459,3 +459,13 @@ test('a clip made on green or on black has that keyed out, and a clip that start
   assert.ok(!colours.includes('blue'), `restarted on every beat, the clip never reaches its blue: ${colours.join(' ')}`);
   assert.ok(colours.includes('red') && colours.includes('green'), colours.join(' '));
 });
+
+test('a video opens with its own picture as the template, and a recording without one with the first template', { skip }, async () => {
+  const chosen = async (recording: string) => runApp({ recording, data: await dataFolder(work) }, async (page) => {
+    page.click('view-video');
+    await page.wait(100);
+    return page.element<HTMLSelectElement>('template').value;
+  });
+  assert.equal(await chosen(filmed), 'original');
+  assert.equal(await chosen(join(work, 'sound.wav')), 'glitter');
+});

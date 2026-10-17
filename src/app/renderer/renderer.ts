@@ -11,7 +11,7 @@ import type { Api, FineWave, VideoMixInfo, VisualsChoice } from '../api.ts';
 import { clock, detailLanes, displayGain, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type MarkerBox, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
 import { VideoView } from './video-view.ts';
-import { templateOf } from './video-frame.ts';
+import { templateOf, VIDEO_RECORDING_TEMPLATE } from './video-frame.ts';
 import { Player } from './player.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
@@ -118,6 +118,14 @@ const levelMeter = new LevelMeter($<HTMLCanvasElement>('level-meter'));
 // The Video view: the selected mix's video in place of the curves, its
 // template in place of the levelling settings. See video-view.ts.
 /** A mix as its video sees it: name, place, length, and the template chosen for it. */
+/**
+ * The template chosen for a mix's video and what was filled in, or, where
+ * nobody chose one and the recording is a video, its own picture.
+ */
+function visualsOf(m: Mix): VisualsChoice | undefined {
+  return m.visuals ?? (recording?.video ? { template: VIDEO_RECORDING_TEMPLATE, fields: {} } : undefined);
+}
+
 function videoMixOf(m: Mix): VideoMixInfo {
   const at = edges(m);
   return {
@@ -130,8 +138,8 @@ function videoMixOf(m: Mix): VideoMixInfo {
     end: at.end * HOP_SECONDS,
     artist: m.artist ?? '',
     album,
-    visuals: m.visuals,
-    template: templateOf(m.visuals),
+    visuals: visualsOf(m),
+    template: templateOf(visualsOf(m)),
     tracks: mixTracks(m),
     fadeIn: fades(m).in * HOP_SECONDS,
     fadeOut: fades(m).out * HOP_SECONDS,
@@ -2753,7 +2761,7 @@ function showExportSettings() {
   if (settings.format === 'wav' && sizes.some((bytes) => bytes > WAV_LIMIT_BYTES)) {
     note += ' Over 4 GB, a WAV is written in an extended form that some players and DJ gear cannot read. FLAC avoids this.';
   } else if (settings.format === 'mp4') {
-    const named = exportingMixes.map((m) => templateOf(m.visuals).name);
+    const named = exportingMixes.map((m) => templateOf(visualsOf(m)).name);
     const which = new Set(named).size === 1 ? `the ${named[0]} template` : 'each mix\'s template';
     note += ` A 1920 × 1080 picture of ${which}, chosen in the Video view, with the sound in AAC. Drawing the picture takes a while.`;
   } else if (settings.format === 'original') {

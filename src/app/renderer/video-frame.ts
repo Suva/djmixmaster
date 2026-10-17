@@ -25,6 +25,8 @@ export const TEMPLATES = new Map<string, Template>(
 // Built-in templates are read only: a template of the user's own starts as a copy of one.
 /** What a mix's video looks like when nobody chose a template for it. */
 export const DEFAULT_TEMPLATE = BUILT_IN_TEMPLATES[0].id;
+/** What a mix's video looks like when nobody chose a template for it and the recording is a video: its own picture. */
+export const VIDEO_RECORDING_TEMPLATE = 'original';
 
 /** How a mix names a template of the user's own: this, then the template's id. */
 export const USER_TEMPLATE = 'user:';

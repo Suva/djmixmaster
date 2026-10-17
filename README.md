@@ -225,7 +225,8 @@ the bottom of the window, or Tab) shows the selected mix as a video: a
 template that moves to the music, with a few things to fill in, such as a
 colour, a logo and the artist's name. Five templates come with the app:
 Glitter, Spectrum ring, Waveform, Photo, over a photo of your own, and
-Original video, the recording's own picture for a set that was filmed. What is
+Original video, the recording's own picture for a set that was filmed,
+which a video starts out with. What is
 chosen is kept with the mix.
 
 You can also make templates of your own, in an editor beside the picture that
