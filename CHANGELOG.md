@@ -36,6 +36,9 @@ are under "Not released yet" and appear there once they are.
   track playing over it. If the picture runs ahead of the sound or behind
   it, "Picture delay" in the Video view puts them in step, for the view and
   every video export.
+- **Clips that keep time.** A video layer can start its clip again on every
+  beat, every 2, 4, 8 or 16 beats, or at each track. A clip made on a green
+  screen or on black can have that keyed out, with a tolerance and a softness.
 - **Ping-pong clips**, up to a minute long, play forwards and then
   backwards. Clips in formats the window cannot play itself, such as
   ProRes, are shown from a copy the app makes the first time.

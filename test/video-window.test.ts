@@ -401,3 +401,61 @@ test('videos of a template that have moved are found again: one located by hand,
   assert.ok(saved.media.Colours.path.startsWith(join(data, 'media')), 'the one located, small, kept in the media folder');
   assert.equal(saved.media.Negative.path, join(moved, 'Negative.mp4'), 'the other found beside it');
 });
+
+test('a clip made on green or on black has that keyed out, and a clip that starts again on every beat never gets far', { skip }, async () => {
+  const green = join(work, 'Green.mp4');
+  const black = join(work, 'Black.mp4');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=0x00ff00:s=160x90:r=25:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', green]);
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=160x90:r=25:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', black]);
+  // A quarter of a second red, a quarter green, then blue: played from its start on every beat, it is never blue.
+  const quick = join(work, 'Quick.mp4');
+  execFileSync(ffmpeg(), [
+    '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=160x90:r=25:d=0.24', '-f', 'lavfi', '-i', 'color=c=lime:s=160x90:r=25:d=0.24',
+    '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:r=25:d=2', '-filter_complex', '[0][1][2]concat=n=3:v=1:a=0', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', quick,
+  ]);
+  const file = join(work, 'Keyed.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1, name: 'Keyed', fields: [],
+    layers: [
+      { type: 'gradient', params: { colour1: '#ff00ff', colour2: '#ff00ff' } },
+      { type: 'video', params: { video: green, fit: 'stretch', width: 33.4, height: 100, x: 16.7, key: 'colour', keyColour: '#00ff00' } },
+      { type: 'video', params: { video: black, fit: 'stretch', width: 33.4, height: 100, x: 50, key: 'dark' } },
+      { type: 'video', params: { video: quick, fit: 'stretch', width: 33.4, height: 100, x: 83.3, restart: 'each beat' } },
+    ],
+  }));
+  const folder = join(work, 'keyed');
+  await mkdir(folder);
+  const seen = await runApp({ recording: filmed, data: await fresh(), template: file, exportFolder: folder, timeoutMs: 150_000 }, async (page) => {
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight');
+    await page.wait(100);
+    page.key('KeyO');
+    page.key('Enter');
+    await page.settle();
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Keyed', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const at = (x: number) => [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), picture.height / 2, 1, 1).data].slice(0, 3);
+    // Wait for the clip on the right, which is not keyed, to be drawn: the others are then too.
+    await page.until(() => at(5 / 6)[0] > 150 && at(5 / 6)[2] < 100, 'the clips to be drawn');
+    const shown = [at(1 / 6), at(1 / 2)];
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+    page.click('export-go');
+    await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 120_000);
+    return { shown, status: page.text('export-status') };
+  });
+  // Magenta shows through where green and black were keyed out.
+  for (const [r, g, b] of seen.shown) assert.ok(r > 200 && g < 60 && b > 200, `the background shows through: ${[r, g, b]}`);
+  assert.match(seen.status, /^Exported 1 mix\./, seen.status);
+  const [exported] = await readdir(folder);
+  const video = join(folder, exported);
+  const colours = [];
+  // Past the first beat, which the analysis finds a little after the start.
+  for (let seconds = 1; seconds < 9.5; seconds += 0.37) colours.push(thirdsAt(video, seconds)[2]);
+  assert.ok(!colours.includes('blue'), `restarted on every beat, the clip never reaches its blue: ${colours.join(' ')}`);
+  assert.ok(colours.includes('red') && colours.includes('green'), colours.join(' '));
+});

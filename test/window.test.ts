@@ -583,7 +583,7 @@ test('a template of your own: duplicated, renamed, kept, shared and deleted', { 
   });
   assert.ok(first.nameHidden, 'no name field outside the editor');
   assert.equal(first.shownName, 'My glitter', 'the name shown under the list');
-  assert.deepEqual(first.groups, [['Comes with the app', ['Glitter', 'Spectrum ring', 'Waveform', 'Photo']], ['Yours', ['Glitter copy']]]);
+  assert.deepEqual(first.groups, [['Comes with the app', ['Glitter', 'Spectrum ring', 'Waveform', 'Photo', 'Original video']], ['Yours', ['Glitter copy']]]);
   assert.equal(first.chosen, 'My glitter');
   assert.ok(first.deletable);
   const stored = await readdir(join(data, 'templates'));
@@ -1505,7 +1505,7 @@ test('the + menu fits the window, scrolls, and finds a kind of layer by typing',
     return { listHeight, opened, found, added, closed, short };
   });
   assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
-  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 14 });
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 15 });
   assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
   assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
   assert.ok(seen.closed);
