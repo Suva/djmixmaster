@@ -230,8 +230,8 @@ chosen is kept with the mix.
 You can also make templates of your own, in an editor beside the picture that
 shows every change as it is made:
 
-- **Layers** that draw (gradients, glitter, pictures, text, the spectrum, the
-  waveform) and effects that change what is beneath them (glow, colour split,
+- **Layers** that draw (gradients, glitter, pictures, video clips, text, the
+  spectrum, the waveform) and effects that change what is beneath them (glow, colour split,
   glitch, kaleidoscope, blur, brightness and contrast, hue and saturation),
   with blends as in an image editor, and **groups** to keep them together.
   Layers can be moved and resized on the picture itself.
@@ -240,6 +240,11 @@ shows every change as it is made:
   `100 + 8 * smooth(bass, 0.02, 0.4)`.
 - **Fields**: what someone using the template fills in, such as a colour or a
   logo.
+- **Video clips** loop, play once, or play forwards and backwards, at a
+  speed you choose, and can start again on every beat, bar or track. A clip
+  made on green or on black can have that keyed out. A video up to 25 MB is
+  copied into the app's own folder when added; a larger one is used where it
+  is, so it must stay there.
 - **About**: who made the template and what it is.
 
 Templates are shared as `.djmtemplate` files, with their pictures packed

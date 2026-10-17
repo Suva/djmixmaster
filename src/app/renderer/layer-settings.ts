@@ -11,8 +11,8 @@
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { toHex, type Colour } from '../../visuals/colour.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, LAYER_TYPES, TEXT_VARIABLES,
-  type Layer, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, MEDIA_PREFIX, RECORDING_VIDEO, settingsOf, LAYER_TYPES, TEXT_VARIABLES,
+  type Layer, type MediaFile, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
 import { scrubbableInput } from './scrub.ts';
@@ -29,6 +29,18 @@ export interface LayerSettingsContext {
   live(): ResolvedParams | null;
   /** Asks for a picture file and gives its name and contents as a data URL, or null. */
   pickPicture(): Promise<{ name: string; data: string } | null>;
+  /** Asks for a video file and makes it one the template can keep: its name, and where it is. */
+  pickVideo(): Promise<{ name: string; file: MediaFile } | null>;
+  /** Keeps a video with the template and gives the setting it. */
+  keepVideo(key: string, name: string, file: MediaFile): void;
+}
+
+/** A name not yet taken among these, for something added: the one wanted, or it with a number. */
+export function freeName(wanted: string, taken: Iterable<string>): string {
+  const names = new Set(taken);
+  let name = wanted;
+  for (let n = 2; names.has(name); n++) name = `${wanted} ${n}`;
+  return name;
 }
 
 /** Settings shown under the layer's own, folded away until wanted. */
@@ -110,13 +122,13 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
     const chosen = asExpression.get(layer) ?? new Set<string>();
     asExpression.set(layer, chosen);
     const expressed = () => chosen.has(key) || isExpression(value(), param);
-    const canExpress = param.kind === 'number' || param.kind === 'switch' || param.kind === 'colour';
+    const canExpress = !param.fixed && (param.kind === 'number' || param.kind === 'switch' || param.kind === 'colour');
     // A number can be set to follow the music without writing the expression: "Moves with…".
     const motionPanel = document.createElement('div');
     motionPanel.className = 'motion';
     motionPanel.hidden = true;
     row.append(motionPanel);
-    if (param.kind === 'number') {
+    if (param.kind === 'number' && !param.fixed) {
       const wave = document.createElement('button');
       wave.type = 'button';
       wave.className = 'fx motion-button';
@@ -446,6 +458,27 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
             let name = picked.name;
             for (let n = 2; taken.has(name); n++) name = `${picked.name} ${n}`;
             context.pack(key, name, picked.data);
+            build();
+          });
+          return select;
+        }
+        case 'video': {
+          const select = document.createElement('select');
+          select.add(new Option('None', ''));
+          const template = context.template();
+          select.add(new Option('The recording, when it is a video', RECORDING_VIDEO));
+          for (const field of template.fields.filter((f) => f.kind === 'video')) select.add(new Option(`Field: ${field.label}`, `%${field.key}%`));
+          for (const name of Object.keys(template.media ?? {})) select.add(new Option(`Kept: ${name}`, MEDIA_PREFIX + name));
+          const value = String(current);
+          if (value && ![...select.options].some((option) => option.value === value)) select.add(new Option(value.split(/[\\/]/).pop()!, value));
+          select.add(new Option('Add a video…', '+'));
+          select.value = value;
+          select.addEventListener('change', async () => {
+            if (select.value !== '+') return change(select.value);
+            select.value = String(layer.params[key] ?? '');
+            const picked = await context.pickVideo();
+            if (!picked) return;
+            context.keepVideo(key, freeName(picked.name, Object.keys(context.template().media ?? {})), picked.file);
             build();
           });
           return select;

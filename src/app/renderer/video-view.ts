@@ -10,12 +10,13 @@ import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, LAYER_TYPES, prepare, TEXT_VARIABLES,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, LAYER_TYPES, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEXT_VARIABLES,
   type Field, type PreparedLayer, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
 import { TemplateEditor } from './template-editor.ts';
 import { PictureHandles } from './picture-handles.ts';
+import { PreviewVideos } from './video-sources.ts';
 import {
   checked, DEFAULT_TEMPLATE, drawVideoFrame, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
 } from './video-frame.ts';
@@ -30,6 +31,8 @@ export interface VideoViewOptions {
   playhead(): number;
   /** Whether the music is playing; paused, the picture is drawn only when something changes. */
   playing(): boolean;
+  /** How fast it plays: 1 at its own speed. */
+  rate(): number;
   /** Moves the playhead to this many seconds into the recording. */
   seek(seconds: number): void;
   /** How loud the selected mix is along its length, in this many steps, 0 to 1, from the analysis. */
@@ -49,6 +52,8 @@ export class VideoView {
   readonly #canvas = $<HTMLCanvasElement>('picture');
   readonly #drawer = new FrameDrawer(this.#canvas);
   readonly #images = new Map<string, ImageBitmap>();
+  /** The videos of video layers, playing along; a frame that comes in while paused is drawn. */
+  readonly #videos = new PreviewVideos(() => (this.#stale = true));
   #visible = false;
   #frame = 0;
   #lastFrame = performance.now();
@@ -94,6 +99,19 @@ export class VideoView {
         let binary = '';
         for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         return { name: file.replace(/\.[^.]+$/, ''), data: `data:image/${type};base64,${btoa(binary)}` };
+      },
+      pickVideo: async () => {
+        const path = await options.api.pickVideo();
+        if (!path) return null;
+        try {
+          options.say('Adding the video…');
+          const file = await options.api.addMedia(path);
+          options.say('');
+          return { name: path.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''), file };
+        } catch (error) {
+          options.say(`Could not add the video: ${error instanceof Error ? error.message : error}`);
+          return null;
+        }
       },
     });
     this.#handles = new PictureHandles($('picture-overlay'), {
@@ -158,6 +176,7 @@ export class VideoView {
     if (!visible) {
       // The editor belongs to the Video view; it closes with it.
       this.#stopEditing();
+      this.#videos.clear();
       return;
     }
     this.refresh();
@@ -676,6 +695,32 @@ export class VideoView {
       });
       row.append(choose, clear, name);
       control.append(row);
+    } else if (field.kind === 'video') {
+      const row = document.createElement('div');
+      row.className = 'image-field';
+      const name = document.createElement('span');
+      name.className = 'file';
+      const shownName = (path: string) => (path === RECORDING_VIDEO ? 'The recording' : path.startsWith(MEDIA_PREFIX) ? path.slice(MEDIA_PREFIX.length) : path.split(/[\\/]/).pop()!);
+      name.textContent = value ? shownName(String(value)) : 'None';
+      const choose = document.createElement('button');
+      choose.type = 'button';
+      choose.id = id;
+      choose.textContent = 'Choose…';
+      choose.addEventListener('click', async () => {
+        const path = await this.#options.api.pickVideo();
+        if (!path) return;
+        name.textContent = shownName(path);
+        this.#setField(field.key, path);
+      });
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.textContent = 'Remove';
+      clear.addEventListener('click', () => {
+        name.textContent = 'None';
+        this.#setField(field.key, '');
+      });
+      row.append(choose, clear, name);
+      control.append(row);
     } else if (field.kind === 'font') {
       // The sample is what the font will set: the artist, or failing that the mix's name.
       const sample = () => {
@@ -758,7 +803,9 @@ export class VideoView {
     this.#lastShown = shown;
     // Time moves on only while playing: drawn again paused, glitter and fades stay where they were.
     const dt = playing ? elapsed : 0;
-    drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images);
+    this.#videos.begin(playing, this.#options.rate());
+    drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images, this.#videos);
+    this.#videos.end();
     // For scripted checks: how many frames have been drawn.
     canvas.dataset.frames = String(Number(canvas.dataset.frames ?? 0) + 1);
     if (this.#editing) {

@@ -10,7 +10,8 @@ import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import { fontsOf, imagesOf, prepare } from '../../visuals/template.ts';
-import { drawVideoFrame, pictureOf } from './video-frame.ts';
+import { clipRequests, drawVideoFrame, pictureOf } from './video-frame.ts';
+import { ExportVideos } from './video-sources.ts';
 
 declare global {
   interface Window {
@@ -54,6 +55,16 @@ async function run(job: VideoRequest) {
   const images = new Map<string, ImageBitmap>();
   for (const name of imagesOf(template, fields)) images.set(name, await pictureOf(name, template, api));
 
+  const videos = new ExportVideos(api, { width: job.width, height: job.height });
+  try {
+    await draw(job, reader, layers, images, videos);
+  } finally {
+    videos.close();
+  }
+}
+
+async function draw(job: VideoRequest, reader: MusicReader, layers: ReturnType<typeof prepare>, images: Map<string, ImageBitmap>, videos: ExportVideos) {
+  const { mix } = job;
   const canvas = new OffscreenCanvas(job.width, job.height);
   const drawer = new FrameDrawer(canvas);
   let pending: Uint8Array[] = [];
@@ -88,7 +99,9 @@ async function run(job: VideoRequest) {
   const keyframeEvery = Math.round(KEYFRAME_SECONDS * job.fps);
   for (let i = 0; i < frames; i++) {
     if (failure) throw new Error(failure);
-    drawVideoFrame(drawer, layers, reader, mix, i / job.fps, dt, images);
+    // The videos' frames for this moment, decoded before the frame is drawn.
+    await videos.prepare(clipRequests(mix, layers, reader, i / job.fps));
+    drawVideoFrame(drawer, layers, reader, mix, i / job.fps, dt, images, videos);
     const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / job.fps), duration: Math.round(1e6 / job.fps) });
     encoder.encode(frame, { keyFrame: i % keyframeEvery === 0 });
     frame.close();

@@ -132,36 +132,54 @@ export async function probe(file: string): Promise<AudioInfo> {
   return { ...parts[0], duration: parts.reduce((total, part) => total + part.duration, 0) };
 }
 
-/** Reads the sample rate and length from what ffmpeg reports about a file. */
-function probeFile(file: string): Promise<AudioInfo> {
+/** What ffmpeg says about a file, or the files a list joins, when given nothing to do with it. */
+function describe(file: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // With no output named, ffmpeg describes the input on stderr and stops.
-    const child = spawn(ffmpeg(), ['-hide_banner', '-nostdin', '-i', file], { stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(ffmpeg(), ['-hide_banner', '-nostdin', ...inputArgs(file)], { stdio: ['ignore', 'ignore', 'pipe'] });
     let described = '';
     child.stderr.on('data', (d) => (described += d));
     child.on('error', reject);
-    child.on('close', () => {
-      const sampleRate = Number(/Stream #.*: Audio: .*?(\d+) Hz/.exec(described)?.[1]);
-      if (!sampleRate) {
-        const reason = described.trim().split('\n').pop();
-        reject(new Error(`No audio found in ${file}${reason ? ` (${reason})` : ''}`));
-        return;
-      }
-      const length = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(described);
-      const duration = length ? Number(length[1]) * 3600 + Number(length[2]) * 60 + Number(length[3]) : 0;
-      // For example: "Stream #0:0: Audio: mp3 (mp3float), 48000 Hz, stereo, fltp, 320 kb/s"
-      const stream = /Stream #.*: Audio: ([^\s,]+)[^,]*, \d+ Hz, ([^,\n]+)(.*)/.exec(described);
-      const bitrate = /(\d+) kb\/s/.exec(stream?.[3] ?? '') ?? /bitrate: (\d+) kb\/s/.exec(described);
-      resolve({
-        sampleRate,
-        duration,
-        codec: stream?.[1] ?? 'unknown',
-        channels: stream?.[2].trim() ?? 'stereo',
-        bitrateKbps: bitrate ? Number(bitrate[1]) : null,
-        video: videoOf(described),
-      });
-    });
+    child.on('close', () => resolve(described));
   });
+}
+
+/** The length of what ffmpeg describes, in seconds; 0 if it does not say. */
+function durationOf(described: string): number {
+  const length = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(described);
+  return length ? Number(length[1]) * 3600 + Number(length[2]) * 60 + Number(length[3]) : 0;
+}
+
+/** A video's picture and length, for a clip that a template shows: it need have no sound. */
+export async function probeVideo(file: string): Promise<{ duration: number; video: VideoInfo }> {
+  const described = await describe(file);
+  const video = videoOf(described);
+  if (!video) {
+    const reason = described.trim().split('\n').pop();
+    throw new Error(`No video found in ${file}${reason ? ` (${reason})` : ''}`);
+  }
+  return { duration: durationOf(described), video };
+}
+
+/** Reads the sample rate and length from what ffmpeg reports about a file. */
+async function probeFile(file: string): Promise<AudioInfo> {
+  const described = await describe(file);
+  const sampleRate = Number(/Stream #.*: Audio: .*?(\d+) Hz/.exec(described)?.[1]);
+  if (!sampleRate) {
+    const reason = described.trim().split('\n').pop();
+    throw new Error(`No audio found in ${file}${reason ? ` (${reason})` : ''}`);
+  }
+  // For example: "Stream #0:0: Audio: mp3 (mp3float), 48000 Hz, stereo, fltp, 320 kb/s"
+  const stream = /Stream #.*: Audio: ([^\s,]+)[^,]*, \d+ Hz, ([^,\n]+)(.*)/.exec(described);
+  const bitrate = /(\d+) kb\/s/.exec(stream?.[3] ?? '') ?? /bitrate: (\d+) kb\/s/.exec(described);
+  return {
+    sampleRate,
+    duration: durationOf(described),
+    codec: stream?.[1] ?? 'unknown',
+    channels: stream?.[2].trim() ?? 'stereo',
+    bitrateKbps: bitrate ? Number(bitrate[1]) : null,
+    video: videoOf(described),
+  };
 }
 
 /** The first real video stream in what ffmpeg says about a file, or null. */

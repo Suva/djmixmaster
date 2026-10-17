@@ -92,6 +92,18 @@ template works at any size; times are in seconds unless they say beats.
 - Tint colour and amount; brightness; saturation
 - Slow drift, as a background photo: zoom amount and speed, pan direction
 
+**★ Video** — a loop behind the music, a clip of the club
+- Video file (MP4, MOV, MKV, WebM), a video field, or the recording's own
+  picture when the recording is a video
+- Plays: loop, ping-pong, once then hold its last frame, once then hide
+- Speed (a plain number: it cannot follow the music, see below)
+- Starts again: never, each track, each beat, every 2, 4, 8 or 16 beats
+- The part used: from, until, and how far into it to start
+- Everything an image has: fit, size, rounding, shadow, tint, brightness,
+  saturation
+- Key out: a colour (a green screen) or what is dark (a clip made on black),
+  with a tolerance and a softness
+
 **★ Text**
 - Text, with variables written between percent signs, such as
   `%currentTrack%` or `%mixName%` (see "Variables in text" below), so one text
@@ -206,6 +218,7 @@ Values any number parameter can follow, through a knob or an expression:
 | Text | Artist name, title, venue, date |
 | Colour | Colour 1, colour 2 |
 | Image | Logo, background photo |
+| Video | A loop for the background |
 | Number | Particle amount, as a slider with the range the designer allows |
 | Choice | Layout: logo left or centred |
 | Font | From the fonts the app carries |
@@ -399,6 +412,39 @@ values into the ones a frame gets. None draws anything yet.
   typed.
 - Not yet: "moves with…" for colours, the waveform as a true oscilloscope (it
   shows the level, not the wave), and the glow's threshold (approximated).
+
+## Video layers, as built
+
+- **Where a clip is** at each moment of the mix is worked out by one pure
+  function, `clipTime` in `src/visuals/clip.ts`, from the layer's timing
+  settings and the clip's length. The view and the export both ask it, so
+  they cannot disagree. A clip's time starts when its layer appears
+  ("shown from"), or at its last restart.
+- **Speed is a plain number.** A speed that followed the music would have to
+  be added up frame by frame, and the view (at the screen's rate) and the
+  export (at 30 frames a second) would drift apart. Such settings are
+  `fixed` in their spec: no ƒ and no "moves with…" in the editor, and an
+  expression is refused when a template is checked. "Starts again" on beats
+  or tracks gives a clip a musical feel instead, and stays exact.
+- **In the view**, each video layer has a muted video element
+  (`PreviewVideos` in `video-sources.ts`), served from its file by the main
+  process with byte ranges (`/video`). Playing, the element plays at the
+  clip's speed and is put back only when it drifts more than 0.15 s from
+  where `clipTime` says; paused, it is put on the exact frame, and the
+  picture is drawn again when the frame comes in.
+- **In the export**, the main process decodes each clip with ffmpeg
+  (`/frames`): frames on an even grid at the clip's own rate, scaled to fit
+  the video being made, as raw I420 in BT.709. `ExportVideos` reads them as
+  `VideoFrame`s. Since drawing a frame is synchronous, the frames it will ask
+  for are got ready first (`clipRequests` in `video-frame.ts`), from the
+  layers' settings. A clip is decoded forwards; a jump back (a loop starting
+  over) or far ahead starts ffmpeg again from there.
+- **Videos are not packed into the template.** A template's `media` lists
+  each by name with its path, size and fingerprint, and a setting names one
+  as `media:name`. A video up to 25 MB is copied into the app's media folder
+  when added, named by its fingerprint; a larger one is used where it is. A
+  setting can also hold a path (a video field filled in for a mix), or
+  `recording:video` for the recording's own picture.
 
 ## The MP4 export, as built
 

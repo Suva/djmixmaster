@@ -24,6 +24,12 @@ are under "Not released yet" and appear there once they are.
   offers "Original video": the video's own picture with the mastered sound.
   The picture is copied rather than encoded again, so it is quick and loses
   nothing, and it starts on the very frame the mix does.
+- **Video layers in templates.** A template can show a video clip: a loop
+  behind the music, a clip of the club. It loops, plays once and holds its
+  last frame or disappears, at a speed of your choosing, and can use part of
+  the clip. A video can also be a field, chosen per mix. Small videos (up to
+  25 MB) are copied into the app's own folder when added, so they stay with
+  the template; larger ones are used where they are.
 
 ## 0.9.1 — 16 October 2026
 

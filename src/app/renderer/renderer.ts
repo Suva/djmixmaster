@@ -131,6 +131,7 @@ function videoMixOf(m: Mix): VideoMixInfo {
     tracks: mixTracks(m),
     fadeIn: fades(m).in * HOP_SECONDS,
     fadeOut: fades(m).out * HOP_SECONDS,
+    video: recording!.video,
   };
 }
 
@@ -139,6 +140,7 @@ const videoView = new VideoView({
   mix: () => (recording ? videoMixOf(mix) : null),
   playhead: () => player.time,
   playing: () => !player.paused,
+  rate: () => player.rate,
   seek: (seconds) => seek(clamp(seconds, edges(mix).start * HOP_SECONDS, edges(mix).end * HOP_SECONDS)),
   levels: (points) => {
     // The loudest moment in each step of the mix, as the recording timeline

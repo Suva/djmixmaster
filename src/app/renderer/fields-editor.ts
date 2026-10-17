@@ -4,7 +4,10 @@
 // once it will do, and then wherever the template uses it.
 
 import { MUSIC_NAMES } from '../../visuals/music.ts';
-import { ASSET_PREFIX, fieldNameProblem, renameField, TEXT_VARIABLES, type Field, type FieldKind, type Template } from '../../visuals/template.ts';
+import {
+  ASSET_PREFIX, fieldNameProblem, MEDIA_PREFIX, RECORDING_VIDEO, renameField, TEXT_VARIABLES, type Field, type FieldKind, type MediaFile, type Template,
+} from '../../visuals/template.ts';
+import { freeName } from './layer-settings.ts';
 import { fontPicker } from './font-picker.ts';
 import { scrubbableInput } from './scrub.ts';
 
@@ -21,10 +24,12 @@ export interface FieldsEditorContext {
   renamed(from: string, to: string): void;
   /** Asks for a picture file and gives its name and contents as a data URL, or null. */
   pickPicture(): Promise<{ name: string; data: string } | null>;
+  /** Asks for a video file and makes it one a template can keep: its name, and where it is; or null. */
+  pickVideo(): Promise<{ name: string; file: MediaFile } | null>;
 }
 
 export const FIELD_KINDS: [FieldKind, string][] = [
-  ['colour', 'Colour'], ['number', 'Number'], ['text', 'Text'], ['image', 'Picture'], ['font', 'Font'], ['choice', 'List'],
+  ['colour', 'Colour'], ['number', 'Number'], ['text', 'Text'], ['image', 'Picture'], ['video', 'Video'], ['font', 'Font'], ['choice', 'List'],
 ];
 
 /** A field of a kind as it starts: a default that does something. */
@@ -241,6 +246,27 @@ function defaults(field: Field, set: (kind: string, apply: (field: Field) => voi
         context.change('', (template) => {
           template.assets = { ...template.assets, [name]: picked.data };
           template.fields.find((f) => f.key === field.key)!.default = ASSET_PREFIX + name;
+        }, true);
+      });
+      box.append(row('Default', select));
+      break;
+    }
+    case 'video': {
+      const select = document.createElement('select');
+      select.add(new Option('None', ''));
+      select.add(new Option('The recording, when it is a video', RECORDING_VIDEO));
+      for (const name of Object.keys(context.template().media ?? {})) select.add(new Option(`Kept: ${name}`, MEDIA_PREFIX + name));
+      select.add(new Option('Add a video…', '+'));
+      select.value = String(field.default);
+      select.addEventListener('change', async () => {
+        if (select.value !== '+') return set('default', (f) => (f.default = select.value));
+        select.value = String(field.default);
+        const picked = await context.pickVideo();
+        if (!picked) return;
+        const name = freeName(picked.name, Object.keys(context.template().media ?? {}));
+        context.change('', (template) => {
+          template.media = { ...template.media, [name]: picked.file };
+          template.fields.find((f) => f.key === field.key)!.default = MEDIA_PREFIX + name;
         }, true);
       });
       box.append(row('Default', select));

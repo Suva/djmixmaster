@@ -3,9 +3,12 @@
 // at that moment.
 
 import type { Api, VideoMixInfo } from '../api.ts';
-import type { FrameDrawer } from '../../visuals/draw.ts';
+import { clipTimingOf, type FrameDrawer, type VideoPicture } from '../../visuals/draw.ts';
+import { beatsOf, type ClipTiming } from '../../visuals/clip.ts';
 import type { MusicReader } from '../../visuals/music.ts';
-import { ASSET_PREFIX, checkTemplate, TEXT_VARIABLES, type PreparedLayer, type Template, type TextValues } from '../../visuals/template.ts';
+import {
+  ASSET_PREFIX, checkTemplate, TEXT_VARIABLES, videoFile, type PreparedLayer, type ResolvedParams, type Template, type TextValues,
+} from '../../visuals/template.ts';
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
 import { BAND_COUNT } from '../../features.ts';
@@ -85,6 +88,62 @@ export function textValues(mix: VideoMix, seconds: number, tempo: number): TextV
   };
 }
 
+/** What gives the frames of the videos a template shows: see video-sources.ts. */
+export interface VideoFrames {
+  picture(path: string, layer: number, timing: ClipTiming): VideoPicture | null;
+}
+
+/**
+ * When a clip last started again by one of the rules of RESTARTS: at the
+ * last beat (or every so many beats, counted from the mix's first), or at the
+ * start of the track playing. In seconds into the mix; -Infinity if never.
+ */
+export function restartedAt(mix: VideoMix, reader: MusicReader | null, rule: string, seconds: number): number {
+  if (rule === 'each track') {
+    let last = -Infinity;
+    for (const track of mix.tracks) if (track.at <= seconds && track.at > last) last = track.at;
+    return last;
+  }
+  const every = beatsOf(rule);
+  return every && reader ? reader.lastBeat(seconds, every) : -Infinity;
+}
+
+/** The file a video layer's source stands for, in this mix: one it names, the template's own, or the recording. */
+export function videoPathOf(source: string, mix: VideoMix): string | null {
+  return videoFile(source, mix.template, { path: mix.path, video: mix.video !== null });
+}
+
+/**
+ * What the drawer will ask for to draw the moment `seconds` into the mix: a
+ * frame of each video layer's clip, where its clip should be. Worked out
+ * from the layers' settings before the frame is drawn, so that an export
+ * can have the frames ready; a video's timing settings are plain numbers
+ * and choices, and its "shown from", if made to follow the music, is taken
+ * as it was in the frame before.
+ */
+export function clipRequests(mix: VideoMix, layers: PreparedLayer[], reader: MusicReader | null, seconds: number): { path: string; layer: number; timing: ClipTiming }[] {
+  const fields = mix.visuals?.fields ?? {};
+  const requests: { path: string; layer: number; timing: ClipTiming }[] = [];
+  mix.template.layers.forEach((layer, index) => {
+    if (layer.type !== 'video') return;
+    let source = String(layer.params.video ?? '');
+    const whole = /^%([A-Za-z_][A-Za-z0-9_]*)%$/.exec(source);
+    if (whole) {
+      const field = mix.template.fields.find((f) => f.key === whole[1]);
+      source = field ? String(fields[field.key] ?? field.default) : '';
+    }
+    const path = videoPathOf(source, mix);
+    if (!path) return;
+    const last = layers[index]?.last;
+    const params: ResolvedParams = { ...layer.params };
+    for (const key of ['from', 'until']) if (typeof params[key] !== 'number') params[key] = typeof last?.[key] === 'number' ? last[key] : 0;
+    const length = mix.end - mix.start;
+    if (seconds < (params.from as number) || seconds > length - (params.until as number)) return;
+    requests.push({ path, layer: index, timing: clipTimingOf(params, { seconds, restartedAt: (rule, at) => restartedAt(mix, reader, rule, at) }) });
+  });
+  return requests;
+}
+
 /** Draws the moment `seconds` into the mix; `dt` is the time since the frame before. */
 export function drawVideoFrame(
   drawer: FrameDrawer,
@@ -94,6 +153,7 @@ export function drawVideoFrame(
   seconds: number,
   dt: number,
   images: Map<string, ImageBitmap>,
+  videos?: VideoFrames,
 ) {
   const length = mix.end - mix.start;
   const music = reader ? reader.at(seconds, dt) : { time: seconds, dt, length, progress: seconds / Math.max(1, length) };
@@ -107,5 +167,10 @@ export function drawVideoFrame(
     text: textValues(mix, seconds, typeof music.tempo === 'number' ? music.tempo : 0),
     images,
     shown: fadeGain(seconds, length, mix.fadeIn, mix.fadeOut),
+    video: (source, layer, timing) => {
+      const path = videos && videoPathOf(source, mix);
+      return path ? videos.picture(path, layer, timing) : null;
+    },
+    restartedAt: (rule, at) => restartedAt(mix, reader, rule, at),
   });
 }

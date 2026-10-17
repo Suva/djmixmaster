@@ -2,20 +2,21 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, sh
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
-import { mkdir, open, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
 import {
-  CHANNELS, decode, ffmpeg, inputArgs, isJoined, JOINED_EXTENSION, joinedFiles, joinedList, joinedListHasLengths, joinedName, probe,
+  CHANNELS, decode, ffmpeg, inputArgs, isJoined, JOINED_EXTENSION, joinedFiles, joinedList, joinedListHasLengths, joinedName, probe, probeVideo,
 } from '../audio-io.ts';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
 import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
 import { VIDEO_EXTENSIONS } from './video-files.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
@@ -60,9 +61,9 @@ protocol.registerSchemesAsPrivileged([
 /** The one recording the window may play, and the id in its address. */
 let media = { id: 0, path: '', sampleRate: 0 };
 
-/** Serves the open recording with byte ranges, which is what lets the player seek. */
-async function serveMedia(request: Request): Promise<Response> {
-  const { size } = await stat(media.path);
+/** Serves a file with byte ranges, which is what lets a player seek: the open recording, or a template's video. */
+async function serveMedia(request: Request, path = media.path): Promise<Response> {
+  const { size } = await stat(path);
   let start = 0;
   let end = size - 1;
   const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') ?? '');
@@ -76,12 +77,12 @@ async function serveMedia(request: Request): Promise<Response> {
     if (start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
   }
   const headers: Record<string, string> = {
-    'Content-Type': MEDIA_TYPES[extname(media.path).toLowerCase()] ?? 'application/octet-stream',
+    'Content-Type': MEDIA_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream',
     'Content-Length': String(end - start + 1),
     'Accept-Ranges': 'bytes',
   };
   if (range) headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
-  const body = Readable.toWeb(createReadStream(media.path, { start, end })) as ReadableStream;
+  const body = Readable.toWeb(createReadStream(path, { start, end })) as ReadableStream;
   return new Response(body, { status: range ? 206 : 200, headers });
 }
 
@@ -109,10 +110,50 @@ function serveStream(request: Request): Response {
   return new Response(Readable.toWeb(audio) as ReadableStream, { headers: { 'Content-Type': 'audio/wav' } });
 }
 
+/** Whether the window may be served this file as a video: one of the kinds a template can show, and there. */
+const servableVideo = (path: string) => VIDEO_EXTENSIONS.includes(extname(path).slice(1).toLowerCase()) && existsSync(path);
+
+/**
+ * Serves the frames of a video decoded, for a video export: from `from`
+ * seconds into it, `fps` frames a second, each `w` × `h` pixels in I420
+ * (a plane of brightness, then two of colour at half the size each way), one
+ * after the other with nothing between. The export reads as many as it
+ * needs, and the decoding stops when it stops reading.
+ */
+function serveFrames(request: Request): Response {
+  const query = new URL(request.url).searchParams;
+  const path = query.get('path') ?? '';
+  const even = (value: string | null) => Math.max(2, Math.min(4096, Math.round((Number(value) || 2) / 2) * 2));
+  const [width, height] = [even(query.get('w')), even(query.get('h'))];
+  const fps = Math.max(1, Math.min(120, Number(query.get('fps')) || 30));
+  const from = Math.max(0, Number(query.get('from')) || 0);
+  if (!servableVideo(path) && !(isJoined(path) && existsSync(path))) return new Response(null, { status: 404 });
+  const decoder = spawn(ffmpeg(), [
+    '-v', 'error', '-nostdin', '-ss', String(from), ...inputArgs(path), '-map', '0:v:0', '-an',
+    // Frames on an even grid from the start, so frame k is at `from + k / fps`, whatever the file's own timing.
+    // In BT.709, which the export page tells the browser the frames are in.
+    '-vf', `fps=${fps},scale=${width}:${height}:out_color_matrix=bt709:out_range=tv,format=yuv420p`,
+    '-f', 'rawvideo', '-',
+  ], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const frames = Readable.from(
+    (async function* () {
+      try {
+        yield* decoder.stdout;
+      } finally {
+        decoder.kill();
+      }
+    })(),
+  );
+  return new Response(Readable.toWeb(frames) as ReadableStream, { headers: { 'Content-Type': 'application/octet-stream' } });
+}
+
 function serve(request: Request): Promise<Response> | Response {
-  const { pathname } = new URL(request.url);
+  const { pathname, searchParams } = new URL(request.url);
   if (pathname === `/media/${media.id}` && media.path) return serveMedia(request);
   if (pathname === `/stream/${media.id}` && media.path) return serveStream(request);
+  // A template's video, for the Video view to play, and its frames, for an export to draw.
+  if (pathname === '/video' && servableVideo(searchParams.get('path') ?? '')) return serveMedia(request, searchParams.get('path')!);
+  if (pathname === '/frames') return serveFrames(request);
   const file = pathname.slice(1);
   if (APP_FILES.includes(file)) return net.fetch(pathToFileURL(join(__dirname, file)).toString());
   // The fonts that come with the app, for a video's text.
@@ -822,6 +863,40 @@ ipcMain.handle('read-image', async (_event, path: string) => {
   if (!IMAGE_EXTENSIONS.includes(extname(path).slice(1).toLowerCase())) throw new Error('Not a picture');
   if ((await stat(path)).size > IMAGE_MOST_BYTES) throw new Error('The picture is too large');
   return new Uint8Array(await readFile(path));
+});
+
+// ---------------------------------------------------------------------------
+// Videos for a video's template: a loop behind the music, a clip of the club.
+// A small one is copied into the app's media folder, so that it stays with
+// the template whatever happens to the file chosen; a large one is used
+// where it is, as copying it would take time and space for nothing.
+
+/** Videos up to this size are copied into the media folder. */
+const MEDIA_COPY_MOST_BYTES = 25 * 1024 * 1024;
+const mediaFolder = () => join(app.getPath('userData'), 'media');
+
+ipcMain.handle('pick-video', async () => {
+  if (SCREENSHOT && process.env.DJMASTER_SHOT_VIDEO) return process.env.DJMASTER_SHOT_VIDEO;
+  const result = await dialog.showOpenDialog(window!, {
+    properties: ['openFile'],
+    filters: [{ name: 'Videos', extensions: VIDEO_EXTENSIONS }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+ipcMain.handle('video-info', (_event, path: string) => probeVideo(String(path)));
+ipcMain.handle('add-media', async (_event, path: string): Promise<MediaFile> => {
+  if (!servableVideo(String(path))) throw new Error('Not a video');
+  await probeVideo(path);
+  const { size } = await stat(path);
+  const known = await fingerprint(path);
+  if (size > MEDIA_COPY_MOST_BYTES) return { path, bytes: size, fingerprint: known };
+  // Named by what is in it: the same video added twice is kept once.
+  const copy = join(mediaFolder(), `${known}${extname(path).toLowerCase()}`);
+  if (!existsSync(copy)) {
+    await mkdir(mediaFolder(), { recursive: true });
+    await copyFile(path, copy);
+  }
+  return { path: copy, bytes: size, fingerprint: known };
 });
 
 let checkStarted = false;

@@ -138,6 +138,28 @@ export class MusicReader {
     return out;
   }
 
+  /**
+   * When the last beat at or before the moment `seconds` into the mix fell,
+   * in seconds into the mix, counting only every `every`th beat from the
+   * first of the mix: so every 4 is the first beat of each bar. -Infinity
+   * before the first.
+   */
+  lastBeat(seconds: number, every: number): number {
+    const beats = this.#features.beats;
+    const inRecording = this.#start + seconds;
+    let low = this.#firstBeat;
+    let high = beats.length - 1;
+    if (low > high || beats[low] > inRecording) return -Infinity;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (beats[middle] <= inRecording) low = middle;
+      else high = middle - 1;
+    }
+    const counted = low - this.#firstBeat;
+    const index = this.#firstBeat + counted - (counted % Math.max(1, Math.round(every)));
+    return beats[index] - this.#start;
+  }
+
   /** The values for the moment `seconds` into the mix. `dt` is the time since the frame before. */
   at(seconds: number, dt: number): Values {
     const features = this.#features;

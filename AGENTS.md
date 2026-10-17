@@ -42,6 +42,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/gaps.ts` | Finds silences between sets |
 | `src/tracks.ts` | The tracks in a mix: reading track lists, chapters, the list for YouTube |
 | `src/features.ts` | What the visuals of a video move to: spectrum, level and beats |
+| `src/visuals/clip.ts` | Where a video layer's clip is at each moment: loop, ping-pong, once, speed, restarts |
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
 | `src/visuals/template.ts` | Templates: layer types and their settings, fields, text variables, checking |
@@ -57,6 +58,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/layer-settings.ts` | The selected layer's settings in the editor, made from its kind's list of settings |
 | `src/app/renderer/fields-editor.ts` | The editor's Fields tab: what a template asks to be filled in |
 | `src/app/renderer/picture-handles.ts` | Picking, moving and resizing layers on the picture while editing, from where the drawer says each was drawn |
+| `src/app/renderer/video-sources.ts` | The frames of a template's videos: video elements in the view, ffmpeg in the export |
 | `src/app/renderer/video-frame.ts` | A frame of a mix's video, drawn the same for the view and the export |
 | `src/app/renderer/exporter.ts` | The hidden page that draws and encodes a video export |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
@@ -135,6 +137,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
+| `DJMASTER_SHOT_VIDEO=<file>` | Answer the dialog for a template's video with this file |
 | `DJMASTER_SHOT_TRACKLIST=<file>` | Answer the dialog for a track list to import with this file |
 | `DJMASTER_SHOT_TEMPLATE=<file>` | Answer the dialog for a template to import with this file. A template exported is saved into `DJMASTER_SHOT_FOLDER`, and one deleted is removed rather than moved to the Trash |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
@@ -179,6 +182,7 @@ Linux), the same for `npm start` and the packaged app.
 | `sessions/` | The mixes, settings, hand adjustments and track markers per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
+| `media/` | Videos up to 25 MB added to templates, copied here and named by their fingerprint |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
@@ -248,6 +252,13 @@ Do not write test data there.
   The editor saves a template as typed, half-written expressions and all; the
   picture shows it checked, with a setting that does not work yet at its last
   good value (`#lastGood` in `video-view.ts`).
+- **Video layers are drawn from frames handed in.** The drawer asks
+  `frame.video` for a clip's frame; the view answers from video elements,
+  the export from ffmpeg (`video-sources.ts`). Drawing is synchronous, so
+  the export gets each frame's clips ready first (`clipRequests`). Where a
+  clip is comes from `clipTime` in `visuals/clip.ts` for both; anything
+  about a clip's timing has to go through it. Videos are never packed into
+  a template's JSON: `media` names files (see VISUALS.md).
 - **A recording can be several files.** Recorders split long recordings at
   2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
   their numbers, or else by when each was written) and listed in

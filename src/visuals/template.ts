@@ -11,6 +11,8 @@
 //   text     any text; %name% is replaced by a variable (see fillText)
 //   choice   one of the parameter's choices
 //   image, font  a name
+//   video    a file's path, `media:name` for a video the template keeps, or
+//            `recording:video` for the picture of the recording itself
 // Fields are used by name in expressions (`colour1`, `amount`), and as
 // %field% in text. A choice, image or font can also be just "%field%", so
 // one field can serve several layers.
@@ -20,10 +22,11 @@
 import { parseHex, toHex, type Colour } from './colour.ts';
 import { flatten, treeOf, type LayerNode } from './layer-tree.ts';
 import { compile, type Compiled, type Kind, type Problem, type Value } from './expression.ts';
+import { PLAYBACKS, RESTARTS } from './clip.ts';
 
 export const TEMPLATE_FORMAT = 1;
 
-export type ParamKind = 'number' | 'switch' | 'colour' | 'text' | 'choice' | 'image' | 'font';
+export type ParamKind = 'number' | 'switch' | 'colour' | 'text' | 'choice' | 'image' | 'font' | 'video';
 export type ParamValue = number | boolean | string;
 
 export interface ParamSpec {
@@ -35,6 +38,12 @@ export interface ParamSpec {
   max?: number;
   unit?: string;
   choices?: string[];
+  /**
+   * A number that cannot follow the music: the speed of a video, say, which
+   * is added up frame by frame, and would come out differently at the
+   * preview's frame rate than at the export's.
+   */
+  fixed?: boolean;
 }
 
 const number = (label: string, value: number, min: number, max: number, unit?: string): ParamSpec =>
@@ -42,6 +51,7 @@ const number = (label: string, value: number, min: number, max: number, unit?: s
 const colour = (label: string, value: string): ParamSpec => ({ kind: 'colour', label, default: value });
 const choice = (label: string, value: string, choices: string[]): ParamSpec => ({ kind: 'choice', label, default: value, choices });
 const toggle = (label: string, value: boolean): ParamSpec => ({ kind: 'switch', label, default: value });
+const fixed = (spec: ParamSpec): ParamSpec => ({ ...spec, fixed: true });
 
 /** What every layer has. Positions and sizes are in percent of the frame, so a template fits any size. */
 export const COMMON_PARAMS: Record<string, ParamSpec> = {
@@ -123,6 +133,32 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       tintAmount: number('Tint amount', 0, 0, 100, '%'),
       brightness: number('Brightness', 100, 0, 200, '%'),
       saturation: number('Saturation', 100, 0, 200, '%'),
+    },
+  },
+  video: {
+    label: 'Video',
+    params: {
+      video: { kind: 'video', label: 'Video', default: '' },
+      playback: choice('Plays', 'loop', [...PLAYBACKS]),
+      speed: fixed(number('Speed', 100, 10, 400, '%')),
+      restart: choice('Starts again', 'never', [...RESTARTS]),
+      inPoint: fixed(number('Clip from', 0, 0, 600, 's')),
+      outPoint: fixed(number('Clip until, 0 for its end', 0, 0, 600, 's')),
+      offset: fixed(number('Starts this far in', 0, 0, 600, 's')),
+      fit: choice('Fit', 'cover', ['contain', 'cover', 'stretch', 'natural']),
+      width: number('Width', 100, 0, 100, '%'),
+      height: number('Height', 100, 0, 100, '%'),
+      rounding: number('Corner rounding', 0, 0, 50, '%'),
+      shadowColour: colour('Shadow colour', '#000000aa'),
+      shadowBlur: number('Shadow blur', 0, 0, 10, '%'),
+      tint: colour('Tint', '#ffffff'),
+      tintAmount: number('Tint amount', 0, 0, 100, '%'),
+      brightness: number('Brightness', 100, 0, 200, '%'),
+      saturation: number('Saturation', 100, 0, 200, '%'),
+      key: choice('Key out', 'none', ['none', 'colour', 'dark']),
+      keyColour: colour('Key colour', '#00ff00'),
+      keyTolerance: number('Key tolerance', 30, 0, 100, '%'),
+      keySoftness: number('Key softness', 10, 0, 100, '%'),
     },
   },
   text: {
@@ -277,7 +313,7 @@ export const FONTS: Record<string, string> = {
   Impact: 'Impact, "Arial Black", sans-serif',
 };
 
-export type FieldKind = 'text' | 'colour' | 'image' | 'number' | 'choice' | 'font';
+export type FieldKind = 'text' | 'colour' | 'image' | 'number' | 'choice' | 'font' | 'video';
 
 /** Something the template asks whoever uses it to fill in. */
 export interface Field {
@@ -310,6 +346,14 @@ export interface Template {
    * image field's default uses one as `asset:name`.
    */
   assets?: Record<string, string>;
+  /**
+   * Videos the template shows, by name; a video setting or field uses one as
+   * `media:name`. Videos are too large to keep inside the template as
+   * pictures are: each is a file, a small one copied into the app's media
+   * folder, a large one left where it was. A template file to share carries
+   * the files themselves.
+   */
+  media?: Record<string, MediaFile>;
   /** Who made it and what it is, shown under the list of templates; it travels with a template file. */
   about?: TemplateAbout;
 }
@@ -321,6 +365,19 @@ export interface TemplateAbout {
   website?: string;
   description?: string;
 }
+
+/** A video a template uses: where the file is, and what tells it apart should it move. */
+export interface MediaFile {
+  path: string;
+  bytes: number;
+  /** As the app knows recordings by: their size and samples of their content. */
+  fingerprint?: string;
+}
+
+/** What a video setting names to use a video the template keeps. */
+export const MEDIA_PREFIX = 'media:';
+/** What a video setting names to show the recording's own picture, when the recording is a video. */
+export const RECORDING_VIDEO = 'recording:video';
 
 /** The parts of a template's about, with the most each may hold. */
 export const ABOUT_LIMITS: Record<keyof TemplateAbout, number> = { author: 100, email: 200, website: 300, description: 2000 };
@@ -436,6 +493,21 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
     else problems.push({ where: `Picture ${name}`, message: 'Not a picture the app can show (PNG, JPEG, WebP or GIF)' });
   }
 
+  const media: Record<string, MediaFile> = {};
+  const givenMedia = (typeof source.media === 'object' && source.media !== null ? source.media : {}) as Record<string, unknown>;
+  for (const [name, item] of Object.entries(givenMedia)) {
+    const file = (typeof item === 'object' && item !== null ? item : {}) as Partial<MediaFile>;
+    if (typeof file.path !== 'string' || !file.path) {
+      problems.push({ where: `Video ${name}`, message: 'Says nowhere where the video is' });
+      continue;
+    }
+    media[name] = {
+      path: file.path,
+      bytes: Number.isFinite(file.bytes) ? Number(file.bytes) : 0,
+      ...(typeof file.fingerprint === 'string' ? { fingerprint: file.fingerprint } : {}),
+    };
+  }
+
   const about: TemplateAbout = {};
   const givenAbout = (typeof source.about === 'object' && source.about !== null ? source.about : {}) as Record<string, unknown>;
   for (const key of Object.keys(ABOUT_LIMITS) as (keyof TemplateAbout)[]) {
@@ -459,7 +531,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
       problems.push({ where: `${where} (${field.key})`, message: `The name ${field.key} is already taken` });
       continue;
     }
-    const kinds: FieldKind[] = ['text', 'colour', 'image', 'number', 'choice', 'font'];
+    const kinds: FieldKind[] = ['text', 'colour', 'image', 'number', 'choice', 'font', 'video'];
     const kind = kinds.includes(field.kind as FieldKind) ? (field.kind as FieldKind) : 'text';
     fields.push({
       key: field.key,
@@ -499,7 +571,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
     for (const [key, param] of Object.entries(all)) {
       const where = `${title}, ${param.label}`;
       const value = given[key];
-      const problem = value === undefined ? null : checkValue(value, param, names, fieldOf, assets);
+      const problem = value === undefined ? null : checkValue(value, param, names, fieldOf, assets, media);
       if (problem) problems.push({ where, ...problem });
       params[key] = value === undefined || problem ? param.default : (value as ParamValue);
     }
@@ -521,6 +593,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
       fields,
       layers,
       ...(Object.keys(assets).length ? { assets } : {}),
+      ...(Object.keys(media).length ? { media } : {}),
       ...(Object.keys(about).length ? { about } : {}),
     },
     problems,
@@ -538,17 +611,19 @@ export function checkSetting(
     expressions: expressionNames(template.fields, musicNames),
     text: [...textNames, ...template.fields.map((field) => field.key)],
   };
-  return checkValue(value, param, names, (key) => template.fields.find((field) => field.key === key), template.assets ?? {});
+  return checkValue(value, param, names, (key) => template.fields.find((field) => field.key === key), template.assets ?? {}, template.media ?? {});
 }
 
 /** What is wrong with one parameter's value, if anything. */
 function checkValue(
-  value: unknown, param: ParamSpec, names: Names, fieldOf: (key: string) => Field | undefined, assets: Record<string, string>,
+  value: unknown, param: ParamSpec, names: Names, fieldOf: (key: string) => Field | undefined,
+  assets: Record<string, string>, media: Record<string, MediaFile>,
 ): Omit<TemplateProblem, 'where'> | null {
   const whole = typeof value === 'string' ? WHOLE_VARIABLE.exec(value) : null;
   switch (param.kind) {
     case 'number':
     case 'switch': {
+      if (param.fixed && typeof value !== 'number') return { message: 'Should be a number; this one cannot follow the music' };
       if (typeof value === 'number' || (param.kind === 'switch' && typeof value === 'boolean')) return null;
       if (typeof value !== 'string') return { message: `Should be ${param.kind === 'switch' ? 'on or off' : 'a number'} or an expression` };
       const compiled = compile(value, names.expressions, 'number');
@@ -582,6 +657,14 @@ function checkValue(
       }
       if (param.kind === 'image' && value.startsWith(ASSET_PREFIX) && !(value.slice(ASSET_PREFIX.length) in assets)) {
         return { message: `No picture called ${value.slice(ASSET_PREFIX.length)} is packed into this template` };
+      }
+      return null;
+    }
+    case 'video': {
+      if (typeof value !== 'string') return { message: 'Should be a video' };
+      if (whole) return fieldOf(whole[1])?.kind === 'video' ? null : { message: `${whole[1]} is not a video field of this template` };
+      if (value.startsWith(MEDIA_PREFIX) && !(value.slice(MEDIA_PREFIX.length) in media)) {
+        return { message: `This template keeps no video called ${value.slice(MEDIA_PREFIX.length)}` };
       }
       return null;
     }
@@ -710,6 +793,34 @@ export function imagesOf(template: Template, filled: Record<string, string | num
     if (typeof value === 'string' && value && !WHOLE_VARIABLE.test(value)) images.add(value);
   }
   return [...images];
+}
+
+/**
+ * Every video a template shows with what was filled in: each as a file's
+ * path, `media:name` or `recording:video`, as `videoFile` takes them.
+ */
+export function videosOf(template: Template, filled: Record<string, string | number>): string[] {
+  const videos = new Set<string>();
+  for (const field of template.fields) {
+    const value = String(filled[field.key] ?? field.default);
+    if (field.kind === 'video' && value) videos.add(value);
+  }
+  for (const layer of template.layers) {
+    const value = layer.params.video;
+    if (layer.type === 'video' && typeof value === 'string' && value && !WHOLE_VARIABLE.test(value)) videos.add(value);
+  }
+  return [...videos];
+}
+
+/**
+ * The file a video setting's value stands for: the template's own video, the
+ * recording when it is a video, or a path as it is. Null for none.
+ */
+export function videoFile(source: string, template: Template, recording: { path: string; video: boolean } | null): string | null {
+  if (!source) return null;
+  if (source === RECORDING_VIDEO) return recording?.video ? recording.path : null;
+  if (source.startsWith(MEDIA_PREFIX)) return template.media?.[source.slice(MEDIA_PREFIX.length)]?.path ?? null;
+  return source;
 }
 
 /** Whether a name will do for a new field: letters, digits and _, not starting with a digit, and not taken. */

@@ -1,5 +1,7 @@
-import type { Template } from '../visuals/template.ts';
+import type { MediaFile, Template } from '../visuals/template.ts';
 import type { EncodeOptions, VideoInfo } from '../audio-io.ts';
+
+export type { VideoInfo } from '../audio-io.ts';
 import type { Features } from '../features.ts';
 import type { Examination, RenderResult } from '../master.ts';
 
@@ -61,6 +63,8 @@ export interface VideoMixInfo {
   /** The mix's fades in and out, in seconds, which the picture follows. */
   fadeIn: number;
   fadeOut: number;
+  /** The recording's own picture, when it is a video, which a template can show. */
+  video: VideoInfo | null;
 }
 
 /** What is remembered between sessions. The window decides what goes in; the main process only stores it. */
@@ -166,6 +170,15 @@ export interface Api {
   pickImage(): Promise<string | null>;
   /** The bytes of a picture file chosen before. */
   readImage(path: string): Promise<Uint8Array>;
+  /** Asks for a video file, for a template's video layer or field. */
+  pickVideo(): Promise<string | null>;
+  /** A video's picture and length. */
+  videoInfo(path: string): Promise<{ duration: number; video: VideoInfo }>;
+  /**
+   * Makes a video one a template can keep: a small one is copied into the
+   * app's media folder, a large one stays where it is.
+   */
+  addMedia(path: string): Promise<MediaFile>;
   /** The templates of the user's own, as stored: each with its id, not yet checked. */
   templates(): Promise<{ id: string; template: unknown }[]>;
   saveTemplate(id: string, template: unknown): Promise<void>;

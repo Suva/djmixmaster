@@ -3,7 +3,7 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ffmpeg, probe } from '../src/audio-io.ts';
@@ -17,6 +17,8 @@ const skip = process.env.DJMASTER_SKIP_WINDOW_TESTS
 let work: string;
 /** A minute of a test picture, with a keyframe every two seconds, and the sound of the synthetic mix. */
 let filmed: string;
+/** Three seconds of a clip: a second red, a second green, a second blue. */
+let clip: string;
 /** A data folder holding its analysis, to start the other runs from. */
 let analysed: string;
 
@@ -50,6 +52,12 @@ before(async () => {
   execFileSync(ffmpeg(), [
     '-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=25', '-i', sound, '-t', '60',
     '-c:v', 'libx264', '-g', '50', '-pix_fmt', 'yuv420p', '-c:a', 'aac', filmed,
+  ]);
+  clip = join(work, 'Colours.mp4');
+  execFileSync(ffmpeg(), [
+    '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=160x90:r=25:d=1', '-f', 'lavfi', '-i', 'color=c=lime:s=160x90:r=25:d=1',
+    '-f', 'lavfi', '-i', 'color=c=blue:s=160x90:r=25:d=1', '-filter_complex', '[0][1][2]concat=n=3:v=1:a=0',
+    '-c:v', 'libx264', '-pix_fmt', 'yuv420p', clip,
   ]);
   analysed = await dataFolder(work);
   await runApp({ recording: filmed, data: analysed }, () => null);
@@ -118,4 +126,92 @@ test('a recording that is not a video is not offered its own picture', { skip },
     return !page.element('export-original').hidden;
   });
   assert.equal(offered, false);
+});
+
+/** Which of red, green and blue is strongest in each third of a picture, given as RGB bytes of three pixels. */
+function thirds(rgb: Uint8Array | number[]): string[] {
+  return [0, 1, 2].map((third) => {
+    const [r, g, b] = [rgb[third * 3], rgb[third * 3 + 1], rgb[third * 3 + 2]];
+    if (Math.max(r, g, b) < 60) return 'black';
+    return r > g && r > b ? 'red' : g > b ? 'green' : 'blue';
+  });
+}
+
+/** The colours of the thirds of a video's frame at a moment, each averaged. */
+function thirdsAt(file: string, seconds: number): string[] {
+  const rgb = execFileSync(ffmpeg(), [
+    '-v', 'error', '-ss', String(seconds), '-i', file, '-frames:v', '1', '-vf', 'scale=3:1:flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-',
+  ]);
+  return thirds(rgb);
+}
+
+test('a video layer plays its clip with the music, looped, once, and at twice the speed, in the view and in the export', { skip }, async () => {
+  // The clip three times side by side: looped, played once and hidden, and looped at twice the speed.
+  const third = (x: number, params: Record<string, unknown>) => ({
+    type: 'video', params: { video: clip, fit: 'stretch', width: 33.4, height: 100, x, ...params },
+  });
+  const file = join(work, 'Colours.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Colours',
+    fields: [],
+    layers: [third(16.7, { playback: 'loop' }), third(50, { playback: 'once, then hide' }), third(83.3, { playback: 'loop', speed: 200 })],
+  }));
+  const folder = join(work, 'clips');
+  await mkdir(folder);
+  const seen = await runApp({ recording: filmed, data: await fresh(), template: file, exportFolder: folder, timeoutMs: 150_000 }, async (page) => {
+    // A mix of the first ten seconds.
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight');
+    await page.wait(100);
+    page.key('KeyO');
+    page.key('Enter');
+    await page.settle();
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Colours', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const row = () => {
+      const y = Math.floor(picture.height / 2);
+      const context = picture.getContext('2d')!;
+      return [1, 3, 5].flatMap((sixth) => [...context.getImageData(Math.floor((picture.width * sixth) / 6), y, 1, 1).data].slice(0, 3));
+    };
+    // At the start of the mix, paused: the first frame of each.
+    await page.until(() => row()[0] > 150 && row()[3] > 150 && row()[6] > 150, 'the clips to be drawn at their start');
+    const atStart = row();
+    // Five seconds on: two seconds into the second round, gone, and ten seconds' worth in, at twice the speed.
+    page.key('ArrowRight');
+    const colour = (rgb: number[], third: number) => {
+      const [r, g, b] = rgb.slice(third * 3, third * 3 + 3);
+      return Math.max(r, g, b) < 60 ? 'black' : r > g && r > b ? 'red' : g > b ? 'green' : 'blue';
+    };
+    await page.until(() => [0, 1, 2].map((third) => colour(row(), third)).join() === 'blue,black,green', 'the clips to follow the playhead');
+    const later = row();
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+    page.click('export-go');
+    await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 120_000);
+    return { atStart, later, status: page.text('export-status'), length: page.region().length };
+  });
+  assert.deepEqual(thirds(seen.atStart), ['red', 'red', 'red']);
+  assert.deepEqual(thirds(seen.later), ['blue', 'black', 'green']);
+  assert.match(seen.status, /^Exported 1 mix\./, seen.status);
+  assert.equal(seen.length, '0:00:10');
+  const [exported] = await readdir(folder);
+  const video = join(folder, exported);
+  assert.deepEqual(thirdsAt(video, 0.5), ['red', 'red', 'green']);
+  assert.deepEqual(thirdsAt(video, 1.5), ['green', 'green', 'red']);
+  assert.deepEqual(thirdsAt(video, 2.5), ['blue', 'blue', 'blue']);
+  assert.deepEqual(thirdsAt(video, 3.5), ['red', 'black', 'green'], 'looped, gone, and round again');
+  assert.deepEqual(thirdsAt(video, 4.5), ['green', 'black', 'red']);
+});
+
+test('a small video is kept in the app\'s media folder, and stays where it is', { skip }, async () => {
+  const data = await fresh();
+  const kept = await runApp({ recording: filmed, data, given: clip }, async (_page, path) => window.api.addMedia(path));
+  assert.ok(kept.path.startsWith(join(data, 'media')), `kept at ${kept.path}`);
+  assert.ok(kept.bytes > 0 && kept.fingerprint);
+  assert.deepEqual(await readdir(join(data, 'media')), [kept.path.split(/[\\/]/).pop()]);
 });

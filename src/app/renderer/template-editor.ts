@@ -7,7 +7,10 @@
 // The layers are listed front-most first, as in image editors, though a
 // template keeps them in drawing order, back first.
 
-import { ABOUT_LIMITS, aboutProblem, COMMON_PARAMS, LAYER_TYPES, settingsOf, type Layer, type TemplateAbout, type ParamValue, type ResolvedParams, type Template } from '../../visuals/template.ts';
+import {
+  ABOUT_LIMITS, aboutProblem, COMMON_PARAMS, LAYER_TYPES, MEDIA_PREFIX, settingsOf,
+  type Layer, type MediaFile, type TemplateAbout, type ParamValue, type ResolvedParams, type Template,
+} from '../../visuals/template.ts';
 import { layerSettings, SHOWN_AS } from './layer-settings.ts';
 import { flatten, isGroup, locate, treeOf, within, type LayerNode } from '../../visuals/layer-tree.ts';
 import { scrubbable } from './scrub.ts';
@@ -22,6 +25,8 @@ export interface TemplateEditorOptions {
   live(index: number): ResolvedParams | null;
   /** Asks for a picture file and gives its name and contents as a data URL, or null. */
   pickPicture(): Promise<{ name: string; data: string } | null>;
+  /** Asks for a video file and makes it one a template can keep: its name, and where it is; or null. */
+  pickVideo(): Promise<{ name: string; file: MediaFile } | null>;
   /** A field was renamed: what the mix filled in goes under the new name. */
   renamedField(from: string, to: string): void;
 }
@@ -247,6 +252,7 @@ export class TemplateEditor {
       },
       renamed: (from, to) => this.#options.renamedField(from, to),
       pickPicture: () => this.#options.pickPicture(),
+      pickVideo: () => this.#options.pickVideo(),
     }));
   }
 
@@ -723,6 +729,11 @@ export class TemplateEditor {
       }),
       live: () => this.#options.live(this.#template!.layers.indexOf(layer)),
       pickPicture: () => this.#options.pickPicture(),
+      pickVideo: () => this.#options.pickVideo(),
+      keepVideo: (key, name, file) => this.#change('', (template) => {
+        template.media = { ...template.media, [name]: file };
+        layer.params[key] = MEDIA_PREFIX + name;
+      }),
     };
     this.#settings = layerSettings(layer, context);
     this.#top = this.#topBar(layer, context);

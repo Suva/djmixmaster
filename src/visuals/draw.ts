@@ -7,11 +7,12 @@
 //
 // Kept free of Node imports; it runs in a window.
 
-import { fromHsl, mixColours, turnHue, type Colour } from './colour.ts';
+import { fromHsl, mixColours, parseHex, turnHue, type Colour } from './colour.ts';
 import { BAND_COUNT, HIGHEST_HZ, LOWEST_HZ } from '../features.ts';
 import type { Values } from './expression.ts';
 import { fontStack } from './fonts.ts';
 import { hexOf, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
+import type { ClipTiming, Playback } from './clip.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -33,6 +34,41 @@ export interface Frame {
   images: Map<string, CanvasImageSource & { width: number; height: number }>;
   /** How much of the picture shows, 0 to 1: the mix's fades in and out take it to black. */
   shown?: number;
+  /**
+   * The picture of a video layer's clip for this frame, given where the clip
+   * is (`clipTime` in clip.ts works it out from `timing`), or null while
+   * there is none. `layer` is the layer's place in the template, as two
+   * layers can play the same clip at different places.
+   */
+  video?(source: string, layer: number, timing: ClipTiming): VideoPicture | null;
+  /**
+   * When a clip last started again by a rule of RESTARTS, in seconds into the
+   * mix: the last beat or track start at or before `seconds`; -Infinity if none.
+   */
+  restartedAt?(rule: string, seconds: number): number;
+}
+
+/** A frame of a video, as a video element, a VideoFrame or a picture, with its size as shown. */
+export interface VideoPicture {
+  image: CanvasImageSource;
+  width: number;
+  height: number;
+}
+
+/** What decides where a video layer is in its clip, from its settings for this frame. */
+export function clipTimingOf(params: ResolvedParams, frame: Pick<Frame, 'seconds' | 'restartedAt'>): ClipTiming {
+  const from = num(params, 'from');
+  const rule = str(params, 'restart');
+  const restarted = rule && rule !== 'never' && frame.restartedAt ? frame.restartedAt(rule, frame.seconds) : -Infinity;
+  return {
+    seconds: frame.seconds,
+    started: Math.max(from, restarted),
+    playback: str(params, 'playback') as Playback,
+    speed: num(params, 'speed') / 100,
+    inPoint: num(params, 'inPoint'),
+    outPoint: num(params, 'outPoint'),
+    offset: num(params, 'offset'),
+  };
 }
 
 /**
@@ -198,6 +234,7 @@ export class FrameDrawer {
       case 'gradient': this.#gradient(params, frame); break;
       case 'particles': this.#particles(params, frame); break;
       case 'image': this.#image(params, frame); break;
+      case 'video': this.#video(params, frame, index); break;
       case 'text': this.#text(params, frame, memory); break;
       case 'spectrum': this.#spectrum(params, frame, memory); break;
       case 'waveform': this.#waveform(params, frame); break;
@@ -425,13 +462,26 @@ export class FrameDrawer {
   #image(params: ResolvedParams, frame: Frame) {
     const picture = frame.images.get(str(params, 'image'));
     if (!picture || !picture.width || !picture.height) return;
+    this.#picture(params, picture, picture.width, picture.height);
+  }
+
+  #video(params: ResolvedParams, frame: Frame, index: number) {
+    const source = str(params, 'video');
+    if (!source || !frame.video) return;
+    const picture = frame.video(source, index, clipTimingOf(params, frame));
+    if (!picture || !picture.width || !picture.height) return;
+    this.#picture(params, picture.image, picture.width, picture.height);
+  }
+
+  /** Draws a picture or a video frame as an image or video layer's settings say: fitted, rounded, tinted. */
+  #picture(params: ResolvedParams, picture: CanvasImageSource, pictureWidth: number, pictureHeight: number) {
     const ctx = this.#ctx;
     const { width, height } = this.#canvas;
     let w = (num(params, 'width') / 100) * width;
     let h = (num(params, 'height') / 100) * height;
     const fit = str(params, 'fit');
-    const ratio = picture.width / picture.height;
-    if (fit === 'natural') [w, h] = [picture.width, picture.height];
+    const ratio = pictureWidth / pictureHeight;
+    if (fit === 'natural') [w, h] = [pictureWidth, pictureHeight];
     else if (fit === 'contain') [w, h] = w / h > ratio ? [h * ratio, h] : [w, w / ratio];
     else if (fit === 'cover') [w, h] = w / h > ratio ? [w, w / ratio] : [h * ratio, h];
     this.#place(params);
@@ -457,6 +507,8 @@ export class FrameDrawer {
     s.drawImage(picture, 0, 0, pw, ph);
     s.restore();
     s.filter = 'none';
+    const key = str(params, 'key');
+    if (key === 'colour' || key === 'dark') keyOut(s, pw, ph, key, col(params, 'keyColour'), num(params, 'keyTolerance'), num(params, 'keySoftness'));
     const tint = col(params, 'tint');
     const tintAmount = num(params, 'tintAmount') / 100;
     if (tint && tintAmount > 0) {
@@ -1051,4 +1103,31 @@ export class FrameDrawer {
     ctx.drawImage(burnt, 0, 0);
     ctx.restore();
   }
+}
+/**
+ * Makes part of a picture transparent: what is near the key colour (a green
+ * screen), or what is dark (a clip made on black). Within `tolerance` percent
+ * of the way to the furthest colour it goes entirely; over the next
+ * `softness` percent it fades back in, so edges stay smooth.
+ */
+function keyOut(
+  ctx: OffscreenCanvasRenderingContext2D, width: number, height: number, kind: 'colour' | 'dark', colour: Colour | null, tolerance: number, softness: number,
+) {
+  if (width <= 0 || height <= 0) return;
+  const image = ctx.getImageData(0, 0, width, height);
+  const data = image.data;
+  const key = colour ?? parseHex('#00ff00')!;
+  const [kr, kg, kb] = [key.r * 255, key.g * 255, key.b * 255];
+  const low = Math.max(0, tolerance) / 100;
+  const high = low + Math.max(1e-3, softness / 100);
+  // The furthest a colour can be from another: corner to corner of the colour cube.
+  const furthest = Math.sqrt(3) * 255;
+  for (let i = 0; i < data.length; i += 4) {
+    const distance = kind === 'dark'
+      ? (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255
+      : Math.hypot(data[i] - kr, data[i + 1] - kg, data[i + 2] - kb) / furthest;
+    if (distance >= high) continue;
+    data[i + 3] = distance <= low ? 0 : Math.round(data[i + 3] * ((distance - low) / (high - low)));
+  }
+  ctx.putImageData(image, 0, 0);
 }
