@@ -268,9 +268,13 @@ test('a template shows the recording\'s own picture in step with the mix, as lat
   const [exported] = await readdir(folder);
   const made = thumbnail(join(folder, exported), 2);
   // Two seconds in, 0.4 s late: the recording at 31.6 s, not 32 s.
+  // The picture is encoded again, so even the right frame differs a little; it
+  // has to match better than the moments either side of it and the one with no delay.
   const right = difference(made, thumbnail(filmed, 31.6));
-  const wrong = difference(made, thumbnail(filmed, 32));
-  assert.ok(right < wrong / 2, `the frame matches the recording 0.4 s earlier (${right.toFixed(1)}) better than at the same moment (${wrong.toFixed(1)})`);
+  for (const other of [31.3, 31.9, 32]) {
+    const wrong = difference(made, thumbnail(filmed, other));
+    assert.ok(right < wrong * 0.8, `the frame matches the recording at 31.6 s (${right.toFixed(1)}) better than at ${other} s (${wrong.toFixed(1)})`);
+  }
 });
 
 test('a ping-pong clip plays there and back, and a clip in a codec the window cannot play is shown from a copy', { skip }, async () => {

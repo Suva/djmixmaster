@@ -194,6 +194,9 @@ dialog input[type="text"] {
   user-select: text;
 }
 dialog input[type="text"]:focus { outline: 1px solid var(--accent); }
+/* Up to six formats in a narrow dialog: the buttons share the row, with less padding than usual. */
+#export-format { flex: 1; min-width: 0; }
+#export-format button { flex: 1 1 auto; padding-inline: 6px; white-space: nowrap; }
 #export-tags { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px 8px; align-items: center; margin-bottom: 12px; }
 #export-tags .head { color: var(--muted); font-size: 12px; }
 #export-tags .number { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 14px; text-align: right; }
