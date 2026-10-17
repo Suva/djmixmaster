@@ -1890,8 +1890,15 @@ $('play').addEventListener('click', togglePlay);
 $('bypass').addEventListener('click', () => setHearLevelled(!hearLevelled));
 $('bypass-off').addEventListener('click', () => setHearLevelled(true));
 
+/** Kinds of box whose keys are the letters and numbers typed into them, not the window's shortcuts. */
+const TYPED_INTO = new Set(['text', 'search', 'number', 'email', 'url', 'tel', 'password']);
+const typingIn = (target: EventTarget | null) =>
+  (target instanceof HTMLInputElement && TYPED_INTO.has(target.type)) ||
+  target instanceof HTMLTextAreaElement ||
+  (target instanceof HTMLElement && target.isContentEditable);
+
 window.addEventListener('keydown', (event) => {
-  if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
+  if (typingIn(event.target)) return;
   // While a dialog is up, the keys belong to it.
   if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open) return;
   // While a template is edited, as in an image editor: ⌘J duplicates a layer, ⌘G groups it, Shift+⌘G ungroups.

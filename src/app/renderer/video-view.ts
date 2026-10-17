@@ -883,8 +883,10 @@ export class VideoView {
     // Time moves on only while playing: drawn again paused, glitter and fades stay where they were.
     const dt = playing ? elapsed : 0;
     this.#videos.begin(playing, this.#options.rate());
-    drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images, this.#videos);
+    drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images, this.#videos, elapsed);
     this.#videos.end();
+    // A change of text plays out even while paused, which takes the frames after this one.
+    if (this.#drawer.changing) this.#stale = true;
     // For scripted checks: how many frames have been drawn.
     canvas.dataset.frames = String(Number(canvas.dataset.frames ?? 0) + 1);
     if (this.#editing) {

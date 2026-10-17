@@ -22,6 +22,12 @@ export interface Frame {
   /** Seconds into the mix, and since the frame before. */
   seconds: number;
   dt: number;
+  /**
+   * Seconds on the clock since the frame before, for what plays out whether
+   * the music moves or not, such as a change of text typed in while paused.
+   * The same as `dt` where it is not given.
+   */
+  clockDt?: number;
   /** The mix's length in seconds, for "until, before the end". */
   length: number;
   music: Values;
@@ -156,6 +162,8 @@ export class FrameDrawer {
   /** Where each layer was drawn in the last frame, by its place in the template; null for a layer not drawn, or without a box. */
   boxes: (LayerBox | null)[] = [];
   #index = 0;
+  /** Whether the last frame had a change of text under way: paused, the frames after it are still needed. */
+  changing = false;
 
   /** Notes where the layer being drawn lies, in its own coordinates after `#place`. */
   #record(params: ResolvedParams, left: number, top: number, w: number, h: number, circle = false) {
@@ -186,6 +194,7 @@ export class FrameDrawer {
     ctx.fillRect(0, 0, width, height);
 
     this.boxes = layers.map(() => null);
+    this.changing = false;
     this.#drawRange(layers, 0, layers.length, frame);
     // The picture follows the sound's fades: black where it is silent, by the same curve.
     const shown = frame.shown ?? 1;
@@ -536,7 +545,7 @@ export class FrameDrawer {
     if (kase === 'lower') text = text.toLowerCase();
 
     // A change of text plays out over a moment: the old leaving, the new arriving.
-    // It moves on with the time between frames rather than the time in the mix,
+    // It moves on with the time on the clock rather than the time in the mix,
     // so that a name typed in while the music is paused still fades in.
     if (memory.shown === undefined) memory.shown = text;
     if (text !== memory.shown) {
@@ -546,7 +555,8 @@ export class FrameDrawer {
     }
     const takes = num(params, 'changeSeconds');
     const change = str(params, 'change');
-    if (memory.changing !== undefined) memory.changing = takes > 0 ? Math.min(1, memory.changing + frame.dt / takes) : 1;
+    if (memory.changing !== undefined) memory.changing = takes > 0 ? Math.min(1, memory.changing + (frame.clockDt ?? frame.dt) / takes) : 1;
+    if (memory.changing !== undefined && memory.changing < 1) this.changing = true;
     const progress = memory.changing === undefined || change === 'cut' ? 1 : memory.changing;
 
     const size = (num(params, 'size') / 100) * height;

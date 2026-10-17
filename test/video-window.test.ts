@@ -491,3 +491,76 @@ test('a change of the picture delay is undone and redone like any setting', { sk
   });
   assert.deepEqual(seen, { typed: '250', undone: '0', redone: '250' });
 });
+
+test('pausing leaves the recording\'s picture on screen, with no frame drawn without it', { skip }, async () => {
+  const seen = await runApp({ recording: filmed, data: await dataFolder(work) }, async (page) => {
+    const playing = () => page.element('play').classList.contains('playing');
+    page.click('view-video');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const small = document.createElement('canvas');
+    [small.width, small.height] = [16, 9];
+    const brightness = () => {
+      const ctx = small.getContext('2d', { willReadFrequently: true })!;
+      ctx.drawImage(picture, 0, 0, 16, 9);
+      const data = ctx.getImageData(0, 0, 16, 9).data;
+      let total = 0;
+      for (let i = 0; i < data.length; i += 4) total += data[i] + data[i + 1] + data[i + 2];
+      return total / (data.length / 4) / 3;
+    };
+    await page.until(() => brightness() > 40, 'the recording\'s picture to be drawn');
+    const darkest: number[] = [];
+    for (let round = 0; round < 4; round++) {
+      page.key('Space');
+      await page.until(playing, 'playback to start');
+      await page.wait(400);
+      page.key('Space');
+      await page.until(() => !playing(), 'playback to stop');
+      // Every frame drawn in the half second after the pause.
+      let least = Infinity;
+      let drawn = Number(picture.dataset.frames);
+      const until = performance.now() + 500;
+      while (performance.now() < until) {
+        await new Promise(requestAnimationFrame);
+        if (Number(picture.dataset.frames) !== drawn) {
+          drawn = Number(picture.dataset.frames);
+          least = Math.min(least, brightness());
+        }
+      }
+      darkest.push(least);
+    }
+    return darkest;
+  });
+  for (const least of seen) assert.ok(least > 40, `a frame drawn after pausing was dark: ${seen.map((value) => value.toFixed(0)).join(', ')}`);
+});
+
+test('a name typed in while the music is paused fades in all the way', { skip }, async () => {
+  const file = join(work, 'Name.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1, name: 'Name', fields: [],
+    layers: [{ type: 'text', params: { text: '%artist%', size: 40, colour: '#ffffff', change: 'fade', changeSeconds: 0.3 } }],
+  }));
+  const seen = await runApp({ recording: join(work, 'sound.wav'), data: await dataFolder(work), template: file }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Name', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const small = document.createElement('canvas');
+    [small.width, small.height] = [64, 36];
+    const brightness = () => {
+      const ctx = small.getContext('2d', { willReadFrequently: true })!;
+      ctx.drawImage(picture, 0, 0, 64, 36);
+      const data = ctx.getImageData(0, 0, 64, 36).data;
+      let total = 0;
+      for (let i = 0; i < data.length; i += 4) total += data[i];
+      return total / (data.length / 4);
+    };
+    await page.wait(500);
+    const before = brightness();
+    page.type('mix-artist', 'WW');
+    await page.wait(1000);
+    return { before, after: brightness() };
+  });
+  assert.ok(seen.before < 1, `nothing is drawn before the name is typed (${seen.before.toFixed(1)})`);
+  assert.ok(seen.after > 5, `the name typed in shows (${seen.after.toFixed(1)})`);
+});

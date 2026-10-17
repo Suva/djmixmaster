@@ -25,6 +25,12 @@ are under "Not released yet" and appear there once they are.
 - **Templates stay out of your recent files.** A template opened from Finder
   or Explorer no longer shows up among the recordings in the Dock menu or the
   taskbar's jump list.
+- **Typing in the Video view while paused.** A name typed into a text
+  field now appears in full at once. Before, the last letter stayed missing
+  until the music played.
+- **Searching for a layer no longer sets off shortcuts.** Typing in the
+  editor's layer search, or in its other boxes, no longer switches bypass on
+  or starts playback.
 - **Videos open as recordings.** Open or drop an MP4, MOV, MKV or WebM of
   a set and master its sound as you would a recording.
 - **Export with the original picture.** For a video, the export dialog

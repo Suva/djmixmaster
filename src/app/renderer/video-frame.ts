@@ -156,7 +156,10 @@ export function clipRequests(mix: VideoMix, layers: PreparedLayer[], reader: Mus
   return requests;
 }
 
-/** Draws the moment `seconds` into the mix; `dt` is the time since the frame before. */
+/**
+ * Draws the moment `seconds` into the mix; `dt` is the time in the mix since
+ * the frame before, `clockDt` that on the clock (see `Frame`).
+ */
 export function drawVideoFrame(
   drawer: FrameDrawer,
   layers: PreparedLayer[],
@@ -166,6 +169,7 @@ export function drawVideoFrame(
   dt: number,
   images: Map<string, ImageBitmap>,
   videos?: VideoFrames,
+  clockDt = dt,
 ) {
   const length = mix.end - mix.start;
   const music = reader ? reader.at(seconds, dt) : { time: seconds, dt, length, progress: seconds / Math.max(1, length) };
@@ -174,6 +178,7 @@ export function drawVideoFrame(
   drawer.draw(layers, {
     seconds,
     dt,
+    clockDt,
     length,
     music,
     spectrum: reader ? reader.spectrum(seconds) : new Float32Array(BAND_COUNT),

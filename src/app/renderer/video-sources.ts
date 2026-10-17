@@ -78,6 +78,8 @@ interface Playing {
   /** The number of the frame that last showed it, and when that was. */
   frame: number;
   used: number;
+  /** Whether it has had a frame to show: while it jumps, that one stays on screen. */
+  shown: boolean;
 }
 
 /** A video as the view plays it: its files one after another, with where each starts. */
@@ -190,7 +192,7 @@ export class PreviewVideos {
       element.addEventListener('seeked', () => this.#changed());
       element.addEventListener('loadeddata', () => this.#changed());
       element.src = videoUrl(part.path);
-      entry = { element, frame: 0, used: 0 };
+      entry = { element, frame: 0, used: 0, shown: false };
       this.#playing.set(key, entry);
     }
     entry.frame = this.#frame;
@@ -206,7 +208,11 @@ export class PreviewVideos {
       if (!video.paused) video.pause();
       if (!video.seeking && Math.abs(video.currentTime - local) > 0.5 / FALLBACK_FPS) video.currentTime = local;
     }
-    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) return null;
+    // A jump, such as to the exact frame on pausing, has the element say it has no frame until it lands;
+    // it still draws the one it had, which beats a moment of nothing.
+    const ready = video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA || (video.seeking && entry.shown);
+    if (!ready || !video.videoWidth) return null;
+    entry.shown = true;
     return { image: video, width: video.videoWidth, height: video.videoHeight };
   }
 }

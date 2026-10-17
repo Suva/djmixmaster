@@ -1553,7 +1553,8 @@ test('paused, the picture is drawn only when something changes; playing, all the
       return frames() - before;
     };
     const paused = await count(() => {}, 1000);
-    const typed = await count(() => page.type('mix-artist', 'Suva'), 300);
+    // A name typed in fades in over a moment, drawn frame by frame; then drawing stops.
+    const typed = await count(() => page.type('mix-artist', 'Suva'), 1200);
     const after = await count(() => {}, 1000);
     const moved = await count(() => page.key('ArrowRight'), 300);
     page.key('Space');
@@ -1563,7 +1564,7 @@ test('paused, the picture is drawn only when something changes; playing, all the
     return { paused, typed, after, moved, playing };
   });
   assert.equal(seen.paused, 0, 'nothing drawn while nothing changes');
-  assert.ok(seen.typed >= 1, 'drawn again for a change');
+  assert.ok(seen.typed >= 5, `drawn again for a change, through its fade: ${seen.typed}`);
   assert.equal(seen.after, 0, 'and still again after it');
   assert.ok(seen.moved >= 1, 'drawn again when the playhead moves');
   assert.ok(seen.playing >= 10, `drawn all the time while playing: ${seen.playing}`);
@@ -2287,4 +2288,27 @@ test('Export all writes each mix, levelled and under the ceiling', { skip }, asy
     const spread = Math.max(...tracks) - Math.min(...tracks);
     assert.ok(spread < 2, `tracks that were 10 dB apart are still ${spread.toFixed(1)} dB apart`);
   }
+});
+
+test('keys typed into the layer search are letters, not the window\'s shortcuts', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.choose('template', 'ring');
+    await page.wait(100);
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    page.click('editor-add');
+    const search = document.activeElement as HTMLInputElement;
+    // A for bypass, Space for play, as a key press in the box sends them.
+    for (const [code, key] of [['KeyA', 'a'], ['Space', ' ']]) {
+      search.dispatchEvent(new KeyboardEvent('keydown', { code, key, bubbles: true, cancelable: true }));
+    }
+    await page.wait(100);
+    return {
+      searching: search.type,
+      bypassed: page.element('bypass').classList.contains('on'),
+      playing: page.element('play').classList.contains('playing'),
+    };
+  });
+  assert.deepEqual(seen, { searching: 'search', bypassed: false, playing: false });
 });
