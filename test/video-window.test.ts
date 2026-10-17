@@ -473,3 +473,21 @@ test('a video opens with its own picture as the template, and a recording withou
   assert.equal(await chosen(filmed), 'original');
   assert.equal(await chosen(join(work, 'sound.wav')), 'glitter');
 });
+
+test('a change of the picture delay is undone and redone like any setting', { skip }, async () => {
+  const seen = await runApp({ recording: filmed, data: await dataFolder(work) }, async (page) => {
+    page.click('view-video');
+    const delay = page.element<HTMLInputElement>('picture-delay');
+    page.type('picture-delay', '250');
+    await page.settle();
+    const typed = delay.value;
+    page.click('undo');
+    const undone = delay.value;
+    page.click('redo');
+    const redone = delay.value;
+    page.click('undo');
+    await page.settle();
+    return { typed, undone, redone };
+  });
+  assert.deepEqual(seen, { typed: '250', undone: '0', redone: '250' });
+});

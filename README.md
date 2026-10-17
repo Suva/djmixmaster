@@ -274,7 +274,8 @@ For a recording that is a video, a template's video layer can show the
 recording's own picture, in step with the music. If the picture runs ahead
 of the sound or behind it, as some cameras' do, set **Picture delay** in the
 Video view: a positive delay shows each frame later. It goes for the whole
-recording, in the view and in every video export.
+recording, in the view and in every video export, and is undone like any
+other change.
 
 A recording that is a video can also be exported as **Original video**: its
 own picture with the mastered sound. The picture is copied as it is, not

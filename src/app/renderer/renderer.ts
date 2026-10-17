@@ -2476,6 +2476,7 @@ interface Step {
   mixes: string;
   tracks: string;
   channels: string;
+  pictureDelayMs: number;
   selected: number;
   mixesCreated: number;
 }
@@ -2487,14 +2488,14 @@ let redoSteps: Step[] = [];
 let settled: Step | null = null;
 
 function snapshot(): Step {
-  return { mixes: JSON.stringify(mixes), tracks: JSON.stringify(tracks), channels: JSON.stringify(channelFixes), selected: Math.max(0, mixes.indexOf(mix)), mixesCreated };
+  return { mixes: JSON.stringify(mixes), tracks: JSON.stringify(tracks), channels: JSON.stringify(channelFixes), pictureDelayMs, selected: Math.max(0, mixes.indexOf(mix)), mixesCreated };
 }
 
 /** Records the changes since the last settled state, if any, as one undo step. */
 function settleHistory() {
   if (!settled) return;
   const now = snapshot();
-  if (now.mixes === settled.mixes && now.tracks === settled.tracks && now.channels === settled.channels) {
+  if (now.mixes === settled.mixes && now.tracks === settled.tracks && now.channels === settled.channels && now.pictureDelayMs === settled.pictureDelayMs) {
     // Selecting another mix is not a change worth a step, but is remembered.
     settled = now;
     return;
@@ -2519,6 +2520,9 @@ function applyStep(step: Step) {
   tracks = JSON.parse(step.tracks);
   channelFixes = JSON.parse(step.channels);
   channelsChanged();
+  pictureDelayMs = step.pictureDelayMs;
+  $<HTMLInputElement>('picture-delay').value = String(pictureDelayMs);
+  videoView.refresh();
   selectedTrack = null;
   mixesCreated = step.mixesCreated;
   settled = step;
