@@ -34,3 +34,9 @@ await mkdir('dist/fonts', { recursive: true });
 for (const file of await readdir('assets/fonts').catch(() => [])) {
   if (/\.(ttf|txt)$/.test(file)) await copyFile(`assets/fonts/${file}`, `dist/fonts/${file}`);
 }
+
+// The same for icons taken from others: the licence goes where the app goes.
+await mkdir('dist/icons', { recursive: true });
+for (const file of await readdir('assets/icons').catch(() => [])) {
+  if (file.endsWith('.txt')) await copyFile(`assets/icons/${file}`, `dist/icons/${file}`);
+}

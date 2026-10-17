@@ -379,6 +379,7 @@ const LOUDNESS_PRESETS = [
 ];
 const AUTO_NOTE = 'As loud as the mix gets while staying clear of the limiter.';
 const CUSTOM_NOTE = 'You set how loud the full-energy parts are. A higher level leans on the limiter.';
+const FIXED_CUSTOM_NOTE = 'You set how much the whole mix is turned up or down. Turning it far up leans on the limiter.';
 
 const presetOf = (m: Mix) => LOUDNESS_PRESETS.find((preset) => preset.id === m.loudness);
 
@@ -413,9 +414,10 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
     { peaks: peaksIn, ceilingDb: m.ceilingDb },
     adjustments,
   );
-  const { gainDb, targetLufs } = levelling;
+  const { gainDb, targetLufs, offsetDb } = levelling;
   // The bass curve is shown and applied when anything moves the bass: the correction or a hand adjustment.
-  const bassDb = options.bassCorrection > 0 || m.adjustments.some((a) => a.bass) ? levelling.bassDb : null;
+  const correcting = options.levelTracks && options.bassCorrection > 0;
+  const bassDb = correcting || m.adjustments.some((a) => a.bass) ? levelling.bassDb : null;
   const ceiling = Math.pow(10, m.ceilingDb / 20);
   const peaksOut = new Float32Array(n);
   const peakGain = new Float32Array(n);
@@ -467,7 +469,7 @@ function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: St
   return {
     detail: {
       startBlock: start, peaksIn, peaksOut, bodyOut, peakGain, loudnessIn: shortTerm, loudnessOut, gainDb, bassDb, adjustments,
-      fadeIn: fade.in, fadeOut: fade.out, from, to, targetLufs, ceiling,
+      fadeIn: fade.in, fadeOut: fade.out, from, to, targetLufs, offsetDb, ceiling,
     },
     stats: {
       loudnessIn: integratedLoudness(blocksIn),
@@ -550,10 +552,12 @@ function recompute() {
     const computed = compute(mix);
     detail = computed.detail;
     setStats(computed.stats);
-    // Unless it was set by hand, the slider shows where the target ended up.
-    if (mix.loudness || mix.options.targetLufs === undefined) {
-      $('target-value').textContent = lufs(detail.targetLufs);
-      $<HTMLInputElement>('target').value = String(Math.round(detail.targetLufs * 2) / 2);
+    // Unless it was set by hand, the slider shows where the target, or the fixed gain, ended up.
+    if (choiceOf(mix) !== 'custom') {
+      const fixed = !mix.options.levelTracks;
+      const value = fixed ? detail.offsetDb : detail.targetLufs;
+      $('target-value').textContent = fixed ? db(value) : lufs(value);
+      $<HTMLInputElement>(fixed ? 'gain' : 'target').value = String(Math.round(value * 2) / 2);
     }
   } catch (error) {
     detail = null;
@@ -1790,10 +1794,21 @@ async function startPlaying() {
 
 function setHearLevelled(levelled: boolean) {
   hearLevelled = levelled;
-  $('hear-levelled').classList.toggle('on', levelled);
-  $('hear-original').classList.toggle('on', !levelled);
+  $('bypass').classList.toggle('on', !levelled);
+  $('bypass').setAttribute('aria-pressed', String(!levelled));
+  $('bypass-note').hidden = levelled;
   scheduleDraw();
 }
+
+// A setting changed while bypassed is not heard; the note says why, again.
+function remindBypassed(event: Event) {
+  if (hearLevelled || (event.target as Element).closest('#bypass-note')) return;
+  const note = $('bypass-note');
+  note.classList.remove('flash');
+  void note.offsetWidth; // so that the animation starts over
+  note.classList.add('flash');
+}
+for (const type of ['input', 'change']) $('mastering-settings').addEventListener(type, remindBypassed);
 
 player.onPlay = () => {
   showPlaying(true);
@@ -1823,8 +1838,8 @@ function showPlaying(playing: boolean) {
 }
 
 $('play').addEventListener('click', togglePlay);
-$('hear-original').addEventListener('click', () => setHearLevelled(false));
-$('hear-levelled').addEventListener('click', () => setHearLevelled(true));
+$('bypass').addEventListener('click', () => setHearLevelled(!hearLevelled));
+$('bypass-off').addEventListener('click', () => setHearLevelled(true));
 
 window.addEventListener('keydown', (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === 'text') return;
@@ -1973,16 +1988,38 @@ const sliders: Slider[] = [
   { id: 'ceiling', get: () => mix.ceilingDb, set: (v) => (mix.ceilingDb = v), format: (v) => `${v.toFixed(1)} dBTP` },
 ];
 
+/**
+ * What the Loudness list shows for a mix. Custom is a target set by hand when
+ * the tracks are levelled, and a gain set by hand when the gain is fixed; only
+ * the one that goes with the mode is ever set.
+ */
+function choiceOf(m: Mix): string {
+  const preset = presetOf(m);
+  if (preset) return preset.id;
+  const byHand = m.options.levelTracks ? m.options.targetLufs : m.options.fixedGainDb;
+  return byHand === undefined ? 'auto' : 'custom';
+}
+
 function syncControls() {
   for (const slider of sliders) {
     $<HTMLInputElement>(slider.id).value = String(slider.get());
     $(`${slider.id}-value`).textContent = slider.format(slider.get());
   }
+  const fixed = !mix.options.levelTracks;
+  $('level-tracks').classList.toggle('on', !fixed);
+  $('fixed-gain').classList.toggle('on', fixed);
+  $('track-levelling').hidden = fixed;
+  $('target').hidden = fixed;
+  $('gain').hidden = !fixed;
   const preset = presetOf(mix);
-  const choice = preset ? preset.id : mix.options.targetLufs === undefined ? 'auto' : 'custom';
+  const choice = choiceOf(mix);
   $<HTMLSelectElement>('loudness').value = choice;
-  $('loudness-note').textContent = preset ? preset.note : choice === 'auto' ? AUTO_NOTE : CUSTOM_NOTE;
-  if (choice === 'custom') {
+  $('loudness-note').textContent =
+    preset ? preset.note : choice === 'auto' ? AUTO_NOTE : fixed ? FIXED_CUSTOM_NOTE : CUSTOM_NOTE;
+  if (choice === 'custom' && fixed) {
+    $<HTMLInputElement>('gain').value = String(mix.options.fixedGainDb);
+    $('target-value').textContent = db(mix.options.fixedGainDb!);
+  } else if (choice === 'custom') {
     $<HTMLInputElement>('target').value = String(mix.options.targetLufs);
     $('target-value').textContent = lufs(mix.options.targetLufs!);
   }
@@ -2003,23 +2040,56 @@ for (const slider of sliders) {
   });
 }
 
-// Moving the slider is choosing a level by hand.
-$<HTMLInputElement>('target').addEventListener('input', (event) => {
-  delete mix.loudness;
-  mix.options.targetLufs = Number((event.target as HTMLInputElement).value);
-  syncControls();
-  scheduleRecompute();
-});
+/** Sets the level by hand, as a target or as a gain depending on the mode; undefined leaves it to work itself out. */
+function setByHand(value: number | undefined) {
+  if (mix.options.levelTracks) {
+    mix.options.targetLufs = value;
+    delete mix.options.fixedGainDb;
+  } else {
+    mix.options.fixedGainDb = value;
+    delete mix.options.targetLufs;
+  }
+}
+
+// Moving either slider is choosing a level by hand.
+for (const id of ['target', 'gain']) {
+  $<HTMLInputElement>(id).addEventListener('input', (event) => {
+    delete mix.loudness;
+    setByHand(Number((event.target as HTMLInputElement).value));
+    syncControls();
+    scheduleRecompute();
+  });
+}
 
 $<HTMLSelectElement>('loudness').addEventListener('change', (event) => {
   const choice = (event.target as HTMLSelectElement).value;
   if (choice === 'auto' || choice === 'custom') delete mix.loudness;
   else mix.loudness = choice;
   // Custom starts from the level in use; everything else works its own out.
-  mix.options.targetLufs = choice === 'custom' ? Number($<HTMLInputElement>('target').value) : undefined;
+  const slider = mix.options.levelTracks ? 'target' : 'gain';
+  setByHand(choice === 'custom' ? Number($<HTMLInputElement>(slider).value) : undefined);
   syncControls();
   scheduleRecompute();
 });
+
+/**
+ * Switches between levelling the tracks and one gain for the whole mix. A
+ * level set by hand carries over as near as it can: a fixed gain starts at the
+ * gain the target came to, and a target at where the fixed gain left the
+ * full-energy parts. Presets and "As loud as fits" mean the same in both.
+ */
+function setLevelTracks(on: boolean) {
+  if (!recording || busy || mix.options.levelTracks === on) return;
+  const custom = choiceOf(mix) === 'custom';
+  mix.options.levelTracks = on;
+  if (custom && detail) setByHand(Math.round((on ? detail.targetLufs : detail.offsetDb) * 2) / 2);
+  else setByHand(undefined);
+  syncControls();
+  scheduleRecompute();
+}
+
+$('level-tracks').addEventListener('click', () => setLevelTracks(true));
+$('fixed-gain').addEventListener('click', () => setLevelTracks(false));
 
 $('reset').addEventListener('click', () => {
   mix.options = { ...DEFAULT_LEVEL_OPTIONS };
@@ -2465,7 +2535,7 @@ const HELP: [string, [string, string][]][] = [
   ]],
   ['Playback', [
     ['Space', 'Play or pause'],
-    ['A', 'Switch between original and levelled'],
+    ['A', 'Bypass processing, to hear the recording as it is, and back'],
     ['← →', 'Back or forward 5 seconds'],
     [`Shift+← →, ${OPTION}+← →`, '30 seconds, 1 second'],
     ['I, O', 'Start, or end, the mix at the playhead'],

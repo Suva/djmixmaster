@@ -57,8 +57,9 @@ There is no build for Intel Macs yet. On those, the tool can be run
 2. **Mark the mix.** The whole recording starts out as one mix. Drag its edges
    in, or press "Split at gaps" to cut a night apart at the silences. Drag
    across a free part to mark another mix.
-3. **Listen.** Press Space to play. The Original/Levelled switch (or the A
-   key) compares before and after.
+3. **Listen.** Press Space to play. The bypass button, left of the
+   play controls (or the A key), compares before and after. While it is on,
+   it pulses, and the settings say that nothing they change is heard.
 4. **Adjust if needed.** The defaults work for most mixes. The sliders on the
    right change how it levels; what you hear follows immediately.
 5. **Export.** "Export mix…" writes the selected mix, "Export all" every mix
@@ -158,6 +159,7 @@ dropouts in white. The report describes; it does not repair yet.
 
 | Setting | What it does |
 |---|---|
+| Even out tracks, Fixed gain | Whether the gain follows the tracks, or the whole mix is turned up or down by one amount, as on a mixer. With a fixed gain the settings for evening out tracks are put away; Loudness, hand adjustments, fades and the limiter work as before, and choosing Custom sets the gain in dB. |
 | Loudness | How loud the result is. "As loud as fits" picks the highest level that keeps the limiter out of the way. The presets aim the whole mix at a level: Loud (-9 LUFS) for places that play the file as it is, Streaming (-14), Podcast or radio show (-16) and Broadcast (-23). Moving the slider sets the level of the full-energy parts by hand. |
 | Breakdown length | Quieter passages shorter than this keep the gain of the track around them. Longer ones are treated as a quieter track and raised. |
 | Transition time | How long a change of gain takes between two tracks. |
@@ -174,7 +176,7 @@ everything below together with the mouse and trackpad gestures.
 | Key | Does |
 |---|---|
 | Space | Play or pause. Playback stops at the end of the mix; pressing play there starts the mix over |
-| A | Switch between the original and the levelled sound |
+| A | Bypass processing, to hear the recording as it is, and back |
 | ← → | Move the playhead 5 seconds (30 with Shift, 1 with Option or Alt) |
 | I, O | Put the start, or the end, of the mix at the playhead |
 | Cmd/Ctrl+E | Split the mix at the playhead |
@@ -316,6 +318,8 @@ The output format follows the file extension: `.wav`, `.flac`, `.mp3` or
 | `--analyze-only` | Print the planned gain without writing audio | off |
 | `--dump <file.csv>` | Write the loudness and gain curves for inspection | off |
 | `--target <LUFS>` | Loudness of the full-energy sections | as loud as fits without limiting |
+| `--no-levelling` | Leave the tracks as they are; turn the whole mix up or down by one amount | levelling on |
+| `--gain <dB>` | That amount, set by hand (implies `--no-levelling`) | as loud as fits |
 | `--window <seconds>` | Quiet passages shorter than about this are breakdowns | 100 |
 | `--percentile <0-1>` | Loudness percentile that counts as full energy | 0.9 |
 | `--bass-correction <0-1>` | How much of the bass difference between tracks the EQ evens out | 0 |
@@ -400,3 +404,8 @@ the `ffmpeg` binary.
 The fonts for videos in `assets/fonts` come from
 [Google Fonts](https://github.com/google/fonts) and are each licensed under the
 SIL Open Font License, whose text is beside each font.
+
+The bypass icon is `bypass_alt` from
+[Brightlayer UI Icons](https://www.npmjs.com/package/@brightlayer-ui/icons-svg)
+by Eaton, under the BSD 3-Clause License; its text is in `assets/icons` and
+travels with the app.

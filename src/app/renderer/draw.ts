@@ -275,6 +275,8 @@ export interface Detail {
   from: number;
   to: number;
   targetLufs: number;
+  /** The part of the gain that is the same all through the mix. */
+  offsetDb: number;
   /** Limiter ceiling as a linear sample value. */
   ceiling: number;
 }

@@ -36,6 +36,9 @@ Output
 Levelling
   --target <LUFS>      Loudness for full-energy sections (default: as loud as fits under the
                        ceiling without limiting); set it higher to push into the limiter
+  --no-levelling       Leave the tracks as they are and turn the whole mix up or down by one
+                       amount, set by --target or --gain, or else as loud as fits
+  --gain <dB>          That amount, set by hand; implies --no-levelling
   --window <seconds>   Quiet passages shorter than about this are breakdowns (default: ${DEFAULT_LEVEL_OPTIONS.windowSeconds})
   --percentile <0-1>   Loudness percentile that counts as full energy (default: ${DEFAULT_LEVEL_OPTIONS.percentile})
   --bass-weight <0-1>  0 matches perceived loudness, 1 matches bass/kick level (default: ${DEFAULT_LEVEL_OPTIONS.bassWeight})
@@ -128,6 +131,8 @@ function parseArgs(argv: string[]): Args {
       case '--analyze-only': args.analyzeOnly = true; break;
       case '--dump': args.dump = value(); break;
       case '--target': args.options.targetLufs = number(); break;
+      case '--no-levelling': args.options.levelTracks = false; break;
+      case '--gain': args.options.fixedGainDb = number(); args.options.levelTracks = false; break;
       case '--window': args.options.windowSeconds = number(); break;
       case '--percentile': args.options.percentile = number(); break;
       case '--bass-weight': args.options.bassWeight = number(); break;
@@ -157,6 +162,9 @@ function parseArgs(argv: string[]): Args {
   if (maxBoostDb < 0 || maxCutDb < 0) throw new Error('--max-boost and --max-cut must not be negative');
   if (!(smoothSeconds >= 0)) throw new Error('--smooth must not be negative');
   if (!(slewDbPerSecond > 0)) throw new Error('--slew must be positive');
+  if (args.options.fixedGainDb !== undefined && args.options.targetLufs !== undefined) {
+    throw new Error('--gain and --target cannot be used together');
+  }
   if (args.ceilingDb !== null && args.ceilingDb > 0) throw new Error('--ceiling must be 0 dBFS or lower');
   if (!(args.fadeInSeconds >= 0) || !(args.fadeOutSeconds >= 0)) throw new Error('--fade-in and --fade-out must not be negative');
   if (args.headroomDb !== undefined && !(args.headroomDb >= 0)) throw new Error('--headroom must not be negative');
@@ -228,7 +236,7 @@ async function main() {
   console.log(`Input        ${lufs(before.integratedLufs)} integrated, peak ${dbfs(before.peak)}`);
   console.log(`Target       ${lufs(levelling.targetLufs)} for full-energy sections`);
   console.log(`Gain         ${db(minGain)} to ${db(maxGain)}`);
-  if (args.options.bassCorrection > 0) {
+  if (args.options.levelTracks && args.options.bassCorrection > 0) {
     const minBass = bassDb.reduce((a, b) => Math.min(a, b), Infinity);
     const maxBass = bassDb.reduce((a, b) => Math.max(a, b), -Infinity);
     console.log(`Bass         ${db(minBass)} to ${db(maxBass)}`);

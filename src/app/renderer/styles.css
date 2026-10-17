@@ -199,6 +199,24 @@ dialog input[type="text"]:focus { outline: 1px solid var(--accent); }
 #export-tags .number { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 14px; text-align: right; }
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; }
 #export-all-group[hidden] { display: none; }
+#track-levelling[hidden], #settings input[hidden] { display: none; }
+/* Bypassed, nothing set in the app is heard. That is easy to do by accident
+   with the A key and then puzzling, so the state pulses and says so. */
+:root { --bypass: #f0a830; --bypass-ink: #2b1d04; }
+#bypass.on { background: var(--bypass); border-color: var(--bypass); color: var(--bypass-ink); font-weight: 600; animation: bypass-pulse 1.2s ease-in-out infinite; }
+#bypass.on:hover:not(:disabled) { background: #f5bb55; }
+/* The icon fills only the middle of its box; this brings it to the size of the transport icons. */
+#bypass svg { width: 22px; height: 22px; }
+@keyframes bypass-pulse { 50% { background: #7a5618; border-color: #7a5618; color: var(--text); } }
+#bypass-note { margin: 14px 0 4px; padding: 10px 12px; border: 1px solid var(--bypass); border-radius: 6px; background: #2b2210; }
+#bypass-note[hidden] { display: none; }
+#bypass-note p { margin: 0 0 8px; }
+#bypass-note.flash { animation: bypass-flash 0.5s ease-out 2; }
+@keyframes bypass-flash { 50% { background: #5a4210; } }
+@media (prefers-reduced-motion: reduce) {
+  #bypass.on, #bypass-note.flash { animation: none; }
+}
+#levelling-mode button { flex: 1; }
 .toggle button:only-child { border-radius: 6px; }
 .region-title { color: var(--text); font-weight: 600; }
 .region-bar output { color: var(--text); font-variant-numeric: tabular-nums; }

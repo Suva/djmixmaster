@@ -4,6 +4,20 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- **A fixed gain instead of levelling.** The switch at the top of the
+  settings, "Even out tracks" or "Fixed gain", turns the whole mix up or down
+  by one amount and leaves the tracks as they are. Loudness still chooses how
+  much: as loud as fits, a preset, or a gain in dB set by hand. Hand
+  adjustments, fades and the limiter work as before. On the command line:
+  `--no-levelling` and `--gain`.
+- **Bypass is one button, and hard to miss.** The Original/Levelled switch is
+  now a bypass button, left of the play controls. While it is on, it pulses,
+  and a note above the settings says that you are hearing the recording as it
+  is, with a button to turn it off. Before, the A key could switch to the original unnoticed, and
+  the settings then seemed to do nothing.
+
 ## 0.9.1 — 16 October 2026
 
 - **WAV exports upload to SoundCloud.** A WAV under 4 GB, which is nearly

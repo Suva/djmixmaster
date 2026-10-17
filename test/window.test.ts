@@ -96,6 +96,31 @@ test('settings change the levelling', { skip }, async () => {
   assert.notEqual(seen.note, '');
 });
 
+test('a fixed gain in place of levelling, set by hand and carried back', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    await page.until(() => page.text('stat-out') !== '–', 'the levelling to be worked out');
+    const levelled = page.text('stat-gain');
+    page.click('fixed-gain');
+    await page.until(() => page.text('stat-gain') !== levelled, 'the gain to stop following the tracks');
+    const fits = page.text('stat-gain');
+    const hidden = document.getElementById('track-levelling')!.hidden;
+    page.choose('loudness', 'custom');
+    page.slide('gain', 3);
+    await page.until(() => page.text('stat-gain').startsWith('+3.0 dB'), 'the gain set by hand');
+    const byHand = { gain: page.text('stat-gain'), shown: page.text('target-value') };
+    page.click('level-tracks');
+    await page.until(() => page.text('stat-gain') !== byHand.gain, 'the levelling to come back');
+    await page.settle();
+    return { levelled, fits, hidden, byHand, back: page.text('stat-gain'), choice: (document.getElementById('loudness') as HTMLSelectElement).value };
+  });
+  const [low, high] = seen.fits.split(' to ');
+  assert.equal(low, high, `a fixed gain moved: ${seen.fits}`);
+  assert.ok(seen.hidden, 'the settings for levelling tracks are put away');
+  assert.deepEqual(seen.byHand, { gain: '+3.0 dB to +3.0 dB', shown: '+3.0 dB' });
+  assert.equal(seen.back.split(' to ')[0] === seen.back.split(' to ')[1], false, `levelling back: ${seen.back}`);
+  assert.equal(seen.choice, 'custom', 'a level set by hand stays set by hand');
+});
+
 test('a mix can be split, deleted with Backspace, and both undone', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     await page.settle();
@@ -1902,9 +1927,9 @@ test('the keys move the playhead, switch what is heard and show the help', { ski
     await press('returnAgain', 'Enter');
 
     page.key('KeyA');
-    const original = page.element('hear-original').classList.contains('on');
+    const original = page.element('bypass').classList.contains('on') && !page.element('bypass-note').hidden;
     page.key('KeyA');
-    const levelled = page.element('hear-levelled').classList.contains('on');
+    const levelled = !page.element('bypass').classList.contains('on') && page.element('bypass-note').hidden;
 
     // Typing in a field must not set the shortcuts off.
     const name = page.element<HTMLInputElement>('mix-name');

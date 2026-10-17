@@ -83,6 +83,24 @@ test('a hand adjustment raises its stretch and ramps at the edges', () => {
   assert.ok(Math.abs(gainDb[4000] - 1) < 0.1, 'half way at the edge');
 });
 
+test('a fixed gain leaves the tracks as they are, but not the hand adjustments', () => {
+  // Two ten-minute tracks 6 dB apart, with 4 dB less bass in the second.
+  const n = 12000;
+  const half = (first: number, second: number) => Float32Array.from({ length: n }, (_, i) => (i < n / 2 ? first : second));
+  const measured = { shortTerm: half(-10, -16), lowShortTerm: half(-14, -24), restShortTerm: half(-13, -19) } as Measurement;
+  const fixed = { ...DEFAULT_LEVEL_OPTIONS, levelTracks: false, bassCorrection: 1, bassWeight: 0.5 };
+  const byHand = level(measured, { ...fixed, fixedGainDb: 3 }, undefined, [{ start: 8000, end: 10000, db: -2 }]);
+  assert.ok(Math.abs(byHand.gainDb[1000] - 3) < 0.01 && Math.abs(byHand.gainDb[7000] - 3) < 0.01, 'one gain for both tracks');
+  assert.ok(Math.abs(byHand.gainDb[9000] - 1) < 0.01, 'the adjustment on top');
+  assert.ok(byHand.bassDb.every((v) => v === 0), 'no bass correction');
+  assert.equal(byHand.offsetDb, 3);
+  // As loud as fits: still one gain, chosen by the peaks.
+  const peaks = new Float32Array(n).fill(0.25);
+  const fits = level(measured, fixed, { peaks, ceilingDb: -1 });
+  assert.ok(Math.abs(fits.gainDb[1000] - fits.gainDb[7000]) < 1e-6);
+  assert.ok(Math.abs(fits.gainDb[1000] - (-1 - 20 * Math.log10(0.25))) < 0.01, `gain was ${fits.gainDb[1000]}`);
+});
+
 test('gaps are the long silences, not the pauses inside the music', () => {
   const second = 10;
   const blocks = new Float64Array(600 * second).fill(0.1);

@@ -25,8 +25,17 @@ export interface LevelOptions {
   bassCorrection: number;
   /** Most the bass of a track is raised or lowered by that EQ. */
   maxBassDb: number;
+  /**
+   * Whether the gain follows the tracks. Off, the whole mix is turned up or
+   * down by one amount and nothing moves on its own: the options that shape
+   * the curve and the bass correction are left unused, and only hand
+   * adjustments change the gain along the way.
+   */
+  levelTracks: boolean;
   /** Loudness the full-energy sections are brought to. Defaults to the mix's own typical level. */
   targetLufs?: number;
+  /** With `levelTracks` off, a gain set by hand, in place of a target. */
+  fixedGainDb?: number;
   /** Most a quiet track is raised, and a loud one lowered, relative to the mix's typical level. */
   maxBoostDb: number;
   maxCutDb: number;
@@ -37,6 +46,7 @@ export interface LevelOptions {
 }
 
 export const DEFAULT_LEVEL_OPTIONS: LevelOptions = {
+  levelTracks: true,
   windowSeconds: 100,
   percentile: 0.9,
   bassWeight: 0,

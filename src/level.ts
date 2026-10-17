@@ -29,6 +29,8 @@ export interface Levelling {
   gainDb: Float32Array;
   /** Gain of the bass shelf in dB per 100 ms block; all zero when bass correction is off. */
   bassDb: Float32Array;
+  /** The part of the gain that is the same all through the mix, which the target or a fixed gain decides. */
+  offsetDb: number;
 }
 
 /**
@@ -37,14 +39,19 @@ export interface Levelling {
  * mix's own level, or, when `headroom` is given, is made as loud as fits under
  * the ceiling without leaning on the limiter. `adjustments` are manual changes
  * to the overall gain or to the bass alone, laid on top of the automatic curves.
+ * With `levelTracks` off there are no automatic curves, only the hand
+ * adjustments and one gain for the whole mix.
  */
 export function level(
   curves: LoudnessCurves, options: LevelOptions, headroom?: Headroom, adjustments: Adjustment[] = [],
 ): Levelling {
   const envelope = fullEnergyEnvelope(curves.shortTerm, options);
   const typicalLufs = median(envelope);
+  const { levelTracks } = options;
   const bass =
-    options.bassWeight > 0 || options.bassCorrection > 0 ? fullEnergyEnvelope(curves.lowShortTerm, options) : null;
+    levelTracks && (options.bassWeight > 0 || options.bassCorrection > 0)
+      ? fullEnergyEnvelope(curves.lowShortTerm, options)
+      : null;
 
   let bassDb: Float32Array = new Float32Array(envelope.length);
   if (bass && options.bassCorrection > 0) {
@@ -74,16 +81,16 @@ export function level(
   // Tracks are levelled against the mix's own typical level, so the boost and
   // cut limits bound the correction between tracks; the target then moves the
   // whole mix by one fixed amount.
-  const reference = median(envelope);
-  const gainDb = gainCurve(envelope, reference, options);
+  const gainDb = levelTracks ? gainCurve(envelope, median(envelope), options) : new Float32Array(envelope.length);
   const manual = adjustmentCurve(adjustments.filter((a) => !a.bass), gainDb.length, options);
   const manualBass = adjustmentCurve(adjustments.filter((a) => a.bass), gainDb.length, options);
   for (let i = 0; i < gainDb.length; i++) {
     gainDb[i] += manual[i];
     bassDb[i] += manualBass[i];
   }
-  let targetLufs = options.targetLufs ?? typicalLufs;
-  if (options.targetLufs === undefined && headroom) {
+  const fixed = levelTracks ? undefined : options.fixedGainDb;
+  let targetLufs = fixed !== undefined ? typicalLufs + fixed : (options.targetLufs ?? typicalLufs);
+  if (fixed === undefined && options.targetLufs === undefined && headroom) {
     // Where the peaks of the music would land after levelling. A recording made
     // too hot peaks at full scale all the way through, so raising any of its
     // tracks would only feed the limiter; turn the whole mix down by that much.
@@ -101,6 +108,7 @@ export function level(
       targetLufs = typicalLufs + Math.min(MAX_AUTO_RAISE_DB, headroom.ceilingDb - reach);
     }
   }
-  for (let i = 0; i < gainDb.length; i++) gainDb[i] += targetLufs - typicalLufs;
-  return { envelope, targetLufs, gainDb, bassDb };
+  const offsetDb = targetLufs - typicalLufs;
+  for (let i = 0; i < gainDb.length; i++) gainDb[i] += offsetDb;
+  return { envelope, targetLufs, gainDb, bassDb, offsetDb };
 }
