@@ -446,6 +446,13 @@ values into the ones a frame gets. None draws anything yet.
   when added, named by its fingerprint; a larger one is used where it is. A
   setting can also hold a path (a video field filled in for a mix), or
   `recording:video` for the recording's own picture.
+- **A template file to share** is a ZIP of `template.json` and its videos,
+  stored as they are. Videos found missing when a template is shown are
+  looked for in the media folders by their kept names; those still missing
+  are listed above the fields with a "Locate…" button each, and the others
+  that were in the same folder are looked for beside the one located.
+  Anything found must have the fingerprint the template noted, where it
+  noted one.
 - **Ping-pong** is played from a copy: the used part followed by itself
   reversed, played forwards as a loop (`pingPongClip` in `main.ts`, used by
   `PingPongs` in `video-sources.ts`). A decoder cannot step backwards a frame

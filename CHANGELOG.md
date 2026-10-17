@@ -39,6 +39,15 @@ are under "Not released yet" and appear there once they are.
 - **Ping-pong clips**, up to a minute long, play forwards and then
   backwards. Clips in formats the window cannot play itself, such as
   ProRes, are shown from a copy the app makes the first time.
+- **Template files carry their videos.** A `.djmtemplate` is now a ZIP
+  holding the template and the videos it shows, so it can be shared whole.
+  Template files from earlier versions still open; earlier versions cannot
+  open the new ones.
+- **A folder for template videos.** File > Folder for Template Videos
+  chooses where small videos added to templates, and those in template files
+  imported, are kept. A video that has moved is found again, or can be
+  located, and the template's other videos in the same folder are found with
+  it.
 
 ## 0.9.1 — 16 October 2026
 

@@ -14,6 +14,7 @@ import { HOP_SECONDS } from '../src/loudness.ts';
 import { measure } from '../src/master.ts';
 import { TRACK_LEVELS_DB, TRACK_SECONDS, writeSyntheticMix } from './synthetic-mix.ts';
 import { dataFolder, electronPath, runApp, workFolder } from './window-app.ts';
+import { readZip, readZipEntry } from '../src/app/zip.ts';
 
 const skip = process.env.DJMASTER_SKIP_WINDOW_TESTS
   ? 'DJMASTER_SKIP_WINDOW_TESTS is set'
@@ -28,6 +29,12 @@ let night: string;
 let analysed: string;
 
 const fresh = () => dataFolder(work, analysed);
+
+/** The template in a template file to share: a ZIP, with the JSON as template.json. */
+async function sharedTemplate(file: string): Promise<{ name: string }> {
+  const json = (await readZip(file)).find((item) => item.name === 'template.json')!;
+  return JSON.parse((await readZipEntry(file, json)).toString('utf8'));
+}
 const MIX_SECONDS = TRACK_LEVELS_DB.length * TRACK_SECONDS;
 
 before(async () => {
@@ -582,7 +589,7 @@ test('a template of your own: duplicated, renamed, kept, shared and deleted', { 
   const stored = await readdir(join(data, 'templates'));
   assert.equal(stored.length, 1);
   assert.equal(JSON.parse(readFileSync(join(data, 'templates', stored[0]), 'utf8')).name, 'My glitter');
-  assert.equal(JSON.parse(readFileSync(join(shared, 'My glitter.djmtemplate'), 'utf8')).name, 'My glitter');
+  assert.equal((await sharedTemplate(join(shared, 'My glitter.djmtemplate'))).name, 'My glitter');
 
   // Kept with the mix, and gone with Delete.
   const second = await runApp({ recording: mix, data }, async (page) => {
@@ -1736,7 +1743,7 @@ test('a template file opened with the app is added, shown, and exported again fr
     return { video, shown, file: page.text('file-name') };
   });
   assert.deepEqual({ video: seen.video, shown: seen.shown, file: seen.file }, { video: true, shown: true, file: 'Test mix.wav' });
-  assert.equal(JSON.parse(readFileSync(join(out, 'Opened.djmtemplate'), 'utf8')).name, 'Opened');
+  assert.equal((await sharedTemplate(join(out, 'Opened.djmtemplate'))).name, 'Opened');
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {

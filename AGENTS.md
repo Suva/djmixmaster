@@ -73,6 +73,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/playback.ts` | Decides whether a recording must be streamed for playback |
 | `src/app/video-files.ts` | Which files are videos, and the container an export keeps their picture in |
 | `src/app/updates.ts` | The background check for a newer version |
+| `src/app/zip.ts` | Writing and reading the ZIPs that template files are |
 | `src/app/api.ts` | The interface between the window and the main process |
 | `src/app/renderer/renderer.ts` | The window: state, mixes, interaction, undo, export |
 | `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
@@ -182,7 +183,8 @@ Linux), the same for `npm start` and the packaged app.
 | `sessions/` | The mixes, settings, hand adjustments and track markers per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
-| `media/` | Videos up to 25 MB added to templates, copied here and named by their fingerprint |
+| `media/` | Videos up to 25 MB added to templates, and those in template files imported, named by their fingerprint; File > Folder for Template Videos can put them elsewhere |
+| `preferences.json` | Choices that belong to the app rather than a recording: so far, the folder for template videos |
 | `video-clips/` | Copies of videos made for the app's own use: ping-pong clips there and back, and playable copies of videos the window cannot play; the 20 most recently used are kept |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
@@ -245,6 +247,11 @@ Do not write test data there.
   `video-frame.ts`). So a video export is handed the checked template itself,
   not its name. A template can carry pictures as data URLs in `assets`, named
   in an image setting as `asset:name`; `pictureOf` loads either kind.
+  A `.djmtemplate` is a ZIP (`zip.ts`, entries stored, ZIP64 past 4 GB):
+  `template.json`, and the videos of its `media` under `media/`, which the
+  JSON names by those entries. On import they are taken out into the media
+  folder under names of the app's own. A file that is JSON alone, from before
+  videos, still opens.
   A `.djmtemplate` file opened from Finder or Explorer, named on the command
   line or dropped on the window is added (`openFiles` in `renderer.ts`); the
   installers register the extension (`build.fileAssociations` in

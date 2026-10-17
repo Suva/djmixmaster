@@ -4,11 +4,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ffmpeg, probe } from '../src/audio-io.ts';
 import { writeSyntheticMix } from './synthetic-mix.ts';
 import { dataFolder, electronPath, runApp, workFolder } from './window-app.ts';
+import { readZip, readZipEntry } from '../src/app/zip.ts';
 
 const skip = process.env.DJMASTER_SKIP_WINDOW_TESTS
   ? 'DJMASTER_SKIP_WINDOW_TESTS is set'
@@ -314,4 +316,88 @@ test('a ping-pong clip plays there and back, and a clip in a codec the window ca
   assert.deepEqual(halves(4.5), ['green', 'green']);
   assert.deepEqual(halves(5.5), ['red', 'blue']);
   assert.deepEqual(halves(6.5), ['red', 'red'], 'and forwards once more');
+});
+
+test('a template is shared with its video packed beside it, and brings it along when added', { skip }, async () => {
+  const file = join(work, 'With a clip.json');
+  await writeFile(file, JSON.stringify({
+    format: 1, name: 'With a clip', fields: [],
+    layers: [{ type: 'video', params: { video: 'media:Colours', fit: 'stretch', width: 100, height: 100 } }],
+    media: { Colours: { path: clip, bytes: 1 } },
+  }));
+  const shared = join(work, 'shared');
+  await mkdir(shared);
+  await runApp({ recording: filmed, data: await fresh(), template: file, exportFolder: shared }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'With a clip', 'the template to be added');
+    page.click('template-export');
+    await page.until(() => /^Saved/.test(page.text('readout')), 'the template to be saved');
+  });
+  const packed = join(shared, 'With a clip.djmtemplate');
+  const items = await readZip(packed);
+  assert.deepEqual(items.map((item) => item.name), ['template.json', 'media/Colours.mp4']);
+  assert.equal(items[1].method, 0, 'stored as it is');
+  const json = JSON.parse((await readZipEntry(packed, items[0])).toString('utf8'));
+  assert.equal(json.media.Colours.path, 'media/Colours.mp4');
+
+  // Somewhere else, with nothing but the file.
+  const data = await fresh();
+  const seen = await runApp({ recording: filmed, data, template: packed }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'With a clip', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const middle = () => [...picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data];
+    await page.until(() => middle()[0] > 150 && middle()[1] < 100, 'the packed video to be drawn');
+    return page.element('media-missing').hidden;
+  });
+  assert.ok(seen, 'nothing is missing');
+  const kept = await readdir(join(data, 'media'));
+  assert.equal(kept.length, 1);
+  assert.match(kept[0], /^[0-9a-f]{40}\.mp4$/, 'taken out into the media folder, named by what is in it');
+});
+
+test('videos of a template that have moved are found again: one located by hand, and the other beside it', { skip }, async () => {
+  const moved = join(work, 'moved');
+  await mkdir(moved);
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', clip, '-c', 'copy', join(moved, 'Colours.mp4')]);
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', clip, '-vf', 'negate', '-c:v', 'libx264', join(moved, 'Negative.mp4')]);
+  const gone = join(work, 'gone');
+  const file = join(work, 'Moved.json');
+  await writeFile(file, JSON.stringify({
+    format: 1, name: 'Moved', fields: [],
+    layers: [
+      { type: 'video', params: { video: 'media:Colours', fit: 'stretch', width: 50, height: 100, x: 25 } },
+      { type: 'video', params: { video: 'media:Negative', fit: 'stretch', width: 50, height: 100, x: 75 } },
+    ],
+    media: { Colours: { path: join(gone, 'Colours.mp4'), bytes: 1 }, Negative: { path: join(gone, 'Negative.mp4'), bytes: 1 } },
+  }));
+  const data = await fresh();
+  const seen = await runApp({ recording: filmed, data, template: file, video: join(moved, 'Colours.mp4') }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Moved', 'the template to be added');
+    const notice = page.element('media-missing');
+    await page.until(() => !notice.hidden, 'the missing videos to be said');
+    const said = notice.querySelector('p')!.textContent;
+    const buttons = [...notice.querySelectorAll('button')].map((button) => button.textContent);
+    notice.querySelector('button')!.click();
+    await page.until(() => notice.hidden, 'both videos to be found');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const at = (x: number) => [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), picture.height / 2, 1, 1).data];
+    // Red on the left; the negative of red, cyan, on the right.
+    await page.until(() => at(0.25)[0] > 150 && at(0.75)[0] < 100 && at(0.75)[1] > 150, 'both videos to be drawn');
+    await page.settle();
+    return { said, buttons };
+  });
+  assert.match(seen.said, /2 videos of this template are not where it says they are: Colours, Negative/);
+  assert.deepEqual(seen.buttons, ['Locate Colours…', 'Locate Negative…']);
+  const [stored] = await readdir(join(data, 'templates'));
+  const saved = JSON.parse(readFileSync(join(data, 'templates', stored), 'utf8'));
+  assert.ok(saved.media.Colours.path.startsWith(join(data, 'media')), 'the one located, small, kept in the media folder');
+  assert.equal(saved.media.Negative.path, join(moved, 'Negative.mp4'), 'the other found beside it');
 });

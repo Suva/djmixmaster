@@ -11,7 +11,7 @@ import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import {
   ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, LAYER_TYPES, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEXT_VARIABLES,
-  type Field, type PreparedLayer, type Template,
+  type Field, type MediaFile, type PreparedLayer, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
 import { TemplateEditor } from './template-editor.ts';
@@ -268,6 +268,84 @@ export class VideoView {
     this.#stale = true;
     if (fresh) this.#drawer.reset();
     for (const name of imagesOf(template, this.#choice.fields)) this.#loadImage(name, template);
+    this.#checkMedia();
+  }
+
+  /** What the videos were last looked for for: the template, and where its videos were. */
+  #mediaChecked = '';
+
+  /**
+   * Looks for the template's videos, and finds those that have moved where
+   * that can be done without asking: into the media folder, by their
+   * fingerprints. Those still missing are listed above the fields, to be
+   * located by hand.
+   */
+  async #checkMedia() {
+    const id = this.#choice.template;
+    const media = this.#template().media ?? {};
+    const key = `${id}|${JSON.stringify(media)}`;
+    if (key === this.#mediaChecked) return;
+    this.#mediaChecked = key;
+    const names = Object.keys(media);
+    const found = names.length ? await this.#options.api.findMedia(names.map((name) => media[name])) : [];
+    if (this.#choice.template !== id) return;
+    const moved: Record<string, MediaFile> = {};
+    names.forEach((name, i) => {
+      if (found[i] && found[i]!.path !== media[name].path) moved[name] = found[i]!;
+    });
+    if (Object.keys(moved).length) this.#relink(id, moved);
+    this.#showMissing(names.filter((_, i) => !found[i]));
+  }
+
+  /** Says which videos of the template are not where it says, each with a button to find it. */
+  #showMissing(missing: string[]) {
+    const box = $('media-missing');
+    box.hidden = missing.length === 0;
+    const id = this.#choice.template;
+    const own = USER_TEMPLATES.has(id);
+    const text = document.createElement('p');
+    text.textContent = missing.length === 1
+      ? `The video ${missing[0]} is not where this template says it is.`
+      : `${missing.length} videos of this template are not where it says they are: ${missing.join(', ')}.`;
+    box.replaceChildren(text);
+    if (!own) return;
+    for (const name of missing) {
+      const locate = document.createElement('button');
+      locate.type = 'button';
+      locate.textContent = missing.length === 1 ? 'Locate…' : `Locate ${name}…`;
+      locate.title = 'Show where the video is now. Others missing from the same folder are found with it.';
+      locate.addEventListener('click', async () => {
+        const path = await this.#options.api.pickVideo();
+        if (!path) return;
+        try {
+          const media = this.#template().media ?? {};
+          const updates: Record<string, MediaFile> = { [name]: await this.#options.api.addMedia(path) };
+          // Others that were in one folder together most likely moved together.
+          const rest = missing.filter((other) => other !== name && media[other]);
+          const found = await this.#options.api.findMedia(rest.map((other) => media[other]), path.replace(/[\\/][^\\/]*$/, ''));
+          rest.forEach((other, i) => {
+            if (found[i]) updates[other] = found[i]!;
+          });
+          this.#relink(id, updates);
+        } catch (error) {
+          this.#options.say(`Could not use that video: ${error instanceof Error ? error.message : error}`);
+        }
+      });
+      box.append(locate);
+    }
+  }
+
+  /** Puts where the template's videos are now into it, and saves it: through the editor, as a change, while it is open. */
+  #relink(id: string, updates: Record<string, MediaFile>) {
+    if (this.#editing === id) return this.#editor.relink(updates);
+    const template = USER_TEMPLATES.get(id);
+    if (!template) return;
+    template.media = { ...template.media, ...updates };
+    const typed = (this.#typed.get(id) ?? structuredClone(template)) as Template;
+    typed.media = { ...typed.media, ...updates };
+    this.#typed.set(id, typed);
+    this.#options.api.saveTemplate(id.slice(USER_TEMPLATE.length), typed);
+    if (this.#choice.template === id) this.#prepare(false);
   }
 
   #setField(key: string, value: string | number) {

@@ -20,6 +20,7 @@ import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
 import { VIDEO_EXTENSIONS } from './video-files.ts';
 import { PING_PONG_MOST_SECONDS } from '../visuals/clip.ts';
+import { extractZipEntry, isZip, readZip, readZipEntry, writeZip } from './zip.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
 import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
 
@@ -768,8 +769,10 @@ const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 const IMAGE_MOST_BYTES = 40 * 1024 * 1024;
 
 // Templates of the user's own, one JSON file each in templates/, by an id the
-// window gives. A template file to share is the same JSON, with its pictures
-// packed inside, under the extension .djmtemplate.
+// window gives. A template file to share (.djmtemplate) is a ZIP of that
+// JSON, as template.json, with the videos it shows beside it in media/; its
+// pictures are inside the JSON. Template files from before videos are the
+// JSON alone, and still open.
 const templatesFolder = () => join(app.getPath('userData'), 'templates');
 const TEMPLATE_ID = /^[A-Za-z0-9-]{1,64}$/;
 /** A template with pictures packed in can be large, but not without end. */
@@ -798,6 +801,48 @@ ipcMain.handle('delete-template', async (_event, id: string) => {
   if (SCREENSHOT) await rm(templateFile(id), { force: true });
   else await shell.trashItem(templateFile(id));
 });
+/** The name of the JSON in a template file. */
+const TEMPLATE_ENTRY = 'template.json';
+
+/**
+ * What is in a template file: the JSON, and for a ZIP the videos packed
+ * with it, taken out into the media folder and named in the JSON by where
+ * they now are.
+ */
+async function readTemplateFile(path: string): Promise<unknown> {
+  if (!(await isZip(path))) {
+    if ((await stat(path)).size > TEMPLATE_MOST_BYTES) throw new Error('That file is too large to be a template');
+    try {
+      return JSON.parse(await readFile(path, 'utf8'));
+    } catch {
+      throw new Error('That file is not a template');
+    }
+  }
+  const items = await readZip(path);
+  const json = items.find((item) => item.name === TEMPLATE_ENTRY);
+  if (!json || json.size > TEMPLATE_MOST_BYTES) throw new Error('That file is not a template');
+  let template: { media?: Record<string, Partial<MediaFile>> };
+  try {
+    template = JSON.parse((await readZipEntry(path, json)).toString('utf8'));
+  } catch {
+    throw new Error('That file is not a template');
+  }
+  // Taken out under a name of the app's own, never one from the file, so nothing lands outside the folder.
+  for (const file of Object.values(template.media ?? {})) {
+    const item = items.find((entry) => entry.name === file?.path);
+    if (!file || !item) continue;
+    await mkdir(mediaFolder(), { recursive: true });
+    const unpacked = join(mediaFolder(), `unpacking-${process.pid}-${Date.now()}${extname(item.name).toLowerCase()}`);
+    try {
+      await extractZipEntry(path, item, unpacked);
+      Object.assign(file, await keepMedia(unpacked, true));
+    } finally {
+      await rm(unpacked, { force: true });
+    }
+  }
+  return template;
+}
+
 ipcMain.handle('import-template', async () => {
   const chosen = SCREENSHOT && process.env.DJMASTER_SHOT_TEMPLATE
     ? process.env.DJMASTER_SHOT_TEMPLATE
@@ -806,22 +851,12 @@ ipcMain.handle('import-template', async () => {
         filters: [{ name: 'Video templates', extensions: ['djmtemplate', 'json'] }],
       })).filePaths[0];
   if (!chosen) return null;
-  if ((await stat(chosen)).size > TEMPLATE_MOST_BYTES) throw new Error('That file is too large to be a template');
-  try {
-    return JSON.parse(await readFile(chosen, 'utf8'));
-  } catch {
-    throw new Error('That file is not a template');
-  }
+  return readTemplateFile(chosen);
 });
 // A template file opened from Finder or dropped on the window, by its path.
 ipcMain.handle('read-template-file', async (_event, path: string) => {
   if (!isTemplateFile(String(path)) && !/\.json$/i.test(String(path))) throw new Error('Not a template file');
-  if ((await stat(path)).size > TEMPLATE_MOST_BYTES) throw new Error('That file is too large to be a template');
-  try {
-    return JSON.parse(await readFile(path, 'utf8'));
-  } catch {
-    throw new Error('That file is not a template');
-  }
+  return readTemplateFile(path);
 });
 ipcMain.handle('export-template', async (_event, template: unknown, name: string) => {
   const fileName = `${String(name).replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'Template'}.djmtemplate`;
@@ -832,7 +867,17 @@ ipcMain.handle('export-template', async (_event, template: unknown, name: string
         filters: [{ name: 'Video templates', extensions: ['djmtemplate'] }],
       })).filePath;
   if (!chosen) return null;
-  await writeFile(chosen, JSON.stringify(template, null, 2));
+  // Each video goes in under media/, named after the name it has in the template, and the JSON says so.
+  const shared = structuredClone(template) as { media?: Record<string, MediaFile> };
+  const videos: { name: string; path: string }[] = [];
+  for (const [key, file] of Object.entries(shared.media ?? {})) {
+    if (!existsSync(file.path)) throw new Error(`The video ${key} is not where the template says it is: ${file.path}`);
+    let entry = `media/${key.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'video'}${extname(file.path).toLowerCase()}`;
+    for (let n = 2; videos.some((video) => video.name === entry); n++) entry = entry.replace(/( \d+)?(\.[^.]*)$/, ` ${n}$2`);
+    videos.push({ name: entry, path: file.path });
+    file.path = entry;
+  }
+  await writeZip(chosen, [{ name: TEMPLATE_ENTRY, data: Buffer.from(JSON.stringify(shared, null, 2)) }, ...videos]);
   return chosen;
 });
 
@@ -877,7 +922,78 @@ ipcMain.handle('read-image', async (_event, path: string) => {
 
 /** Videos up to this size are copied into the media folder. */
 const MEDIA_COPY_MOST_BYTES = 25 * 1024 * 1024;
-const mediaFolder = () => join(app.getPath('userData'), 'media');
+const defaultMediaFolder = () => join(app.getPath('userData'), 'media');
+/**
+ * Where videos added to templates are kept: in the app's data folder unless
+ * chosen otherwise, as a larger drive may be wanted for them.
+ */
+const mediaFolder = () => preferences.mediaFolder ?? defaultMediaFolder();
+
+// Choices that belong to the app rather than to a recording.
+interface Preferences {
+  mediaFolder?: string;
+}
+let preferences: Preferences = {};
+const preferencesFile = () => join(app.getPath('userData'), 'preferences.json');
+
+async function loadPreferences() {
+  const saved = (await readJson(preferencesFile())) as Record<string, unknown> | null;
+  preferences = typeof saved?.mediaFolder === 'string' && saved.mediaFolder ? { mediaFolder: saved.mediaFolder } : {};
+}
+
+/** File > Folder for Template Videos: where videos added from now on are kept. Those kept already stay where they are. */
+async function chooseMediaFolder() {
+  if (!window) return;
+  const result = await dialog.showOpenDialog(window, {
+    title: 'Folder for Template Videos',
+    message: 'Videos up to 25 MB added to templates, and those in template files imported, are kept here. Videos already kept stay where they are.',
+    defaultPath: mediaFolder(),
+    buttonLabel: 'Use This Folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths[0]) return;
+  preferences = { ...preferences, mediaFolder: result.filePaths[0] };
+  await writeStored(preferencesFile(), JSON.stringify(preferences));
+}
+
+/**
+ * Makes a video one a template can keep: a small one copied into the media
+ * folder, named by what is in it so that the same video is kept once; a
+ * large one where it is. Either way with its fingerprint, to find it by.
+ */
+async function keepMedia(path: string, copyAnyway = false): Promise<MediaFile> {
+  const { size } = await stat(path);
+  const known = await fingerprint(path);
+  if (size > MEDIA_COPY_MOST_BYTES && !copyAnyway) return { path, bytes: size, fingerprint: known };
+  const copy = join(mediaFolder(), `${known}${extname(path).toLowerCase()}`);
+  if (!existsSync(copy)) {
+    await mkdir(mediaFolder(), { recursive: true });
+    await copyFile(path, `${copy}.part`);
+    await rename(`${copy}.part`, copy);
+  }
+  return { path: copy, bytes: size, fingerprint: known };
+}
+
+/**
+ * Looks for videos of a template that are no longer where it says: in the
+ * media folders by their kept names, and in `near`, a folder where another
+ * was just found, by their own names. One found must be the same video, by
+ * its fingerprint. Gives each where it is now, or null.
+ */
+async function findMedia(files: MediaFile[], near?: string): Promise<(MediaFile | null)[]> {
+  return Promise.all(files.map(async (file) => {
+    if (existsSync(file.path)) return file;
+    const name = basename(file.path.replace(/\\/g, '/'));
+    const candidates = [mediaFolder(), defaultMediaFolder(), ...(near ? [near] : [])].map((folder) => join(folder, name));
+    for (const candidate of candidates) {
+      if (!existsSync(candidate)) continue;
+      if (file.fingerprint && (await fingerprint(candidate).catch(() => '')) !== file.fingerprint) continue;
+      return { ...file, path: candidate };
+    }
+    return null;
+  }));
+}
+ipcMain.handle('find-media', (_event, files: MediaFile[], near?: string) => findMedia(files, near));
 
 ipcMain.handle('pick-video', async () => {
   if (SCREENSHOT && process.env.DJMASTER_SHOT_VIDEO) return process.env.DJMASTER_SHOT_VIDEO;
@@ -1012,16 +1128,7 @@ async function pingPongClip(path: string, inPoint: number, outPoint: number): Pr
 ipcMain.handle('add-media', async (_event, path: string): Promise<MediaFile> => {
   if (!servableVideo(String(path))) throw new Error('Not a video');
   await probeVideo(path);
-  const { size } = await stat(path);
-  const known = await fingerprint(path);
-  if (size > MEDIA_COPY_MOST_BYTES) return { path, bytes: size, fingerprint: known };
-  // Named by what is in it: the same video added twice is kept once.
-  const copy = join(mediaFolder(), `${known}${extname(path).toLowerCase()}`);
-  if (!existsSync(copy)) {
-    await mkdir(mediaFolder(), { recursive: true });
-    await copyFile(path, copy);
-  }
-  return { path: copy, bytes: size, fingerprint: known };
+  return keepMedia(path);
 });
 
 let checkStarted = false;
@@ -1198,6 +1305,8 @@ function buildMenu() {
         command('Open Recording…', 'CmdOrCtrl+O', 'open'),
         { label: 'Open Recent', submenu: recentMenu() },
         { type: 'separator' },
+        { label: 'Folder for Template Videos…', click: chooseMediaFolder },
+        { type: 'separator' },
         { ...command('Close Recording', 'Shift+CmdOrCtrl+W', 'close'), enabled: recordingOpen },
         { role: 'close' },
       ],
@@ -1248,6 +1357,7 @@ app.whenReady().then(async () => {
   // Reading a small local file; the network is not touched before the window is up.
   checksAutomatically = (await loadUpdateSettings()).automatic;
   await loadRecent();
+  await loadPreferences();
   buildMenu();
   createWindow();
   window?.webContents.once('did-finish-load', () => {

@@ -37,6 +37,7 @@ const api: Api = {
   previewParts: (path) => ipcRenderer.invoke('preview-parts', path),
   pingPongClip: (path, inPoint, outPoint) => ipcRenderer.invoke('ping-pong-clip', path, inPoint, outPoint),
   addMedia: (path) => ipcRenderer.invoke('add-media', path),
+  findMedia: (files, near) => ipcRenderer.invoke('find-media', files, near),
   readImage: (path) => ipcRenderer.invoke('read-image', path),
   openTracklist: () => ipcRenderer.invoke('open-tracklist'),
   templates: () => ipcRenderer.invoke('templates'),

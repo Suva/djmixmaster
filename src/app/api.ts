@@ -197,6 +197,12 @@ export interface Api {
    * app's media folder, a large one stays where it is.
    */
   addMedia(path: string): Promise<MediaFile>;
+  /**
+   * Looks for a template's videos that are not where it says: in the media
+   * folders, and in `near`, a folder where another was found. Each comes
+   * back where it is now, or null.
+   */
+  findMedia(files: MediaFile[], near?: string): Promise<(MediaFile | null)[]>;
   /** The templates of the user's own, as stored: each with its id, not yet checked. */
   templates(): Promise<{ id: string; template: unknown }[]>;
   saveTemplate(id: string, template: unknown): Promise<void>;

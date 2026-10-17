@@ -105,7 +105,6 @@
             "UTTypeIdentifier": "com.djmixmaster.template",
             "UTTypeDescription": "DJ Mix Master video template",
             "UTTypeConformsTo": [
-              "public.json",
               "public.data"
             ],
             "UTTypeTagSpecification": {

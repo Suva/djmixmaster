@@ -329,6 +329,11 @@ export class TemplateEditor {
     this.#top?.tick();
   }
 
+  /** Videos of the template found somewhere else: where they are now, by name. */
+  relink(media: Record<string, MediaFile>) {
+    this.#change('', (template) => (template.media = { ...template.media, ...media }));
+  }
+
   /** The template's name was changed outside the list of layers; one undo step per bout of typing. */
   rename(name: string) {
     this.#change('name', (template) => (template.name = name));

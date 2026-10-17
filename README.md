@@ -245,11 +245,14 @@ shows every change as it is made:
   speed you choose, and can start again on every beat, bar or track. A clip
   made on green or on black can have that keyed out. A video up to 25 MB is
   copied into the app's own folder when added; a larger one is used where it
-  is, so it must stay there.
+  is. File > Folder for Template Videos chooses where the copies go, a larger
+  drive say. A video that has moved is found again in that folder, or with
+  "Locate…" in the Video view, which also finds the template's other videos
+  in the same folder.
 - **About**: who made the template and what it is.
 
-Templates are shared as `.djmtemplate` files, with their pictures packed
-inside: export one from the editor, and add one by importing it, dropping it
+Templates are shared as `.djmtemplate` files, with their pictures and
+videos packed inside: export one from the editor, and add one by importing it, dropping it
 on the window, or opening it from Finder or Explorer. The templates that come
 with the app stay as they are; editing one makes a copy of your own. A
 template's website and email open in your own browser and mail program when

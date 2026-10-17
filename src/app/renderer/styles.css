@@ -211,6 +211,10 @@ dialog input[type="text"]:focus { outline: 1px solid var(--accent); }
 #bypass-note { margin: 14px 0 4px; padding: 10px 12px; border: 1px solid var(--bypass); border-radius: 6px; background: #2b2210; }
 #bypass-note[hidden] { display: none; }
 #bypass-note p { margin: 0 0 8px; }
+#media-missing { margin: 12px 0 4px; padding: 10px 12px; border: 1px solid var(--bypass); border-radius: 6px; background: #2b2210; }
+#media-missing[hidden] { display: none; }
+#media-missing p { margin: 0 0 8px; }
+#media-missing button { margin: 0 6px 4px 0; }
 #bypass-note.flash { animation: bypass-flash 0.5s ease-out 2; }
 @keyframes bypass-flash { 50% { background: #5a4210; } }
 @media (prefers-reduced-motion: reduce) {
