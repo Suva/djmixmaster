@@ -193,8 +193,6 @@ whether the spectrum shows what is expected.
 One-click fixes for what the check-up report finds, added as real recordings
 show which faults actually turn up:
 
-- Rebalance the channels, or build both from the good one.
-- Flip one channel that is out of phase.
 - Narrow filters for mains hum and its harmonics, at 50 or 60 Hz according
   to which the check-up found.
 - A high-pass filter for rumble and DC offset (shared with the EQ idea).

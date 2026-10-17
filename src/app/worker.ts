@@ -25,6 +25,7 @@ async function run(job: Job): Promise<unknown> {
     headroomDb: job.headroomDb,
     fadeInSeconds: job.fadeInSeconds,
     fadeOutSeconds: job.fadeOutSeconds,
+    channels: job.channels,
   }, progress);
 }
 

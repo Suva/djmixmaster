@@ -1,4 +1,5 @@
 import type { Template } from '../visuals/template.ts';
+import type { ChannelMix } from '../channels.ts';
 import type { EncodeOptions } from '../audio-io.ts';
 import type { Features } from '../features.ts';
 import type { Examination, RenderResult } from '../master.ts';
@@ -19,6 +20,8 @@ export interface RenderRequest {
   fadeInSeconds: number;
   fadeOutSeconds: number;
   ceilingDb: number | null;
+  /** A fix for the recording's channels, applied before anything else. */
+  channels?: ChannelMix;
   /** For an MP4: the picture to go with the sound. */
   video?: VideoRequest;
 }

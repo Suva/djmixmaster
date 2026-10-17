@@ -17,6 +17,11 @@ are under "Not released yet" and appear there once they are.
   and a note above the settings says that you are hearing the recording as it
   is, with a button to turn it off. Before, the A key could switch to the original unnoticed, and
   the settings then seemed to do nothing.
+- **One-click fixes for the channels.** When the check-up finds one channel
+  quieter than the other, one silent, or one out of phase, its report offers
+  to put it right: evened out, filled from the other side, or flipped. You
+  hear it at once, the levelling works from the fixed sound, and every export
+  carries it.
 
 ## 0.9.1 — 16 October 2026
 

@@ -61,6 +61,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/exporter.ts` | The hidden page that draws and encodes a video export |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
 | `src/checkup.ts` | Turns that data into the findings of the check-up report |
+| `src/channels.ts` | Fixes for a recording's channels (rebalance, fill, flip), as a mix of the two, and what they do to its loudness |
 | `src/fade.ts` | The fade curve shared by drawing, preview and export |
 | `src/shelf.ts`, `src/limiter.ts`, `src/true-peak.ts` | The DSP applied while rendering |
 | `src/audio-io.ts` | Decoding, encoding and probing through ffmpeg |
@@ -88,7 +89,7 @@ and curves in the code are block indexes unless a name says seconds.
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
   `level.ts`, `gaps.ts`, `tracks.ts`, `features.ts`, `visuals/*.ts` (`draw.ts` needs a canvas, so it is for windows only), `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
-  `diagnostics.ts`, `checkup.ts` and `encode-options.ts` are
+  `diagnostics.ts`, `checkup.ts`, `channels.ts` and `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
 - **Preview and export must sound the same.** They share the limiter code.
@@ -257,6 +258,14 @@ Do not write test data there.
   time on request (`fine-wave` in `main.ts`), and the window keeps the pieces
   it was given (`fineWave` in `renderer.ts`). Until a piece arrives the view
   falls back to blocks. This is for display only; nothing is levelled from it.
+- **A channel fix is applied before anything else.** The check-up's fixes
+  (`channels.ts`) are a mix of the two channels into two, applied first in
+  export (`render` in `master.ts`) and in the player (four gains between a
+  splitter and a merger). The analysis is not redone: the faults last the
+  whole recording, so the levelling reads its loudness curves moved by one
+  amount, worked out from the per-channel energies the check-up keeps
+  (`measuredAsFixed` in `renderer.ts`). The fixes in use belong to the
+  recording, are saved with its session and undone like any change.
 - **Decoded MP3s can exceed full scale.** A clipped recording decodes with
   peaks several dB above 0 dBFS. The pipeline is floating point throughout
   and must stay that way.

@@ -3,6 +3,7 @@
 // that hold across the recording, or are plainly faults, are reported; dance
 // music does unusual things on purpose. Free of Node imports.
 
+import { fillFrom, FLIP, raise, type ChannelMix } from './channels.ts';
 import { LOW_FIELDS, MAINS_TONES, SPECTRUM_SIZE, type Diagnostics } from './diagnostics.ts';
 import type { BlockRange } from './gaps.ts';
 import { energyToLufs, HOP_SECONDS } from './loudness.ts';
@@ -28,6 +29,8 @@ export interface Finding {
   detail: string;
   /** Where it happens, for marking on the timeline. */
   marks?: BlockRange[];
+  /** For a fault in the channels: the mix that puts it right, offered in the report with one click. */
+  fix?: ChannelMix;
 }
 
 export interface Checkup {
@@ -116,6 +119,7 @@ function channels(music: Uint8Array, d: Diagnostics): Finding[] {
         kind: 'fault',
         title: `The ${name} channel is silent`,
         detail: 'Only one side was recorded: a cable, a connector or a recorder input. The other side is all there is to work with.',
+        fix: fillFrom(name === 'left' ? 'right' : 'left'),
       }];
     }
   }
@@ -140,6 +144,7 @@ function channels(music: Uint8Array, d: Diagnostics): Finding[] {
       detail:
         'Left and right largely cancel when added together, so on a mono system, which many club rigs are, ' +
         'the bass and anything in the centre all but disappear. One side was probably wired or switched the wrong way round.',
+      fix: FLIP,
     });
   }
 
@@ -155,6 +160,7 @@ function channels(music: Uint8Array, d: Diagnostics): Finding[] {
         kind: 'fault',
         title: `The ${quieter} channel is ${Math.abs(median).toFixed(1)} dB quieter throughout`,
         detail: 'A steady difference like this comes from a cable, a balance control or a recorder setting, not from the music.',
+        fix: raise(quieter, Math.abs(median)),
       });
     }
   }
