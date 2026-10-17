@@ -53,7 +53,7 @@ export class VideoView {
   readonly #drawer = new FrameDrawer(this.#canvas);
   readonly #images = new Map<string, ImageBitmap>();
   /** The videos of video layers, playing along; a frame that comes in while paused is drawn. */
-  readonly #videos = new PreviewVideos(() => (this.#stale = true));
+  readonly #videos: PreviewVideos;
   #visible = false;
   #frame = 0;
   #lastFrame = performance.now();
@@ -79,6 +79,7 @@ export class VideoView {
 
   constructor(options: VideoViewOptions) {
     this.#options = options;
+    this.#videos = new PreviewVideos(options.api, () => (this.#stale = true));
     this.#editor = new TemplateEditor({
       change: (template) => this.#edited(template),
       history: () => options.history(),

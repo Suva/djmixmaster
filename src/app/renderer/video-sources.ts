@@ -28,22 +28,32 @@ interface Playing {
   used: number;
 }
 
+/** A video as the view plays it: its files one after another, with where each starts. */
+interface Playable {
+  parts: { path: string; start: number; duration: number }[];
+  duration: number;
+}
+
 /**
- * Plays the videos of the Video view, one video element per layer showing
- * one, kept where the layer's clip should be. While the music plays they
- * play too, and are put back only when they drift; paused, each is put on
- * the exact frame. `changed` is told when a frame arrives that the picture
- * should show.
+ * Plays the videos of the Video view, one video element per layer and file
+ * showing one, kept where the layer's clip should be. While the music plays
+ * they play too, and are put back only when they drift; paused, each is put
+ * on the exact frame. `changed` is told when a frame arrives that the
+ * picture should show.
  */
 export class PreviewVideos {
+  readonly #api: Api;
   readonly #changed: () => void;
   readonly #playing = new Map<string, Playing>();
+  /** What each video is played from, by its path; null while being found out. */
+  readonly #playables = new Map<string, Playable | null>();
   #musicPlaying = false;
   #rate = 1;
   /** Counts the frames drawn, to tell which clips the last one showed. */
   #frame = 0;
 
-  constructor(changed: () => void) {
+  constructor(api: Api, changed: () => void) {
+    this.#api = api;
     this.#changed = changed;
   }
 
@@ -78,8 +88,41 @@ export class PreviewVideos {
     this.#playing.delete(key);
   }
 
+  /** What a video is played from, once known; asked for the first time it is wanted. */
+  #playable(path: string): Playable | null {
+    if (this.#playables.has(path)) return this.#playables.get(path)!;
+    this.#playables.set(path, null);
+    this.#api.previewParts(path).then(
+      (found) => {
+        let start = 0;
+        const parts = found.map((part) => {
+          const placed = { ...part, start };
+          start += part.duration;
+          return placed;
+        });
+        this.#playables.set(path, { parts, duration: start });
+        this.#changed();
+      },
+      // Not a video that can be shown; asked again only after a while, in case it was a moment's trouble.
+      () => setTimeout(() => this.#playables.delete(path), KEPT_MS),
+    );
+    return null;
+  }
+
   picture(path: string, layer: number, timing: ClipTiming): VideoPicture | null {
-    const key = `${layer}|${path}`;
+    const playable = this.#playable(path);
+    if (!playable) return null;
+    const at = clipTime(timing, playable.duration);
+    if (at === null) return null;
+    // The file it is in, and where in that file.
+    const inside = playable.parts.findIndex((part) => at < part.start + part.duration);
+    const part = playable.parts[inside < 0 ? playable.parts.length - 1 : inside];
+    const local = Math.min(at - part.start, Math.max(0, part.duration - 0.5 / FALLBACK_FPS));
+    // Moving on as it plays, or standing still: held at its end, or about to jump back to its start.
+    const soon = clipTime({ ...timing, seconds: timing.seconds + 0.05 }, playable.duration);
+    const moving = this.#musicPlaying && soon !== null && soon > at && soon < part.start + part.duration;
+
+    const key = `${layer}|${part.path}`;
     let entry = this.#playing.get(key);
     if (!entry) {
       const element = document.createElement('video');
@@ -89,30 +132,22 @@ export class PreviewVideos {
       // A frame that has come in, after a jump or at the start, is shown even while paused.
       element.addEventListener('seeked', () => this.#changed());
       element.addEventListener('loadeddata', () => this.#changed());
-      element.src = videoUrl(path);
+      element.src = videoUrl(part.path);
       entry = { element, frame: 0, used: 0 };
       this.#playing.set(key, entry);
     }
     entry.frame = this.#frame;
     entry.used = performance.now();
     const video = entry.element;
-    if (video.readyState < HTMLMediaElement.HAVE_METADATA || !Number.isFinite(video.duration)) return null;
-    const at = clipTime(timing, video.duration);
-    if (at === null) {
-      if (!video.paused) video.pause();
-      return null;
-    }
-    // Moving on as it plays, or standing still: held at its end, or about to jump back to its start.
-    const soon = clipTime({ ...timing, seconds: timing.seconds + 0.05 }, video.duration);
-    const moving = this.#musicPlaying && soon !== null && soon > at;
+    if (video.readyState < HTMLMediaElement.HAVE_METADATA) return null;
     if (moving) {
       const rate = Math.max(0.0625, Math.min(16, timing.speed * this.#rate));
       if (video.playbackRate !== rate) video.playbackRate = rate;
-      if (!video.seeking && Math.abs(video.currentTime - at) > DRIFT) video.currentTime = at;
+      if (!video.seeking && Math.abs(video.currentTime - local) > DRIFT) video.currentTime = local;
       if (video.paused) video.play().catch(() => {});
     } else {
       if (!video.paused) video.pause();
-      if (!video.seeking && Math.abs(video.currentTime - at) > 0.5 / FALLBACK_FPS) video.currentTime = at;
+      if (!video.seeking && Math.abs(video.currentTime - local) > 0.5 / FALLBACK_FPS) video.currentTime = local;
     }
     if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) return null;
     return { image: video, width: video.videoWidth, height: video.videoHeight };

@@ -380,7 +380,7 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
   });
   assert.deepEqual(first.mastering, { pictureShown: false, curvesShown: true });
   assert.deepEqual(first.video, { pictureShown: true, curvesShown: false, templateShown: true, levellingShown: false });
-  assert.deepEqual(first.options, ['glitter', 'ring', 'waveform', 'photo']);
+  assert.deepEqual(first.options, ['glitter', 'ring', 'waveform', 'photo', 'original']);
   assert.ok(first.lit > 50, 'the picture is not blank');
   assert.ok(first.back, 'the bar at the bottom switches back');
 

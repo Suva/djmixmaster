@@ -223,8 +223,9 @@ show, and a video can show the track playing.
 YouTube will not take a mix as sound alone. The **Video** view (the switch at
 the bottom of the window, or Tab) shows the selected mix as a video: a
 template that moves to the music, with a few things to fill in, such as a
-colour, a logo and the artist's name. Four templates come with the app:
-Glitter, Spectrum ring, Waveform, and Photo, over a photo of your own. What is
+colour, a logo and the artist's name. Five templates come with the app:
+Glitter, Spectrum ring, Waveform, Photo, over a photo of your own, and
+Original video, the recording's own picture for a set that was filmed. What is
 chosen is kept with the mix.
 
 You can also make templates of your own, in an editor beside the picture that
@@ -260,6 +261,12 @@ the mix's length with the templates that come with the app, some 20 minutes
 for two hours; a template heavy with effects takes about three times as long.
 The first time, the recording is also listened to for the beats and the
 spectrum the template moves to, which takes about as long as its analysis.
+
+For a recording that is a video, a template's video layer can show the
+recording's own picture, in step with the music. If the picture runs ahead
+of the sound or behind it, as some cameras' do, set **Picture delay** in the
+Video view: a positive delay shows each frame later. It goes for the whole
+recording, in the view and in every video export.
 
 A recording that is a video can also be exported as **Original video**: its
 own picture with the mastered sound. The picture is copied as it is, not

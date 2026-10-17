@@ -10,7 +10,7 @@ import type { Values } from './expression.ts';
 export const MUSIC_NAMES = [
   'bass', 'lowMids', 'mids', 'highs', 'level',
   'beat', 'beatPhase', 'barPhase', 'beats', 'tempo', 'energy',
-  'time', 'progress', 'length', 'dt',
+  'time', 'progress', 'length', 'dt', 'hasVideo',
 ] as const;
 
 /** Where each group of bands starts, in Hz; it ends where the next starts. */
@@ -166,7 +166,11 @@ export class MusicReader {
     const inRecording = this.#start + seconds;
     // A spectrum describes the moment at its centre; frames between two are interpolated.
     const step = inRecording * features.rate;
-    const values: Values = { time: seconds, length: this.#length, dt, progress: this.#length ? Math.min(1, Math.max(0, seconds / this.#length)) : 0 };
+    const values: Values = {
+      time: seconds, length: this.#length, dt, progress: this.#length ? Math.min(1, Math.max(0, seconds / this.#length)) : 0,
+      // Whether the recording is a video is no matter of the music: whoever draws, and knows, sets it.
+      hasVideo: 0,
+    };
     for (const [name, curve] of this.#groups) values[name] = this.#read(curve, this.#range.get(name)!, step);
     values.energy = this.#read(this.#energy, this.#energyRange, step);
 

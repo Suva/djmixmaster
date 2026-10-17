@@ -15,7 +15,7 @@ import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
-import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
 import { VIDEO_EXTENSIONS } from './video-files.ts';
@@ -713,13 +713,16 @@ async function renderOriginalPicture(request: RenderRequest): Promise<unknown> {
       (fraction) => window?.webContents.send('progress', 0.9 * fraction),
     );
     const picture = (await probe(request.input)).video;
+    const pictureFrom = request.start - (request.pictureDelay ?? 0);
     if (!picture) throw new Error('The recording has no picture');
     await new Promise<void>((done, fail) => {
       const packer = spawn(ffmpeg(), [
         '-y', '-v', 'error', '-nostdin',
-        '-ss', String(request.start), '-t', String(request.end - request.start), ...inputArgs(request.input),
+        // A picture shown later than its sound starts earlier in the recording; before its start, it starts late.
+        ...(pictureFrom >= 0 ? ['-ss', String(pictureFrom)] : ['-itsoffset', String(-pictureFrom)]),
+        ...inputArgs(request.input),
         '-i', sound,
-        '-map', '0:v:0', '-map', '1:a', '-c', 'copy',
+        '-map', '0:v:0', '-map', '1:a', '-c', 'copy', '-t', String(request.end - request.start),
         // The tags and the chapters were written into the sound; they carry over.
         '-map_metadata', '1', '-map_chapters', '1',
         // Apple's players and QuickTime show HEVC in an MP4 only under this name.
@@ -884,6 +887,21 @@ ipcMain.handle('pick-video', async () => {
   return result.canceled ? null : result.filePaths[0];
 });
 ipcMain.handle('video-info', (_event, path: string) => probeVideo(String(path)));
+/**
+ * The files the Video view plays a video from, each with its length, one
+ * after the other: the video itself, or the parts of a recording in several
+ * files, which a video element cannot join.
+ */
+const previewParts = new Map<string, Promise<PreviewPart[]>>();
+ipcMain.handle('preview-parts', (_event, path: string) => {
+  let parts = previewParts.get(path);
+  if (!parts) {
+    parts = Promise.all(partsOf(String(path)).map(async (part) => ({ path: part, duration: (await probeVideo(part)).duration })));
+    previewParts.set(path, parts);
+    parts.catch(() => previewParts.delete(path));
+  }
+  return parts;
+});
 ipcMain.handle('add-media', async (_event, path: string): Promise<MediaFile> => {
   if (!servableVideo(String(path))) throw new Error('Not a video');
   await probeVideo(path);

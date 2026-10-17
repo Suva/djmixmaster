@@ -152,6 +152,10 @@ function durationOf(described: string): number {
 
 /** A video's picture and length, for a clip that a template shows: it need have no sound. */
 export async function probeVideo(file: string): Promise<{ duration: number; video: VideoInfo }> {
+  if (isJoined(file)) {
+    const parts = await Promise.all(joinedFiles(file).map(probeVideo));
+    return { ...parts[0], duration: parts.reduce((total, part) => total + part.duration, 0) };
+  }
   const described = await describe(file);
   const video = videoOf(described);
   if (!video) {

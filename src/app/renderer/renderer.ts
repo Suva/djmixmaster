@@ -91,6 +91,10 @@ let mix: Mix = {
 let mixesCreated = 0;
 /** Album name written into every export of this recording, typically the event. */
 let album = '';
+/** For a recording that is a video: how much later than its sound its picture is shown, to put the two in step. */
+let pictureDelayMs = 0;
+/** As much as a recorder's picture and sound are ever likely to be apart. */
+const MOST_PICTURE_DELAY_MS = 10_000;
 /**
  * Where each track played starts, in order. They belong to the recording, not
  * to a mix, so moving a mix's edges or splitting it never moves one; each mix
@@ -132,6 +136,7 @@ function videoMixOf(m: Mix): VideoMixInfo {
     fadeIn: fades(m).in * HOP_SECONDS,
     fadeOut: fades(m).out * HOP_SECONDS,
     video: recording!.video,
+    pictureDelay: pictureDelayMs / 1000,
   };
 }
 
@@ -2189,12 +2194,14 @@ async function open(files: string[]) {
     showCheckup();
     overviewShown = { start: 0, end: measured.peaks.length };
     player.load(source);
+    $('picture-delay-row').hidden = !source.video;
     $('file-name').textContent = name;
     $('file-name').classList.add('loaded');
     $('empty').hidden = true;
     $('settings').inert = false;
     $('views').hidden = false;
     const restored = restore(await api.recall(path), measured.peaks.length);
+    $<HTMLInputElement>('picture-delay').value = String(pictureDelayMs);
     select(mixes[restored.selected]);
     undoSteps = [];
     redoSteps = [];
@@ -2292,6 +2299,7 @@ interface Session {
   mixes: Mix[];
   album?: string;
   tracks?: Track[];
+  pictureDelayMs?: number;
 }
 
 interface Defaults {
@@ -2314,6 +2322,7 @@ function saveNow() {
     mixes,
     album,
     tracks,
+    ...(pictureDelayMs ? { pictureDelayMs } : {}),
   };
   const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb, ...(mix.loudness ? { loudness: mix.loudness } : {}) };
   api.remember(recording.path, { session, defaults: { ...defaults, export: exportSettings } });
@@ -2387,6 +2396,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
       ...(visualsChoice(m.visuals) ? { visuals: visualsChoice(m.visuals)! } : {}),
     }));
     album = typeof session!.album === 'string' ? session!.album : '';
+    pictureDelayMs = isNumber(session!.pictureDelayMs) ? clamp(Math.round(session!.pictureDelayMs), -MOST_PICTURE_DELAY_MS, MOST_PICTURE_DELAY_MS) : 0;
     tracks = (Array.isArray(session!.tracks) ? session!.tracks : [])
       .filter((t) => isNumber(t?.at) && t.at >= 0 && t.at <= total * HOP_SECONDS && typeof t.name === 'string')
       .map((t) => ({ at: Math.round(t.at * 1000) / 1000, name: t.name, ...(t.guessed === true ? { guessed: true } : {}) }))
@@ -2398,6 +2408,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
 
   mixes = [{ name: 'Mix 1', region: { start: 0, end: total }, ...defaults, adjustments: [] }];
   album = '';
+  pictureDelayMs = 0;
   tracks = [];
   mixesCreated = 1;
   return { selected: 0, fromLastTime: false };
@@ -2897,7 +2908,7 @@ function renderMix(m: Mix, output: string, track?: string) {
     fadeInSeconds: fades(m).in * HOP_SECONDS,
     fadeOutSeconds: fades(m).out * HOP_SECONDS,
     ...(exportSettings.format === 'mp4' ? { video: { ...VIDEO, mix: videoMixOf(m) } } : {}),
-    ...(exportSettings.format === 'original' ? { originalPicture: true } : {}),
+    ...(exportSettings.format === 'original' ? { originalPicture: true, pictureDelay: pictureDelayMs / 1000 } : {}),
   });
 }
 
@@ -2979,6 +2990,15 @@ async function exportAll() {
     setBusy(null);
   }
 }
+
+// The picture of a recording that is a video, put in step with its sound.
+$<HTMLInputElement>('picture-delay').addEventListener('input', (event) => {
+  const value = Number((event.target as HTMLInputElement).value);
+  if (!Number.isFinite(value)) return;
+  pictureDelayMs = clamp(Math.round(value), -MOST_PICTURE_DELAY_MS, MOST_PICTURE_DELAY_MS);
+  videoView.refresh();
+  scheduleSave();
+});
 
 $('export').addEventListener('click', exportMix);
 $('export-all').addEventListener('click', exportAll);

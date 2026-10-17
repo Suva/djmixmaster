@@ -28,6 +28,8 @@ export interface RenderRequest {
    * copied as it is rather than drawn and encoded again.
    */
   originalPicture?: boolean;
+  /** For that: how much later than its sound the picture is shown, in seconds. */
+  pictureDelay?: number;
 }
 
 /** The picture of a video export. */
@@ -65,6 +67,14 @@ export interface VideoMixInfo {
   fadeOut: number;
   /** The recording's own picture, when it is a video, which a template can show. */
   video: VideoInfo | null;
+  /** How much later than its sound the recording's picture is shown, in seconds, to put the two in step. */
+  pictureDelay: number;
+}
+
+/** One of the files the Video view plays a video from. */
+export interface PreviewPart {
+  path: string;
+  duration: number;
 }
 
 /** What is remembered between sessions. The window decides what goes in; the main process only stores it. */
@@ -172,6 +182,8 @@ export interface Api {
   readImage(path: string): Promise<Uint8Array>;
   /** Asks for a video file, for a template's video layer or field. */
   pickVideo(): Promise<string | null>;
+  /** The files the Video view plays a video from, one after another, each with its length in seconds. */
+  previewParts(path: string): Promise<PreviewPart[]>;
   /** A video's picture and length. */
   videoInfo(path: string): Promise<{ duration: number; video: VideoInfo }>;
   /**

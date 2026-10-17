@@ -215,3 +215,58 @@ test('a small video is kept in the app\'s media folder, and stays where it is', 
   assert.ok(kept.bytes > 0 && kept.fingerprint);
   assert.deepEqual(await readdir(join(data, 'media')), [kept.path.split(/[\\/]/).pop()]);
 });
+
+/** A frame of a video at a moment, as 16 × 9 shades of grey. */
+function thumbnail(file: string, seconds: number): Uint8Array {
+  return execFileSync(ffmpeg(), [
+    '-v', 'error', '-ss', String(seconds), '-i', file, '-frames:v', '1', '-vf', 'scale=16:9:flags=area', '-f', 'rawvideo', '-pix_fmt', 'gray', '-',
+  ]);
+}
+const difference = (a: Uint8Array, b: Uint8Array) => a.reduce((total, value, i) => total + Math.abs(value - b[i]), 0) / a.length;
+
+test('a template shows the recording\'s own picture in step with the mix, as late as the picture is delayed', { skip }, async () => {
+  const file = join(work, 'Picture.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1, name: 'Picture', fields: [],
+    layers: [{ type: 'video', params: { video: 'recording:video', fit: 'stretch', width: 100, height: 100 } }],
+  }));
+  const folder = join(work, 'picture');
+  await mkdir(folder);
+  const seen = await runApp({ recording: filmed, data: await fresh(), template: file, exportFolder: folder, timeoutMs: 150_000 }, async (page) => {
+    // A mix from half a minute in, ten seconds long.
+    page.key('Enter');
+    page.key('ArrowRight', { shift: true });
+    page.key('KeyI');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight');
+    await page.wait(100);
+    page.key('KeyO');
+    await page.settle();
+    page.click('view-video');
+    const offered = !page.element('picture-delay-row').hidden;
+    const builtIn = [...page.element<HTMLSelectElement>('template').options].map((option) => option.text);
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Picture', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const middle = () => [...picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data];
+    await page.until(() => Math.max(...middle().slice(0, 3)) > 40, 'the recording\'s picture to be drawn');
+    page.type('picture-delay', '400');
+    await page.settle();
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+    page.click('export-go');
+    await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 120_000);
+    return { offered, builtIn, status: page.text('export-status'), region: page.region() };
+  });
+  assert.ok(seen.offered, 'the picture delay is offered for a video');
+  assert.ok(seen.builtIn.includes('Original video'));
+  assert.match(seen.status, /^Exported 1 mix\./, seen.status);
+  assert.equal(seen.region.length, '0:00:10');
+  const [exported] = await readdir(folder);
+  const made = thumbnail(join(folder, exported), 2);
+  // Two seconds in, 0.4 s late: the recording at 31.6 s, not 32 s.
+  const right = difference(made, thumbnail(filmed, 31.6));
+  const wrong = difference(made, thumbnail(filmed, 32));
+  assert.ok(right < wrong / 2, `the frame matches the recording 0.4 s earlier (${right.toFixed(1)}) better than at the same moment (${wrong.toFixed(1)})`);
+});

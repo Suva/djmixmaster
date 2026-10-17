@@ -7,7 +7,7 @@ import { clipTimingOf, type FrameDrawer, type VideoPicture } from '../../visuals
 import { beatsOf, type ClipTiming } from '../../visuals/clip.ts';
 import type { MusicReader } from '../../visuals/music.ts';
 import {
-  ASSET_PREFIX, checkTemplate, TEXT_VARIABLES, videoFile, type PreparedLayer, type ResolvedParams, type Template, type TextValues,
+  ASSET_PREFIX, checkTemplate, RECORDING_VIDEO, TEXT_VARIABLES, videoFile, type PreparedLayer, type ResolvedParams, type Template, type TextValues,
 } from '../../visuals/template.ts';
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
@@ -108,6 +108,15 @@ export function restartedAt(mix: VideoMix, reader: MusicReader | null, rule: str
   return every && reader ? reader.lastBeat(seconds, every) : -Infinity;
 }
 
+/**
+ * Where the recording's own picture is for the moment `seconds` into the mix:
+ * the same moment of the recording, as late as the picture is put to be in
+ * step with the sound. Whatever the layer's settings for playing a clip.
+ */
+export function recordingTiming(mix: VideoMix, seconds: number): ClipTiming {
+  return { seconds: mix.start + seconds - mix.pictureDelay, started: 0, playback: 'once, then hold', speed: 1, inPoint: 0, outPoint: 0, offset: 0 };
+}
+
 /** The file a video layer's source stands for, in this mix: one it names, the template's own, or the recording. */
 export function videoPathOf(source: string, mix: VideoMix): string | null {
   return videoFile(source, mix.template, { path: mix.path, video: mix.video !== null });
@@ -134,6 +143,7 @@ export function clipRequests(mix: VideoMix, layers: PreparedLayer[], reader: Mus
     }
     const path = videoPathOf(source, mix);
     if (!path) return;
+    if (source === RECORDING_VIDEO) return requests.push({ path, layer: index, timing: recordingTiming(mix, seconds) });
     const last = layers[index]?.last;
     const params: ResolvedParams = { ...layer.params };
     for (const key of ['from', 'until']) if (typeof params[key] !== 'number') params[key] = typeof last?.[key] === 'number' ? last[key] : 0;
@@ -157,6 +167,8 @@ export function drawVideoFrame(
 ) {
   const length = mix.end - mix.start;
   const music = reader ? reader.at(seconds, dt) : { time: seconds, dt, length, progress: seconds / Math.max(1, length) };
+  // So that a template can show something else where the recording has no picture of its own.
+  music.hasVideo = mix.video ? 1 : 0;
   drawer.draw(layers, {
     seconds,
     dt,
@@ -169,7 +181,8 @@ export function drawVideoFrame(
     shown: fadeGain(seconds, length, mix.fadeIn, mix.fadeOut),
     video: (source, layer, timing) => {
       const path = videos && videoPathOf(source, mix);
-      return path ? videos.picture(path, layer, timing) : null;
+      if (!path) return null;
+      return videos.picture(path, layer, source === RECORDING_VIDEO ? recordingTiming(mix, seconds) : timing);
     },
     restartedAt: (rule, at) => restartedAt(mix, reader, rule, at),
   });

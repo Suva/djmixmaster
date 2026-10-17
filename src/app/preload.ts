@@ -34,6 +34,7 @@ const api: Api = {
   pickImage: () => ipcRenderer.invoke('pick-image'),
   pickVideo: () => ipcRenderer.invoke('pick-video'),
   videoInfo: (path) => ipcRenderer.invoke('video-info', path),
+  previewParts: (path) => ipcRenderer.invoke('preview-parts', path),
   addMedia: (path) => ipcRenderer.invoke('add-media', path),
   readImage: (path) => ipcRenderer.invoke('read-image', path),
   openTracklist: () => ipcRenderer.invoke('open-tracklist'),

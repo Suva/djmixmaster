@@ -30,6 +30,12 @@ are under "Not released yet" and appear there once they are.
   the clip. A video can also be a field, chosen per mix. Small videos (up to
   25 MB) are copied into the app's own folder when added, so they stay with
   the template; larger ones are used where they are.
+- **The recording's own picture in a template.** For a set that was filmed,
+  a video layer can show the recording itself, in step with the music, and
+  the new "Original video" template does just that, with the artist and the
+  track playing over it. If the picture runs ahead of the sound or behind
+  it, "Picture delay" in the Video view puts them in step, for the view and
+  every video export.
 
 ## 0.9.1 — 16 October 2026
 

@@ -257,4 +257,35 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       ],
     },
   },
+  {
+    id: 'original',
+    template: {
+      format: 1,
+      name: 'Original video',
+      about: {
+        author: 'DJ Mix Master',
+        description: 'The recording\'s own picture, for a set that was filmed, with the artist and the track playing over it.',
+      },
+      fields: [{ key: 'font', label: 'Font', kind: 'font', default: 'Space Grotesk' }],
+      layers: [
+        // Seen only where the picture does not fill the frame, or the recording has none.
+        { type: 'gradient', name: 'Background', params: { kind: 'radial', colour1: '#22252c', colour2: '#08090b' } },
+        { type: 'video', name: 'Picture', params: { video: 'recording:video', fit: 'contain', width: 100, height: 100 } },
+        {
+          type: 'text',
+          name: 'No picture',
+          params: { text: 'This recording has no picture of its own', visible: '1 - hasVideo', size: 2.4, weight: 500, colour: '#ffffff99' },
+        },
+        {
+          type: 'text',
+          name: 'Artist',
+          params: {
+            text: '%artist%', font: '%font%', x: 4, y: 88, anchor: 'bottom left', align: 'left', size: 4.5, weight: 700,
+            colour: '#ffffff', shadowColour: '#000000cc', shadowBlur: 1.5,
+          },
+        },
+        { ...nowPlaying, params: { ...nowPlaying.params, x: 4, y: 89, anchor: 'top left', align: 'left', shadowColour: '#000000cc', shadowBlur: 1.5 } },
+      ],
+    },
+  },
 ];

@@ -210,6 +210,7 @@ Values any number parameter can follow, through a knob or an expression:
 | `energy` | Slow-moving: high in a drop, low in a breakdown |
 | `trackChange` | 1 when a new track's marker passes, falling to 0 |
 | `time`, `progress` | Seconds into the mix, and 0 to 1 across it |
+| `hasVideo` | 1 when the recording is a video with a picture of its own, 0 when not |
 
 ## Fields a template can ask for
 
@@ -445,6 +446,13 @@ values into the ones a frame gets. None draws anything yet.
   when added, named by its fingerprint; a larger one is used where it is. A
   setting can also hold a path (a video field filled in for a mix), or
   `recording:video` for the recording's own picture.
+- **The recording's own picture** ignores a layer's playing settings: it is
+  always at the same moment of the recording as the sound, less the
+  recording's picture delay (`recordingTiming` in `video-frame.ts`). A
+  recording in several files is played in the view part by part, as a video
+  element cannot join them (`previewParts` in `main.ts`); the export reads it
+  through the same concat list as the sound. `hasVideo`, 1 or 0, tells an
+  expression whether the recording has a picture.
 
 ## The MP4 export, as built
 
