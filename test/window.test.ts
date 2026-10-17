@@ -4,7 +4,7 @@
 // (`npm test` does that first) and are skipped where Electron is not installed.
 
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFile, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -1744,6 +1744,76 @@ test('a template file opened with the app is added, shown, and exported again fr
   });
   assert.deepEqual({ video: seen.video, shown: seen.shown, file: seen.file }, { video: true, shown: true, file: 'Test mix.wav' });
   assert.equal((await sharedTemplate(join(out, 'Opened.djmtemplate'))).name, 'Opened');
+});
+
+test('a recording\'s channels put right from the check-up: heard, levelled, exported, undone and kept', { skip }, async () => {
+  // The test mix with its right channel upside down and 6 dB down: out of phase, and quieter.
+  const faulty = join(work, 'Wired wrong.wav');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', mix, '-af', 'pan=stereo|c0=c0|c1=-0.5*c1', '-c:a', 'pcm_s16le', faulty]);
+  const out = join(work, 'put right');
+  await mkdir(out);
+  const data = await fresh();
+  const seen = await runApp({ recording: faulty, data, exportFolder: out, timeoutMs: 90_000 }, async (page) => {
+    const findings = () => [...document.querySelectorAll<HTMLElement>('#checkup-findings .finding')];
+    const offered = findings().map((f) => [f.querySelector('b')!.textContent, f.querySelector<HTMLButtonElement>('[data-fix]')?.textContent ?? null]);
+    const loudness = () => page.text('stat-in');
+    const before = loudness();
+    for (const id of ['out-of-phase', 'quieter-channel']) document.querySelector<HTMLButtonElement>(`[data-fix="${id}"]`)!.click();
+    await page.settle();
+    await page.wait(300);
+    const after = loudness();
+    const fixed = findings().filter((f) => f.classList.contains('fixed')).length;
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=wav]')!.click();
+    page.click('export-go');
+    await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 60_000);
+    // Undo takes the fixes back, one change at a time.
+    page.click('undo');
+    await page.wait(200);
+    const undone = findings().filter((f) => f.classList.contains('fixed')).length;
+    page.click('redo');
+    await page.settle();
+    return { offered, before, after, fixed, undone };
+  });
+  assert.deepEqual(seen.offered, [
+    ['One channel is out of phase with the other', 'Flip one channel'],
+    ['The right channel is 6.0 dB quieter throughout', 'Even them out'],
+  ]);
+  assert.equal(seen.fixed, 2);
+  assert.ok(seen.undone < 2, 'undone');
+  // Raising the quieter side by 6 dB adds 2 dB to the loudness: the energy from 1.25 to 2.
+  const lufs = (text: string) => Number(text.replace('−', '-').match(/-?[\d.]+/)![0]);
+  assert.ok(Math.abs(lufs(seen.after) - lufs(seen.before) - 2.04) < 0.2, `${seen.before} became ${seen.after}`);
+
+  // The export: both channels alike, and in step again.
+  const [file] = await readdir(out);
+  const report = spawnSync(ffmpeg(), ['-hide_banner', '-nostats', '-i', join(out, file), '-af', 'astats=measure_overall=none:measure_perchannel=RMS_level,aphasemeter=video=0,ametadata=print:key=lavfi.aphasemeter.phase', '-f', 'null', '-'], { encoding: 'utf8' }).stderr;
+  const rms = [...report.matchAll(/RMS level dB: (-?[\d.]+)/g)].map((m) => Number(m[1]));
+  const phases = [...report.matchAll(/lavfi\.aphasemeter\.phase=(-?[\d.]+)/g)].map((m) => Number(m[1]));
+  const phase = phases.reduce((sum, p) => sum + p, 0) / phases.length;
+  assert.ok(Math.abs(rms[0] - rms[1]) < 0.5, `the channels alike: ${rms}`);
+  assert.ok(phase > 0.9, `in step: ${phase}`);
+
+  // Kept with the recording.
+  const again = await runApp({ recording: faulty, data }, () => [...document.querySelectorAll('#checkup-findings .finding.fixed')].length);
+  assert.equal(again, 2);
+});
+
+test('a silent channel is filled from the other, and the recording measures 3 dB louder for it', { skip }, async () => {
+  const oneSided = join(work, 'One sided.wav');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', mix, '-af', 'pan=stereo|c0=0*c0|c1=c1', '-c:a', 'pcm_s16le', oneSided]);
+  const seen = await runApp({ recording: oneSided, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    const finding = document.querySelector('#checkup-findings .finding')!;
+    const offered = [finding.querySelector('b')!.textContent, finding.querySelector('[data-fix]')!.textContent];
+    const before = page.text('stat-in');
+    document.querySelector<HTMLButtonElement>('[data-fix="dead-channel"]')!.click();
+    await page.wait(400);
+    return { offered, before, after: page.text('stat-in') };
+  });
+  assert.deepEqual(seen.offered, ['The left channel is silent', 'Fill it from the other']);
+  const lufs = (text: string) => Number(text.replace('−', '-').match(/-?[\d.]+/)![0]);
+  assert.ok(Math.abs(lufs(seen.after) - lufs(seen.before) - 3.0) < 0.15, `${seen.before} became ${seen.after}`);
 });
 
 test('the strip under the picture shows the mix and moves the playhead', { skip }, async () => {

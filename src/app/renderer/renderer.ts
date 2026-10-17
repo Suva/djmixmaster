@@ -13,6 +13,7 @@ import { LevelMeter, type MeterFigure } from './meter.ts';
 import { VideoView } from './video-view.ts';
 import { templateOf, VIDEO_RECORDING_TEMPLATE } from './video-frame.ts';
 import { Player } from './player.ts';
+import { isUnmixed, loudnessChangeDb, then, UNMIXED, type ChannelMix } from '../../channels.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
 import { originalPictureExtension } from '../video-files.ts';
@@ -103,6 +104,12 @@ const MOST_PICTURE_DELAY_MS = 10_000;
 let tracks: Track[] = [];
 /** The track marker last clicked, which Backspace removes. */
 let selectedTrack: Track | null = null;
+/**
+ * The check-up's findings whose fix is in use, by their ids: the recording's
+ * channels put right (see channels.ts), in playback, the levelling and every
+ * export. They belong to the recording, as the fault does.
+ */
+let channelFixes: string[] = [];
 /** Part of the selected mix the detail view shows, in blocks of the recording. */
 let view: Region = { start: 0, end: 0 };
 /** Part of the recording the overview shows, in blocks. */
@@ -418,7 +425,7 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
 }
 
 function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: Stats } {
-  const { measured } = recording!;
+  const measured = measuredAsFixed();
   const { start, end } = m.region;
   const shortTerm = measured.shortTerm.subarray(start, end);
   const restShortTerm = measured.restShortTerm.subarray(start, end);
@@ -520,6 +527,13 @@ function overviewData(r: Recording) {
 const checkupDialog = $<HTMLDialogElement>('checkup-dialog');
 
 /** Says in the header how much there is to know, and fills the panel behind it. */
+/** What putting each fixable fault right does, on its button. */
+const FIX_LABELS: Record<string, string> = {
+  'dead-channel': 'Fill it from the other',
+  'quieter-channel': 'Even them out',
+  'out-of-phase': 'Flip one channel',
+};
+
 function showCheckup() {
   const { findings, facts } = recording!.checkup;
   const button = $('checkup');
@@ -546,6 +560,22 @@ function showCheckup() {
         const detail = document.createElement('p');
         detail.textContent = finding.detail;
         item.append(title, detail);
+        if (finding.fix) {
+          // One click to put it right, and one to take that back.
+          const fixed = channelFixes.includes(finding.id);
+          item.classList.toggle('fixed', fixed);
+          const row = document.createElement('div');
+          row.className = 'finding-fix';
+          const button = document.createElement('button');
+          button.dataset.fix = finding.id;
+          button.textContent = fixed ? 'Undo the fix' : FIX_LABELS[finding.id] ?? 'Fix it';
+          button.className = fixed ? '' : 'primary';
+          button.addEventListener('click', () => setChannelFix(finding.id, !fixed));
+          const note = document.createElement('span');
+          note.textContent = fixed ? 'Fixed: playback, the levelling and every export hear it put right.' : 'Playback, the levelling and every export would hear it put right.';
+          row.append(button, note);
+          item.append(row);
+        }
         return item;
       }),
     );
@@ -2209,6 +2239,11 @@ async function open(files: string[]) {
     $('settings').inert = false;
     $('views').hidden = false;
     const restored = restore(await api.recall(path), measured.peaks.length);
+    // Only fixes the check-up offers for this recording; heard from the start.
+    channelFixes = channelFixes.filter((id) => recording!.checkup.findings.some((finding) => finding.id === id && finding.fix));
+    fixedFor = null;
+    player.setChannels(channelMix());
+    showCheckup();
     $<HTMLInputElement>('picture-delay').value = String(pictureDelayMs);
     select(mixes[restored.selected]);
     undoSteps = [];
@@ -2262,6 +2297,8 @@ function closeRecording() {
   finePieces.clear();
   mixes = [];
   tracks = [];
+  channelFixes = [];
+  player.setChannels(UNMIXED);
   selectedTrack = null;
   detail = null;
   drag = null;
@@ -2308,6 +2345,8 @@ interface Session {
   album?: string;
   tracks?: Track[];
   pictureDelayMs?: number;
+  /** The check-up's channel fixes in use, by the ids of their findings. */
+  channels?: string[];
 }
 
 interface Defaults {
@@ -2331,6 +2370,7 @@ function saveNow() {
     album,
     tracks,
     ...(pictureDelayMs ? { pictureDelayMs } : {}),
+    channels: channelFixes,
   };
   const defaults: Defaults = { options: mix.options, ceilingDb: mix.ceilingDb, ...(mix.loudness ? { loudness: mix.loudness } : {}) };
   api.remember(recording.path, { session, defaults: { ...defaults, export: exportSettings } });
@@ -2405,6 +2445,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
     }));
     album = typeof session!.album === 'string' ? session!.album : '';
     pictureDelayMs = isNumber(session!.pictureDelayMs) ? clamp(Math.round(session!.pictureDelayMs), -MOST_PICTURE_DELAY_MS, MOST_PICTURE_DELAY_MS) : 0;
+    channelFixes = (Array.isArray(session!.channels) ? session!.channels : []).filter((id): id is string => typeof id === 'string');
     tracks = (Array.isArray(session!.tracks) ? session!.tracks : [])
       .filter((t) => isNumber(t?.at) && t.at >= 0 && t.at <= total * HOP_SECONDS && typeof t.name === 'string')
       .map((t) => ({ at: Math.round(t.at * 1000) / 1000, name: t.name, ...(t.guessed === true ? { guessed: true } : {}) }))
@@ -2418,6 +2459,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
   album = '';
   pictureDelayMs = 0;
   tracks = [];
+  channelFixes = [];
   mixesCreated = 1;
   return { selected: 0, fromLastTime: false };
 }
@@ -2433,6 +2475,7 @@ interface Step {
   /** The mixes and the tracks as JSON, which is also what tells two states apart. */
   mixes: string;
   tracks: string;
+  channels: string;
   selected: number;
   mixesCreated: number;
 }
@@ -2444,14 +2487,14 @@ let redoSteps: Step[] = [];
 let settled: Step | null = null;
 
 function snapshot(): Step {
-  return { mixes: JSON.stringify(mixes), tracks: JSON.stringify(tracks), selected: Math.max(0, mixes.indexOf(mix)), mixesCreated };
+  return { mixes: JSON.stringify(mixes), tracks: JSON.stringify(tracks), channels: JSON.stringify(channelFixes), selected: Math.max(0, mixes.indexOf(mix)), mixesCreated };
 }
 
 /** Records the changes since the last settled state, if any, as one undo step. */
 function settleHistory() {
   if (!settled) return;
   const now = snapshot();
-  if (now.mixes === settled.mixes && now.tracks === settled.tracks) {
+  if (now.mixes === settled.mixes && now.tracks === settled.tracks && now.channels === settled.channels) {
     // Selecting another mix is not a change worth a step, but is remembered.
     settled = now;
     return;
@@ -2474,6 +2517,8 @@ function applyStep(step: Step) {
   $('export-status').textContent = '';
   mixes = JSON.parse(step.mixes);
   tracks = JSON.parse(step.tracks);
+  channelFixes = JSON.parse(step.channels);
+  channelsChanged();
   selectedTrack = null;
   mixesCreated = step.mixesCreated;
   settled = step;
@@ -2900,6 +2945,60 @@ function exportExtension(): string {
   return exportSettings.format === 'original' ? originalPictureExtension(recording!.video!.codec) : exportSettings.format;
 }
 
+// ---------------------------------------------------------------------------
+// Fixes for the recording's channels, offered by the check-up
+
+/** The mix that puts the recording's channels right, from the fixes in use. */
+function channelMix(): ChannelMix {
+  if (!recording) return UNMIXED;
+  return recording.checkup.findings
+    .filter((finding) => finding.fix && channelFixes.includes(finding.id))
+    .reduce((mix, finding) => then(mix, finding.fix!), UNMIXED);
+}
+
+let fixedFor: { key: string; measured: Examination } | null = null;
+
+/**
+ * The analysis as the levelling should see it: the recording's loudness as it
+ * is once its channels are put right. The faults last the whole recording, so
+ * the loudness curves move by one amount throughout.
+ */
+function measuredAsFixed(): Examination {
+  const { measured } = recording!;
+  const mix = channelMix();
+  if (isUnmixed(mix)) return measured;
+  const key = `${recording!.path}|${JSON.stringify(mix)}`;
+  if (fixedFor?.key === key) return fixedFor.measured;
+  const { left, right, cross } = measured.diagnostics;
+  const db = loudnessChangeDb(left, right, cross, mix);
+  const factor = 10 ** (db / 10);
+  const shift = (curve: Float32Array) => curve.map((value) => value + db);
+  fixedFor = {
+    key,
+    measured: {
+      ...measured,
+      blocks: measured.blocks.map((energy) => energy * factor),
+      shortTerm: shift(measured.shortTerm),
+      lowShortTerm: shift(measured.lowShortTerm),
+      restShortTerm: shift(measured.restShortTerm),
+    },
+  };
+  return fixedFor.measured;
+}
+
+/** A fix of the check-up's put to use, or taken back: heard at once, and kept with the recording. */
+function setChannelFix(id: string, on: boolean) {
+  channelFixes = on ? [...new Set([...channelFixes, id])] : channelFixes.filter((fix) => fix !== id);
+  channelsChanged();
+  scheduleSave();
+}
+
+function channelsChanged() {
+  player.setChannels(channelMix());
+  if (recording) showCheckup();
+  scheduleRecompute();
+}
+
 function renderMix(m: Mix, output: string, track?: string) {
   const { gainDb, bassDb } = compute(m).detail;
   return api.render({
@@ -2915,6 +3014,7 @@ function renderMix(m: Mix, output: string, track?: string) {
     headroomDb: isLossy(output) && exportSettings.lossyHeadroom ? LOSSY_HEADROOM_DB : 0,
     fadeInSeconds: fades(m).in * HOP_SECONDS,
     fadeOutSeconds: fades(m).out * HOP_SECONDS,
+    ...(isUnmixed(channelMix()) ? {} : { channels: channelMix() }),
     ...(exportSettings.format === 'mp4' ? { video: { ...VIDEO, mix: videoMixOf(m) } } : {}),
     ...(exportSettings.format === 'original' ? { originalPicture: true, pictureDelay: pictureDelayMs / 1000 } : {}),
   });

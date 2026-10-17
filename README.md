@@ -122,7 +122,11 @@ or "2 things to know". It opens a short report on the recording as it is:
 - the format, sample rate, length, loudness and peak level.
 
 Clipping is marked in red along the top of the overview and possible
-dropouts in white. The report describes; it does not repair yet.
+dropouts in white. A channel that is quieter, silent or out of phase can be
+put right with one click in the report: evened out, filled from the other
+side, or flipped. The fix is heard straight away, the levelling works from the
+sound as fixed, and every export carries it; it is kept with the recording and
+can be undone.
 
 ### Listening and adjusting
 

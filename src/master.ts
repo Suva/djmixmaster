@@ -1,3 +1,4 @@
+import { mixChannels, type ChannelMix } from './channels.ts';
 import { extname } from 'node:path';
 import { FeatureExtractor, type Features } from './features.ts';
 import { CHANNELS, decode, decodeParts, encode, isJoined, joinedFiles, probe, type EncodeOptions, type Region } from './audio-io.ts';
@@ -50,6 +51,8 @@ export interface RenderOptions {
   /** Length in seconds of the fade at the start and at the end of the result. */
   fadeInSeconds?: number;
   fadeOutSeconds?: number;
+  /** A fix for the recording's channels (see channels.ts), applied before anything else. */
+  channels?: ChannelMix;
 }
 
 export interface RenderResult extends Measurement {
@@ -161,6 +164,8 @@ export async function render(
   let frame = 0;
   for await (const chunk of decode(input, region)) {
     const frames = chunk.length / CHANNELS;
+    // The recording put right first: everything after works on what it should have been.
+    if (options.channels) mixChannels(chunk, options.channels);
     if (shelf && bassDb) {
       // The shelf moves far too slowly to need per-sample updates.
       for (let from = 0; from < frames; from += SHELF_STEP_FRAMES) {

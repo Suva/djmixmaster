@@ -4,6 +4,7 @@
 // Most recordings are played by the audio element straight from the file. The
 // ones it cannot seek in exactly are streamed instead: each time playback
 // starts or jumps, the main process decodes from that position onwards.
+import { UNMIXED, type ChannelMix } from '../../channels.ts';
 import { BASS_SHELF_HZ } from '../../shelf.ts';
 import type { MediaSource } from '../api.ts';
 import type { LimiterReport, LimiterSettings } from './limiter-worklet.ts';
@@ -34,6 +35,9 @@ export class Player {
   #limiter: AudioWorkletNode | null = null;
   #fade: GainNode | null = null;
   #meters: [AnalyserNode, AnalyserNode] | null = null;
+  /** A fix for the recording's channels: four gains, from each channel in to each channel out. */
+  #channels: { ll: GainNode; lr: GainNode; rl: GainNode; rr: GainNode } | null = null;
+  #mix: ChannelMix = UNMIXED;
   readonly #heard = new Float32Array(2048);
   #settings: Required<LimiterSettings> = { ceilingDb: -1, bypass: false };
 
@@ -134,6 +138,13 @@ export class Player {
    * Sets what is being heard right now. Called every frame during playback;
    * the gain curve moves slowly enough that following it this way is inaudible.
    */
+  /** Puts the recording's channels right as heard, before anything else: the same mix the export applies. */
+  setChannels(mix: ChannelMix) {
+    this.#mix = mix;
+    if (!this.#channels) return;
+    for (const key of ['ll', 'lr', 'rl', 'rr'] as const) this.#channels[key].gain.value = mix[key];
+  }
+
   apply(gain: number, bassDb: number, fade: number, settings: Required<LimiterSettings>) {
     if (!this.#context || !this.#gain || !this.#shelf || !this.#limiter || !this.#fade) return;
     this.#gain.gain.setTargetAtTime(gain, this.#context.currentTime, 0.03);
@@ -197,7 +208,24 @@ export class Player {
       new AnalyserNode(context, { fftSize: this.#heard.length }),
       new AnalyserNode(context, { fftSize: this.#heard.length }),
     ];
-    source.connect(shelf).connect(gain).connect(limiter).connect(fade).connect(context.destination);
+    // The channels first: each one out made of both in, as the fix for the recording says.
+    const apart = new ChannelSplitterNode(context, { numberOfOutputs: 2 });
+    const together = new ChannelMergerNode(context, { numberOfInputs: 2 });
+    const channels = {
+      ll: new GainNode(context, { gain: this.#mix.ll }),
+      lr: new GainNode(context, { gain: this.#mix.lr }),
+      rl: new GainNode(context, { gain: this.#mix.rl }),
+      rr: new GainNode(context, { gain: this.#mix.rr }),
+    };
+    // Always two channels into the splitter: a mono recording spread to both, as speakers would play it.
+    const stereo = new GainNode(context, { channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers' });
+    source.connect(stereo).connect(apart);
+    apart.connect(channels.ll, 0).connect(together, 0, 0);
+    apart.connect(channels.lr, 1).connect(together, 0, 0);
+    apart.connect(channels.rl, 0).connect(together, 0, 1);
+    apart.connect(channels.rr, 1).connect(together, 0, 1);
+    together.connect(shelf).connect(gain).connect(limiter).connect(fade).connect(context.destination);
+    this.#channels = channels;
     fade.connect(split);
     split.connect(meters[0], 0);
     split.connect(meters[1], 1);
