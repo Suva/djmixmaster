@@ -3,7 +3,7 @@
 // ffmpeg, frame by exact frame. Both work out where each clip is with the
 // same function (clipTime in visuals/clip.ts).
 
-import { clipTime, type ClipTiming } from '../../visuals/clip.ts';
+import { clipTime, PING_PONG_MOST_SECONDS, usedPart, type ClipTiming } from '../../visuals/clip.ts';
 import type { VideoPicture } from '../../visuals/draw.ts';
 import type { Api, VideoInfo } from '../api.ts';
 
@@ -12,6 +12,58 @@ export const videoUrl = (path: string) => `djm://app/video?path=${encodeURICompo
 
 /** A frame a clip's frames are shown at, when it does not say. */
 const FALLBACK_FPS = 30;
+
+/**
+ * A clip that plays ping-pong is played from a copy of its part followed by
+ * itself reversed (see `pingPongClip` in main.ts), forwards, as a loop: a
+ * decoder cannot go backwards a frame at a time. These are the copies, made
+ * on first request, by clip and part.
+ */
+class PingPongs {
+  readonly #api: Api;
+  readonly #copies = new Map<string, Promise<string>>();
+  readonly #made = new Map<string, string>();
+
+  constructor(api: Api) {
+    this.#api = api;
+  }
+
+  /** The copy for this clip and timing, and the timing to play it with; null if it does not play ping-pong, or is too long to. */
+  #wanted(path: string, timing: ClipTiming, duration: number): { key: string; from: number; to: number } | null {
+    if (timing.playback !== 'ping-pong') return null;
+    const [from, to] = usedPart(timing, duration);
+    if (to - from > PING_PONG_MOST_SECONDS || to - from <= 0) return null;
+    return { key: `${path}|${from}|${to}`, from, to };
+  }
+
+  /** As a loop of the copy: where it is in the copy comes to where it is in the clip, there and back. */
+  static #asLoop(copy: string, timing: ClipTiming) {
+    return { path: copy, timing: { ...timing, playback: 'loop' as const, inPoint: 0, outPoint: 0 } };
+  }
+
+  /** The copy to play now, if it has been made; asks for it to be made if not. `made` is told when it is. */
+  now(path: string, timing: ClipTiming, duration: number, made: () => void): { path: string; timing: ClipTiming } | null {
+    const wanted = this.#wanted(path, timing, duration);
+    if (!wanted) return null;
+    const copy = this.#made.get(wanted.key);
+    if (copy) return PingPongs.#asLoop(copy, timing);
+    if (!this.#copies.has(wanted.key)) this.ready(path, timing, duration).then(made, () => {});
+    return null;
+  }
+
+  /** The copy to play, once made. */
+  async ready(path: string, timing: ClipTiming, duration: number): Promise<{ path: string; timing: ClipTiming } | null> {
+    const wanted = this.#wanted(path, timing, duration);
+    if (!wanted) return null;
+    let copy = this.#copies.get(wanted.key);
+    if (!copy) {
+      copy = this.#api.pingPongClip(path, wanted.from, wanted.to);
+      this.#copies.set(wanted.key, copy);
+      copy.then((made) => this.#made.set(wanted.key, made), () => {});
+    }
+    return PingPongs.#asLoop(await copy, timing);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // The Video view
@@ -47,6 +99,7 @@ export class PreviewVideos {
   readonly #playing = new Map<string, Playing>();
   /** What each video is played from, by its path; null while being found out. */
   readonly #playables = new Map<string, Playable | null>();
+  readonly #pingPongs: PingPongs;
   #musicPlaying = false;
   #rate = 1;
   /** Counts the frames drawn, to tell which clips the last one showed. */
@@ -55,6 +108,7 @@ export class PreviewVideos {
   constructor(api: Api, changed: () => void) {
     this.#api = api;
     this.#changed = changed;
+    this.#pingPongs = new PingPongs(api);
   }
 
   /** Before a frame is drawn: whether the music plays, and how fast. */
@@ -112,6 +166,9 @@ export class PreviewVideos {
   picture(path: string, layer: number, timing: ClipTiming): VideoPicture | null {
     const playable = this.#playable(path);
     if (!playable) return null;
+    // Until its copy is made, a ping-pong is played backwards by jumping, which is slow but shows where it is.
+    const copy = this.#pingPongs.now(path, timing, playable.duration, this.#changed);
+    if (copy) return this.picture(copy.path, layer, copy.timing);
     const at = clipTime(timing, playable.duration);
     if (at === null) return null;
     // The file it is in, and where in that file.
@@ -234,11 +291,13 @@ export class ExportVideos {
   readonly #most: { width: number; height: number };
   readonly #readings = new Map<string, Reading>();
   readonly #infos = new Map<string, Promise<{ duration: number; video: VideoInfo }>>();
+  readonly #pingPongs: PingPongs;
 
   /** `most` is the size of the video being made: no clip is decoded larger. */
   constructor(api: Api, most: { width: number; height: number }) {
     this.#api = api;
     this.#most = most;
+    this.#pingPongs = new PingPongs(api);
   }
 
   #info(path: string) {
@@ -251,7 +310,8 @@ export class ExportVideos {
   }
 
   async prepare(requests: ClipRequest[]) {
-    for (const { path, layer, timing } of requests) {
+    for (const request of requests) {
+      const { path, layer, timing } = await this.#played(request);
       const key = `${layer}|${path}`;
       let reading = this.#readings.get(key);
       if (!reading) {
@@ -306,7 +366,20 @@ export class ExportVideos {
     }
   }
 
+  /** What is played for a request: the clip, or for a ping-pong, its copy there and back as a loop. */
+  async #played(request: ClipRequest): Promise<ClipRequest> {
+    if (request.timing.playback !== 'ping-pong') return request;
+    const copy = await this.#pingPongs.ready(request.path, request.timing, (await this.#info(request.path)).duration);
+    if (copy) this.#copyOf.set(`${request.layer}|${request.path}`, copy.path);
+    return copy ? { ...request, ...copy } : request;
+  }
+
+  /** The ping-pong copy played for a layer's clip, by layer and clip. */
+  readonly #copyOf = new Map<string, string>();
+
   picture(path: string, layer: number, timing: ClipTiming): VideoPicture | null {
+    const copy = timing.playback === 'ping-pong' ? this.#copyOf.get(`${layer}|${path}`) : undefined;
+    if (copy) return this.picture(copy, layer, { ...timing, playback: 'loop', inPoint: 0, outPoint: 0 });
     const reading = this.#readings.get(`${layer}|${path}`);
     if (!reading?.frame || clipTime(timing, reading.duration, 1 / reading.fps) === null) return null;
     return { image: reading.frame, width: reading.width, height: reading.height };

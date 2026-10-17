@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, sh
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
-import { copyFile, mkdir, open, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
@@ -19,6 +19,7 @@ import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, 
 import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
 import { VIDEO_EXTENSIONS } from './video-files.ts';
+import { PING_PONG_MOST_SECONDS } from '../visuals/clip.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
 import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
 
@@ -890,18 +891,124 @@ ipcMain.handle('video-info', (_event, path: string) => probeVideo(String(path)))
 /**
  * The files the Video view plays a video from, each with its length, one
  * after the other: the video itself, or the parts of a recording in several
- * files, which a video element cannot join.
+ * files, which a video element cannot join; each a playable copy if the
+ * window cannot play it as it is.
  */
 const previewParts = new Map<string, Promise<PreviewPart[]>>();
 ipcMain.handle('preview-parts', (_event, path: string) => {
   let parts = previewParts.get(path);
   if (!parts) {
-    parts = Promise.all(partsOf(String(path)).map(async (part) => ({ path: part, duration: (await probeVideo(part)).duration })));
+    parts = Promise.all(partsOf(String(path)).map(async (part) => ({ path: await playable(part), duration: (await probeVideo(part)).duration })));
     previewParts.set(path, parts);
     parts.catch(() => previewParts.delete(path));
   }
   return parts;
 });
+ipcMain.handle('ping-pong-clip', (_event, path: string, inPoint: number, outPoint: number) => pingPongClip(String(path), Number(inPoint) || 0, Number(outPoint) || 0));
+
+// Copies of videos made for the app's own use, kept like the analyses: one
+// the window can play, for a video in a codec or a file it does not know;
+// and the part of a clip that plays ping-pong, followed by itself reversed,
+// so that it can be played forwards all the way round.
+const clipsFolder = () => join(app.getPath('userData'), 'video-clips');
+/** Codecs and files the window plays as they are. */
+const PLAYED_PICTURES = ['h264', 'vp8', 'vp9', 'av1'];
+const PLAYED_FILES = ['.mp4', '.m4v', '.mov', '.webm'];
+/** Reversed in pieces of this length: ffmpeg holds a whole piece decoded while it reverses it. */
+const REVERSED_SECONDS = 2;
+/** Copies being made, so that asking twice waits for the same one. */
+const making = new Map<string, Promise<string>>();
+
+/** Runs ffmpeg to its end; fails with what it said. */
+function runFfmpeg(args: string[]): Promise<void> {
+  return new Promise((done, fail) => {
+    const child = spawn(ffmpeg(), ['-v', 'error', '-y', '-nostdin', ...args], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let complaint = '';
+    child.stderr.on('data', (data) => (complaint += data));
+    child.on('error', fail);
+    child.on('close', (code) => (code === 0 ? done() : fail(new Error(complaint.trim() || `ffmpeg exit code ${code}`))));
+  });
+}
+
+/** Makes a copy once, under a name made from `key`, or finds it made before; `make` writes the file it is given. */
+async function madeCopy(key: string, make: (output: string) => Promise<void>): Promise<string> {
+  const output = stored('video-clips', key, 'mp4');
+  if (existsSync(output)) {
+    await utimes(output, new Date(), new Date()).catch(() => {});
+    return output;
+  }
+  let made = making.get(output);
+  if (!made) {
+    made = (async () => {
+      await mkdir(clipsFolder(), { recursive: true });
+      const partial = `${output}.part.mp4`;
+      try {
+        await make(partial);
+        await rename(partial, output);
+      } finally {
+        await rm(partial, { force: true }).catch(() => {});
+      }
+      await pruneAnalyses(clipsFolder()).catch(() => {});
+      return output;
+    })().finally(() => making.delete(output));
+    making.set(output, made);
+  }
+  return made;
+}
+
+/** H.264 that any part of the app plays and cuts cleanly, a keyframe every second; `crf` 18 is as good as the eye can tell. */
+const H264 = (fps: number, crf = 18) => ['-an', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-g', String(Math.round(fps))];
+/** No larger than this, with the even sides H.264 wants, on an even grid of frames. */
+const fitted = (fps: number, width = 1920, height = 1080) =>
+  `fps=${fps},scale=w='min(iw,${width})':h='min(ih,${height})':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2`;
+
+/** A file the window can play for this video: the video itself if it can, or a copy. */
+async function playable(path: string): Promise<string> {
+  const { video } = await probeVideo(path);
+  const knownCodec = PLAYED_PICTURES.includes(video.codec);
+  if (knownCodec && PLAYED_FILES.includes(extname(path).toLowerCase())) return path;
+  const fps = Math.min(60, video.fps || 30);
+  return madeCopy(`preview|${await fingerprint(path)}`, (output) =>
+    // In a file the window knows, the picture as it is; else made again, smaller, which takes longer.
+    runFfmpeg(knownCodec
+      ? ['-i', path, '-map', '0:v:0', '-an', '-c:v', 'copy', output]
+      : ['-i', path, '-map', '0:v:0', '-vf', fitted(fps, 1280, 720), ...H264(fps, 23), output]),
+  );
+}
+
+/**
+ * The part of a clip from `inPoint` to `outPoint` (0 for its end), followed
+ * by itself reversed: ping-pong, played forwards. The reversed half is made
+ * in short pieces, each reversed on its own and put in the opposite order,
+ * so that only a piece is ever held decoded.
+ */
+async function pingPongClip(path: string, inPoint: number, outPoint: number): Promise<string> {
+  const { duration, video } = await probeVideo(path);
+  const from = Math.max(0, Math.min(duration, inPoint));
+  const to = outPoint > 0 ? Math.max(from, Math.min(duration, outPoint)) : duration;
+  const length = to - from;
+  if (length > PING_PONG_MOST_SECONDS) throw new Error(`Ping-pong is for clips of up to ${PING_PONG_MOST_SECONDS} seconds`);
+  const fps = Math.min(60, video.fps || 30);
+  return madeCopy(`ping-pong|${await fingerprint(path)}|${from}|${to}`, async (output) => {
+    const work = `${output}.pieces`;
+    await mkdir(work, { recursive: true });
+    try {
+      const forwards = join(work, 'forwards.mp4');
+      await runFfmpeg(['-ss', String(from), '-t', String(length), '-i', path, '-map', '0:v:0', '-vf', fitted(fps), ...H264(fps), forwards]);
+      const pieces: string[] = [];
+      for (let start = 0; start < length; start += REVERSED_SECONDS) {
+        const piece = join(work, `${pieces.length}.mp4`);
+        await runFfmpeg(['-ss', String(start), '-t', String(REVERSED_SECONDS), '-i', forwards, '-vf', 'reverse', ...H264(fps), piece]);
+        pieces.push(piece);
+      }
+      const list = join(work, 'list.txt');
+      await writeFile(list, [forwards, ...pieces.reverse()].map((file) => `file '${file.replace(/'/g, "'\\''")}'`).join('\n'));
+      await runFfmpeg(['-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', output]);
+    } finally {
+      await rm(work, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+}
 ipcMain.handle('add-media', async (_event, path: string): Promise<MediaFile> => {
   if (!servableVideo(String(path))) throw new Error('Not a video');
   await probeVideo(path);

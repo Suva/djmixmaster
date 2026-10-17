@@ -446,6 +446,17 @@ values into the ones a frame gets. None draws anything yet.
   when added, named by its fingerprint; a larger one is used where it is. A
   setting can also hold a path (a video field filled in for a mix), or
   `recording:video` for the recording's own picture.
+- **Ping-pong** is played from a copy: the used part followed by itself
+  reversed, played forwards as a loop (`pingPongClip` in `main.ts`, used by
+  `PingPongs` in `video-sources.ts`). A decoder cannot step backwards a frame
+  at a time. The reversed half is made in two-second pieces, each reversed on
+  its own, so that ffmpeg never holds more than a piece decoded. Parts up to
+  60 s (`PING_PONG_MOST_SECONDS`); a longer one, or one whose copy is still
+  being made, is played back and forth by jumping, which is slow.
+- **Videos the window cannot play** (ProRes, DNxHD, anything in an MKV) are
+  shown in the view from a copy in `video-clips/`: the picture as it is, in
+  an MP4, where only the file was the trouble; otherwise made again as
+  H.264 at up to 1280 × 720. The export reads the original.
 - **The recording's own picture** ignores a layer's playing settings: it is
   always at the same moment of the recording as the sound, less the
   recording's picture delay (`recordingTiming` in `video-frame.ts`). A

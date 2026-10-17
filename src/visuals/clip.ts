@@ -16,6 +16,13 @@ export type Restart = (typeof RESTARTS)[number];
 /** How many beats apart a restart rule starts the clip again; 0 for one that does not go by beats. */
 export const beatsOf = (restart: string) => (restart === 'each beat' ? 1 : Number(/^every (\d+) beats$/.exec(restart)?.[1] ?? 0));
 
+/**
+ * The longest part of a clip that plays ping-pong; a longer one is played
+ * back and forth by jumping, which is slow. Its reversed copy takes a while
+ * to make, and room on disk.
+ */
+export const PING_PONG_MOST_SECONDS = 60;
+
 /** A clip shorter than this is taken as a still: there is nothing to play. */
 const SHORTEST = 0.001;
 

@@ -183,6 +183,7 @@ Linux), the same for `npm start` and the packaged app.
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
 | `media/` | Videos up to 25 MB added to templates, copied here and named by their fingerprint |
+| `video-clips/` | Copies of videos made for the app's own use: ping-pong clips there and back, and playable copies of videos the window cannot play; the 20 most recently used are kept |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |

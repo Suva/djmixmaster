@@ -184,6 +184,12 @@ export interface Api {
   pickVideo(): Promise<string | null>;
   /** The files the Video view plays a video from, one after another, each with its length in seconds. */
   previewParts(path: string): Promise<PreviewPart[]>;
+  /**
+   * A copy of the part of a clip from `inPoint` to `outPoint` (0 for its end)
+   * followed by itself reversed, made the first time it is asked for: a
+   * ping-pong played forwards. Up to PING_PONG_MOST_SECONDS long.
+   */
+  pingPongClip(path: string, inPoint: number, outPoint: number): Promise<string>;
   /** A video's picture and length. */
   videoInfo(path: string): Promise<{ duration: number; video: VideoInfo }>;
   /**

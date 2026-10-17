@@ -270,3 +270,48 @@ test('a template shows the recording\'s own picture in step with the mix, as lat
   const wrong = difference(made, thumbnail(filmed, 32));
   assert.ok(right < wrong / 2, `the frame matches the recording 0.4 s earlier (${right.toFixed(1)}) better than at the same moment (${wrong.toFixed(1)})`);
 });
+
+test('a ping-pong clip plays there and back, and a clip in a codec the window cannot play is shown from a copy', { skip }, async () => {
+  const prores = join(work, 'Colours.mov');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', clip, '-c:v', 'prores_ks', prores]);
+  const half = (x: number, params: Record<string, unknown>) => ({ type: 'video', params: { fit: 'stretch', width: 50, height: 100, x, ...params } });
+  const file = join(work, 'There and back.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1, name: 'There and back', fields: [],
+    layers: [half(25, { video: clip, playback: 'ping-pong' }), half(75, { video: prores, playback: 'loop' })],
+  }));
+  const folder = join(work, 'ping-pong');
+  await mkdir(folder);
+  const seen = await runApp({ recording: filmed, data: await fresh(), template: file, exportFolder: folder, timeoutMs: 150_000 }, async (page) => {
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight');
+    await page.wait(100);
+    page.key('KeyO');
+    page.key('Enter');
+    await page.settle();
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'There and back', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const at = (x: number) => [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), picture.height / 2, 1, 1).data];
+    await page.until(() => at(0.75)[0] > 150 && at(0.75)[1] < 100, 'the ProRes clip to be drawn from its copy', 30_000);
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+    page.click('export-go');
+    await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 120_000);
+    return page.text('export-status');
+  });
+  assert.match(seen, /^Exported 1 mix\./, seen);
+  const [exported] = await readdir(folder);
+  const video = join(folder, exported);
+  // Thirds of a picture in halves: the first is the left half, the last the right.
+  const halves = (seconds: number) => { const [left, , right] = thirdsAt(video, seconds); return [left, right]; };
+  assert.deepEqual(halves(0.5), ['red', 'red']);
+  assert.deepEqual(halves(2.5), ['blue', 'blue']);
+  assert.deepEqual(halves(3.5), ['blue', 'red'], 'on its way back, and round again');
+  assert.deepEqual(halves(4.5), ['green', 'green']);
+  assert.deepEqual(halves(5.5), ['red', 'blue']);
+  assert.deepEqual(halves(6.5), ['red', 'red'], 'and forwards once more');
+});
