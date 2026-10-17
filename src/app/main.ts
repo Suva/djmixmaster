@@ -235,6 +235,19 @@ function saveRecent() {
   );
 }
 
+/**
+ * macOS and Windows put a file opened from Finder or Explorer in the app's
+ * recent documents (the Dock menu, the jump list) by themselves. A template
+ * is imported once and has no place there, and they offer no way to take
+ * one item out, so the list is made again from the recordings in ours.
+ */
+function forgetSystemRecent() {
+  if (SCREENSHOT) return;
+  app.clearRecentDocuments();
+  // Added oldest first, so that the newest ends up on top.
+  for (const path of [...recent].reverse()) if (existsSync(path)) app.addRecentDocument(path);
+}
+
 /** A video template to import, rather than a recording to open: from Finder, the command line or a drop. */
 const isTemplateFile = (path: string) => /\.djmtemplate$/i.test(path);
 
@@ -701,6 +714,7 @@ ipcMain.handle('import-template', async () => {
 // A template file opened from Finder or dropped on the window, by its path.
 ipcMain.handle('read-template-file', async (_event, path: string) => {
   if (!isTemplateFile(String(path)) && !/\.json$/i.test(String(path))) throw new Error('Not a template file');
+  forgetSystemRecent();
   if ((await stat(path)).size > TEMPLATE_MOST_BYTES) throw new Error('That file is too large to be a template');
   try {
     return JSON.parse(await readFile(path, 'utf8'));

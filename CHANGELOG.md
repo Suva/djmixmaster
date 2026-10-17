@@ -22,6 +22,9 @@ are under "Not released yet" and appear there once they are.
   to put it right: evened out, filled from the other side, or flipped. You
   hear it at once, the levelling works from the fixed sound, and every export
   carries it.
+- **Templates stay out of your recent files.** A template opened from Finder
+  or Explorer no longer shows up among the recordings in the Dock menu or the
+  taskbar's jump list.
 
 ## 0.9.1 — 16 October 2026
 
