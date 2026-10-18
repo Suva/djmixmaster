@@ -1,7 +1,8 @@
 // The Fields tab of the template editor: what someone using the template fills
 // in, one card per field in the order they are shown, with its label, its kind,
 // the name settings use it by, and its default. A field's name is changed only
-// once it will do, and then wherever the template uses it.
+// once it will do, and then wherever the template uses it. Cards are dragged
+// into another order; a card clicked has the keys, and Delete removes it.
 
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import {
@@ -20,9 +21,10 @@ export interface FieldsEditorContext {
   /**
    * Makes a change; `kind` merges changes of the same kind made in quick
    * succession into one undo step. With `rebuild`, the cards are made anew
-   * after, for a change to what there is rather than to a value.
+   * after, for a change to what there is rather than to a value, and the card
+   * at `focus` is given the keys.
    */
-  change(kind: string, apply: (template: Template) => void, rebuild?: boolean): void;
+  change(kind: string, apply: (template: Template) => void, rebuild?: boolean, focus?: number): void;
   /** A field was renamed: what the mix filled in goes under the new name. */
   renamed(from: string, to: string): void;
   /** Asks for a picture file and gives its name and contents as a data URL, or null. */
@@ -59,7 +61,14 @@ export function freeFieldName(template: Template, kind: FieldKind): string {
   }
 }
 
-export function fieldsEditor(context: FieldsEditorContext): HTMLElement {
+/** Movement under this many pixels is a click, not a drag. */
+const DRAG_START_PX = 4;
+
+/** What a press on a card leaves alone, to do what it does: typing, choosing, clicking. */
+const CONTROLS = 'input, select, textarea, button, .font-picker, .lut-picker';
+
+/** The cards of a template's fields; with `focus`, that card has the keys. */
+export function fieldsEditor(context: FieldsEditorContext, focus?: number): HTMLElement {
   const list = document.createElement('div');
   list.className = 'field-cards';
   const fields = context.template().fields;
@@ -69,20 +78,92 @@ export function fieldsEditor(context: FieldsEditorContext): HTMLElement {
     empty.textContent = 'No fields: this template shows the same for every mix. Add one below.';
     list.append(empty);
   }
-  fields.forEach((field, index) => list.append(card(field, index, fields.length, context)));
+  fields.forEach((field, index) => list.append(card(field, index, context)));
+  // Once in the page; until then it cannot take the keys.
+  if (focus !== undefined) requestAnimationFrame(() => list.querySelectorAll<HTMLElement>('.field-card')[focus]?.focus());
   return list;
 }
 
-function card(field: Field, index: number, count: number, context: FieldsEditorContext): HTMLElement {
+/** Moves the field at `from` to `to`, and the keys go with it. */
+function moveField(context: FieldsEditorContext, from: number, to: number) {
+  if (to === from || to < 0 || to >= context.template().fields.length) return;
+  context.change('', (template) => {
+    const [moved] = template.fields.splice(from, 1);
+    template.fields.splice(to, 0, moved);
+  }, true, to);
+}
+
+function removeField(context: FieldsEditorContext, index: number) {
+  const left = context.template().fields.length - 1;
+  context.change('', (template) => template.fields.splice(index, 1), true, left ? Math.min(index, left - 1) : undefined);
+}
+
+/**
+ * Dragging a card to another place in the list: the line shows where it goes,
+ * above or below the card under the pointer. Let go without a drag, it is
+ * just clicked, and has the keys.
+ */
+function dragCard(down: MouseEvent, box: HTMLElement, index: number, context: FieldsEditorContext) {
+  const list = box.parentElement!;
+  let dragging = false;
+  let to: number | null = null;
+  const marks = ['drop-above', 'drop-below'];
+  const move = (event: MouseEvent) => {
+    if (!dragging && Math.abs(event.clientY - down.clientY) < DRAG_START_PX) return;
+    dragging = true;
+    box.classList.add('dragging');
+    const cards = [...list.querySelectorAll<HTMLElement>('.field-card')];
+    for (const c of cards) c.classList.remove(...marks);
+    // The place among all the cards, before any is taken out: 0 above the first, cards.length below the last.
+    let at = cards.findIndex((c) => { const r = c.getBoundingClientRect(); return event.clientY < r.top + r.height / 2; });
+    if (at === -1) at = cards.length;
+    to = at > index ? at - 1 : at;
+    if (to === index) return;
+    if (at < cards.length) cards[at].classList.add('drop-above');
+    else cards.at(-1)!.classList.add('drop-below');
+  };
+  const up = () => {
+    window.removeEventListener('mousemove', move);
+    window.removeEventListener('mouseup', up);
+    for (const c of list.querySelectorAll('.field-card')) c.classList.remove(...marks, 'dragging');
+    if (dragging && to !== null) moveField(context, index, to);
+  };
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+}
+
+function card(field: Field, index: number, context: FieldsEditorContext): HTMLElement {
   const box = document.createElement('div');
   box.className = 'field-card';
   box.dataset.key = field.key;
+  box.tabIndex = 0;
+  box.addEventListener('mousedown', (event) => {
+    if (event.button !== 0 || (event.target as Element).closest(CONTROLS)) return;
+    // No text is selected on the way, and the card, not what was under the pointer, has the keys.
+    event.preventDefault();
+    box.focus();
+    dragCard(event, box, index, context);
+  });
+  box.addEventListener('keydown', (event) => {
+    if (event.target !== box) return;
+    // Keys on a card belong to the list: they must not reach the window, where Delete removes a layer.
+    if (event.key === 'Backspace' || event.key === 'Delete') removeField(context, index);
+    else if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) moveField(context, index, index + (event.key === 'ArrowUp' ? -1 : 1));
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+  });
   const set = (kind: string, apply: (field: Field) => void, rebuild = false) =>
     context.change(`field:${index}:${kind}`, (template) => apply(template.fields[index]), rebuild);
 
-  // Label, kind, and moving and removing.
+  // A handle to drag it by, label, kind, and removing.
   const top = document.createElement('div');
   top.className = 'field-top';
+  const grip = document.createElement('span');
+  grip.className = 'field-grip';
+  grip.setAttribute('aria-hidden', 'true');
+  grip.title = `Drag the card to move the field. Click the card, then Delete removes it, and ${navigator.platform.startsWith('Mac') ? 'Option' : 'Alt'}+↑ ↓ moves it.`;
+  grip.innerHTML = '<svg viewBox="0 0 8 14"><circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/><circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/></svg>';
   const label = document.createElement('input');
   label.type = 'text';
   label.className = 'field-label';
@@ -100,27 +181,14 @@ function card(field: Field, index: number, count: number, context: FieldsEditorC
     for (const key of ['min', 'max', 'choices'] as const) delete f[key];
     Object.assign(f, { kind: fresh.kind, default: fresh.default }, fresh.min !== undefined ? { min: fresh.min, max: fresh.max } : {}, fresh.choices ? { choices: fresh.choices } : {});
   }, true));
-  const button = (text: string, title: string, disabled: boolean, action: () => void) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'icon';
-    b.textContent = text;
-    b.title = title;
-    b.setAttribute('aria-label', title);
-    b.disabled = disabled;
-    b.addEventListener('click', action);
-    return b;
-  };
-  const move = (by: number) => context.change('', (template) => {
-    const [moved] = template.fields.splice(index, 1);
-    template.fields.splice(index + by, 0, moved);
-  }, true);
-  top.append(
-    label, kind,
-    button('↑', 'Show this field earlier', index === 0, () => move(-1)),
-    button('↓', 'Show this field later', index === count - 1, () => move(1)),
-    button('×', 'Remove this field. Settings that use it will say so.', false, () => context.change('', (template) => template.fields.splice(index, 1), true)),
-  );
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'icon';
+  remove.textContent = '×';
+  remove.title = 'Remove this field (Delete). Settings that use it will say so.';
+  remove.setAttribute('aria-label', 'Remove this field');
+  remove.addEventListener('click', () => removeField(context, index));
+  top.append(grip, label, kind, remove);
 
   // The name settings use it by.
   const nameRow = document.createElement('div');

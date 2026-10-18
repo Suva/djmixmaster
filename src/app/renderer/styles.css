@@ -500,11 +500,23 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
 #editor-layers-pane[hidden], #editor-fields-pane[hidden] { display: none; }
 #editor-fields-pane > .note { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
 .field-cards { display: flex; flex-direction: column; gap: 8px; }
-.field-card { padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--lane); }
+.field-card { position: relative; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--lane); cursor: grab; }
+.field-card:focus { outline: none; border-color: var(--accent); }
+.field-card.dragging { opacity: 0.5; cursor: grabbing; }
+/* Where a dragged card goes: a line in the gap above or below. */
+.field-card.drop-above::before, .field-card.drop-below::after { content: ''; position: absolute; left: 0; right: 0; height: 2px; border-radius: 1px; background: var(--accent); }
+.field-card.drop-above::before { top: -6px; }
+.field-card.drop-below::after { bottom: -6px; }
+.field-card input, .field-card select { cursor: auto; }
+.field-card button { cursor: pointer; }
 .field-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.field-top .field-label { flex: 1; min-width: 0; font: inherit; font-weight: 600; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; user-select: text; }
-.field-top .field-kind { flex: none; width: 92px; }
-.field-top button.icon { width: 24px; height: 24px; font-size: 13px; }
+.field-grip { flex: none; display: grid; place-items: center; width: 10px; color: var(--muted); }
+.field-grip svg { width: 8px; height: 14px; fill: currentColor; }
+/* The label and the kind side by side, the same height and look. */
+.field-top .field-label, .field-top .field-kind { box-sizing: border-box; height: 28px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; }
+.field-top .field-label { flex: 1; min-width: 0; font-weight: 600; user-select: text; }
+.field-top .field-kind { flex: none; width: 100px; }
+.field-top button.icon { width: 28px; height: 28px; font-size: 13px; }
 .field-name-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .field-key { width: 110px; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; user-select: text; }
 .field-usage { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }

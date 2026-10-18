@@ -796,7 +796,7 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
   assert.deepEqual(again, { typed: '20 + 0 * (bass', problem: 'Expected a closing ")"' });
 });
 
-test('a template\'s fields in the editor: renamed everywhere, added, changed, reordered and removed', { skip }, async () => {
+test('a template\'s fields in the editor: renamed everywhere, added, changed, dragged into another order and removed with Delete', { skip }, async () => {
   const data = await fresh();
   const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
     page.click('view-video');
@@ -836,19 +836,36 @@ test('a template\'s fields in the editor: renamed everywhere, added, changed, re
     const kind = cardOf('sparkle').querySelector<HTMLSelectElement>('.field-kind')!;
     kind.value = 'colour';
     kind.dispatchEvent(new Event('change', { bubbles: true }));
-    cardOf('logo').querySelector<HTMLButtonElement>('button[title^="Show this field later"]')!.click();
-    cardOf('font').querySelector<HTMLButtonElement>('button[title^="Remove"]')!.click();
+    // Dragged by the card into the lower half of the sparkle's, the one after it, so below that.
+    const logo = cardOf('logo').getBoundingClientRect();
+    const below = cardOf('sparkle').getBoundingClientRect().bottom - 4;
+    cardOf('logo').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: logo.left + 4, clientY: logo.top + 4 }));
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: logo.left + 4, clientY: below }));
+    const marked = cardOf('text1').classList.contains('drop-above');
+    window.dispatchEvent(new MouseEvent('mouseup', { clientX: logo.left + 4, clientY: below }));
+    // The moved card has the keys.
+    await page.wait(50);
+    const focused = (document.activeElement as HTMLElement).dataset.key;
+    // Clicked, the font's card has the keys, and Delete removes it rather than a layer.
+    const layers = document.querySelectorAll('.layer-row').length;
+    cardOf('font').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    window.dispatchEvent(new MouseEvent('mouseup'));
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', code: 'Delete', bubbles: true }));
     const order = [...document.querySelectorAll<HTMLElement>('.field-card')].map((card) => card.dataset.key);
+    const layersLeft = document.querySelectorAll('.layer-row').length;
     await page.wait(600);
     page.click('editor-done');
     await page.wait(100);
     const panel = [...page.element('video-fields').querySelectorAll('label')].map((label) => label.textContent);
-    return { refused, kept, usage, order, panel, accent: page.element<HTMLInputElement>('field-accent').value };
+    return { refused, kept, usage, order, marked, focused, layers, layersLeft, panel, accent: page.element<HTMLInputElement>('field-accent').value };
   });
   assert.equal(seen.refused, 'The name bass is already taken');
   assert.ok(seen.kept);
   assert.equal(seen.usage, 'in expressions: accent');
   assert.deepEqual(seen.order, ['accent', 'sparkle', 'logo', 'text1']);
+  assert.ok(seen.marked, 'a line showed where the card would go');
+  assert.equal(seen.focused, 'logo');
+  assert.equal(seen.layersLeft, seen.layers, 'Delete on a card left the layers alone');
   assert.deepEqual(seen.panel, ['Colour', 'Sparkle', 'Logo', 'Tagline']);
   assert.equal(seen.accent, '#ff0000', 'what the mix filled in went with the new name');
 

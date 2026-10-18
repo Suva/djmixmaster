@@ -19,6 +19,10 @@ are under "Not released yet" and appear there once they are.
   in the Video view choose the shape: landscape for YouTube, vertical for
   phones, square for feeds. Every template works in each, its title and its
   shapes keeping their size across the picture.
+- **Fields are dragged into order.** In the template editor's Fields tab,
+  drag a field's card up or down to change the order fields are filled in.
+  Click a card and press Delete to remove it. The name and the kind of a
+  field now sit side by side at the same size.
 - **A fixed gain instead of levelling.** The switch at the top of the
   settings, "Even out tracks" or "Fixed gain", turns the whole mix up or down
   by one amount and leaves the tracks as they are. Loudness still chooses how

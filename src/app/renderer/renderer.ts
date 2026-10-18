@@ -2643,6 +2643,8 @@ const HELP: [string, [string, string][]][] = [
     [`${COMMAND}G, Shift+${COMMAND}G`, 'Group the selected layer, ungroup a group'],
     ['Drag a layer onto a group', 'Put it in the group'],
     [`${COMMAND}-click, Shift-click a layer`, 'Select several, or a run of them, to group, delete, duplicate or drag together'],
+    ['Drag a field up or down', `Change the order fields are filled in; or click it and press ${OPTION}+↑ ↓`],
+    ['Click a field, Backspace', 'Remove it'],
     [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo changes to the template'],
   ]],
   ['Everything else', [

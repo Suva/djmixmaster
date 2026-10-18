@@ -530,7 +530,8 @@ test('pausing leaves the recording\'s picture on screen, with no frame drawn wit
     }
     return darkest;
   });
-  for (const least of seen) assert.ok(least > 40, `a frame drawn after pausing was dark: ${seen.map((value) => value.toFixed(0)).join(', ')}`);
+  // A pause after which nothing was drawn comes back as null (Infinity does not survive the trip), and showed no dark frame.
+  for (const least of seen) assert.ok(least === null || least > 40, `a frame drawn after pausing was dark: ${seen.map((value) => value?.toFixed(0) ?? 'none').join(', ')}`);
 });
 
 test('a name typed in while the music is paused fades in all the way', { skip }, async () => {

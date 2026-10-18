@@ -248,20 +248,20 @@ export class TemplateEditor {
     }));
   }
 
-  #showFields() {
+  #showFields(focus?: number) {
     if (!this.#template) return $('editor-fields').replaceChildren();
     $('editor-fields').replaceChildren(fieldsEditor({
       template: () => this.#template!,
-      change: (kind, apply, rebuild) => {
+      change: (kind, apply, rebuild, focus) => {
         this.#change(kind, apply);
-        if (rebuild) this.#showFields();
+        if (rebuild) this.#showFields(focus);
       },
       renamed: (from, to) => this.#options.renamedField(from, to),
       pickPicture: () => this.#options.pickPicture(),
       pickVideo: () => this.#options.pickVideo(),
       pickLut: () => this.#options.pickLut(),
       folderLuts: () => this.#options.folderLuts(),
-    }));
+    }, focus));
   }
 
   get open(): boolean {
