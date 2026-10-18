@@ -212,6 +212,8 @@ Values any number parameter can follow, through a knob or an expression:
 | `trackChange` | 1 when a new track's marker passes, falling to 0 |
 | `time`, `progress` | Seconds into the mix, and 0 to 1 across it |
 | `hasVideo` | 1 when the recording is a video with a picture of its own, 0 when not |
+| `portrait` | 1 when the picture is taller than it is wide (the vertical shape), 0 when not |
+| `aspect` | The picture's width over its height: 1.78 landscape, 0.56 vertical, 1 square |
 
 ## Fields a template can ask for
 
@@ -479,7 +481,7 @@ values into the ones a frame gets. None draws anything yet.
 - "MP4 video" is a format in the export dialog, beside WAV, FLAC, MP3 and
   AAC; Export all works with it too. Each mix is drawn with its own template,
   or Glitter if none was chosen. The dialog says which.
-- 1920 × 1080 at 30 frames a second, H.264 at up to 8 Mbit/s (the encoder
+- In the mix's shape (see below), at 30 frames a second, H.264 at up to 8 Mbit/s (the encoder
   uses far less on calm pictures: 2 to 4 Mbit/s for the built-in templates),
   and the sound in AAC at the bitrate chosen, made 1 dB quieter like any
   lossy export. The tags go into the video file.
@@ -489,8 +491,26 @@ values into the ones a frame gets. None draws anything yet.
   long.
 - Not yet tried: Windows and Linux, where the hardware encoder may not be
   offered and the software one built into Electron takes over (about half
-  the speed on the Mac); other sizes and frame rates; very long mixes end to
-  end.
+  the speed on the Mac); other frame rates; very long mixes end to end.
+
+## Shapes, as built
+
+- **Three shapes** (`src/visuals/shape.ts`): landscape 1920 × 1080,
+  vertical 1080 × 1920, square 1080 × 1080, chosen with three small buttons
+  beside the template in the Video view. A shape is kept in a video's
+  choice beside its template and fields (`VisualsChoice.shape`, absent for
+  landscape, as videos were before), so it is saved and undone with them.
+  4K and 60 frames a second, sketched above, are not built.
+- **Sizes follow the short side.** Positions and boxes are parts of the width
+  and the height, as they were; everything that is a size (text, radii, line
+  widths, shadows, blurs, particles, the reach of a round spectrum or
+  waveform) is a part of the picture's short side (`#unit` in `draw.ts`).
+  In landscape that is the height, as it always was, so templates made
+  before shapes draw exactly as they did. In vertical it is the width, so a
+  ring or a title that fits a landscape picture fits across a vertical one.
+- **`portrait` and `aspect`** tell an expression the shape, for a template
+  to lay itself out otherwise: `portrait ? 80 : 50` for a logo's height, say.
+  The built-in templates do not use them yet.
 
 ## LUTs, as built
 

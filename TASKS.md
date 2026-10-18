@@ -58,6 +58,16 @@ Written down so they are not tried the same way again.
   is reported, and as a note. Nobody has yet listened to the four it finds
   in the 8-hour test recording to see whether they are real.
 
+### The built-in templates in vertical and square — small
+
+Every template draws in each shape, with sizes against the short side, but
+the built-in ones were laid out for landscape. In vertical, a ring or a title
+sits small in a tall picture, with empty space above and below.
+
+- Look at each built-in template in vertical and square, and use `portrait`
+  in their expressions where a layer should sit or size otherwise.
+- Done when each looks made for the shape in a screenshot of each.
+
 ### Named settings presets — small
 
 "Apply to all mixes" copies one mix's settings to the rest of a recording. A
@@ -157,15 +167,6 @@ from Mixcloud was found either way. A test would settle it: upload the same
 minute at -9 and at -14 as private tracks and compare. Adjust the preset
 descriptions in `renderer.ts` to match what is found.
 
-### Video exports with visuals
-
-YouTube will not take a mix as sound alone. A template of layers (backgrounds,
-images, text, a spectrum, effects) that follow the music, with a few fields
-for the DJ to fill in, would turn a mix into a video. Layer types and their
-parameters are sketched in [VISUALS.md](VISUALS.md). A first version would be
-a few built-in templates and no editor; frames go straight to the encoder,
-never to disk.
-
 ### Corrective EQ, with a suggested correction
 
 A recording taken from a PA mixer can carry the system's EQ: boosted bass,
@@ -249,8 +250,6 @@ all". Still unchecked there:
 
 - Dragging: marking a mix on the overview, moving its edges, fades, hand
   adjustments, and that a click with a pixel of movement is not a drag.
-- Exporting a single mix, which goes through a system dialog. The check mode
-  would need a way to answer it, as it has for the folder of "Export all".
 - The streamed playback path, with a variable-bitrate MP3.
 - Running on GitHub for real. A trial job in `test.yml` runs them on macOS
   and Windows without failing the workflow. Once it has passed a few times,

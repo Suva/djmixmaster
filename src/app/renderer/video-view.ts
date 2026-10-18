@@ -5,6 +5,7 @@
 // picture and the levelling settings for the template's fields.
 
 import type { Api, FolderLut, VisualsChoice } from '../api.ts';
+import { SHAPES, type Shape } from '../../visuals/shape.ts';
 import type { Features } from '../../features.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
@@ -165,11 +166,23 @@ export class VideoView {
     this.#templateActions();
     select.addEventListener('change', () => {
       // Fields of the same name carry over to the new template: the artist's name, the colour.
-      this.#choice = { template: select.value, fields: this.#choice.fields };
+      this.#choice = { ...this.#choice, template: select.value };
       this.#prepare();
       this.#showFields();
       options.choose(this.#choice);
     });
+    // The shape of the picture, kept with the template choice; the same template is drawn in any.
+    for (const button of $('video-shape').querySelectorAll<HTMLButtonElement>('button')) {
+      button.addEventListener('click', () => {
+        this.#choice = { ...this.#choice, shape: button.dataset.shape as Shape };
+        this.#showShape(this.#choice.shape!);
+        this.#drawer.reset();
+        this.#stale = true;
+        const mix = options.mix();
+        this.#shownFor = `${mix?.path}|${mix?.number}|${JSON.stringify(this.#choice)}`;
+        options.choose(this.#choice);
+      });
+    }
     // Clicking or dragging on the strip under the picture moves the playhead within the mix.
     const strip = $<HTMLCanvasElement>('mix-strip');
     let dragging = false;
@@ -444,9 +457,18 @@ export class VideoView {
     }
   }
 
+  /** Marks the shape in use among the buttons that choose it. */
+  #showShape(shape: Shape) {
+    for (const button of $('video-shape').querySelectorAll<HTMLButtonElement>('button')) {
+      button.classList.toggle('on', button.dataset.shape === shape);
+      button.setAttribute('aria-pressed', String(button.dataset.shape === shape));
+    }
+  }
+
   #showFields() {
     const mix = this.#options.mix();
     this.#shownFor = `${mix?.path}|${mix?.number}|${JSON.stringify(this.#choice)}`;
+    this.#showShape(mix?.shape ?? 'landscape');
     const template = this.#template();
     const known = templates.has(this.#choice.template) || USER_TEMPLATES.has(this.#choice.template);
     $<HTMLSelectElement>('template').value = known ? this.#choice.template : DEFAULT_TEMPLATE;
@@ -536,7 +558,7 @@ export class VideoView {
     await this.#options.api.saveTemplate(id, template);
     USER_TEMPLATES.set(USER_TEMPLATE + id, template);
     this.#fillTemplates();
-    this.#choice = { template: USER_TEMPLATE + id, fields: this.#choice.fields };
+    this.#choice = { ...this.#choice, template: USER_TEMPLATE + id };
     this.#prepare();
     this.#showFields();
     this.#options.choose(this.#choice);
@@ -753,7 +775,7 @@ export class VideoView {
       await api.deleteTemplate(id.slice(USER_TEMPLATE.length));
       USER_TEMPLATES.delete(id);
       this.#fillTemplates();
-      this.#choice = { template: DEFAULT_TEMPLATE, fields: this.#choice.fields };
+      this.#choice = { ...this.#choice, template: DEFAULT_TEMPLATE };
       this.#prepare();
       this.#showFields();
       this.#options.choose(this.#choice);
@@ -937,19 +959,21 @@ export class VideoView {
     const canvas = this.#canvas;
     if (!mix) return;
 
-    // As large as fits the area at 16:9, drawn at the size it is shown (up to
-    // that of the video) so it stays sharp and quick.
+    // As large as fits the area in the video's shape, drawn at the size it is
+    // shown (up to that of the video) so it stays sharp and quick.
+    const shape = SHAPES[mix.shape];
+    const aspect = shape.width / shape.height;
     const area = canvas.parentElement!;
-    const shownWidth = Math.floor(Math.min(area.clientWidth, (area.clientHeight * 16) / 9));
-    const shownHeight = Math.floor((shownWidth * 9) / 16);
+    const shownWidth = Math.floor(Math.min(area.clientWidth, area.clientHeight * aspect));
+    const shownHeight = Math.floor(shownWidth / aspect);
     if (shownWidth <= 0) return;
-    if (canvas.style.width !== `${shownWidth}px`) {
+    if (canvas.style.width !== `${shownWidth}px` || canvas.style.height !== `${shownHeight}px`) {
       canvas.style.width = `${shownWidth}px`;
       canvas.style.height = `${shownHeight}px`;
     }
     const ratio = window.devicePixelRatio || 1;
-    const width = Math.min(1920, Math.round(shownWidth * ratio));
-    const height = Math.round((width * 9) / 16);
+    const width = Math.min(shape.width, Math.round(shownWidth * ratio));
+    const height = Math.round(width / aspect);
     if (canvas.width !== width || canvas.height !== height) [canvas.width, canvas.height] = [width, height];
 
     const key = `${mix.path}|${mix.start}|${mix.end}`;

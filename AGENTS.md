@@ -42,6 +42,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/gaps.ts` | Finds silences between sets |
 | `src/tracks.ts` | The tracks in a mix: reading track lists, chapters, the list for YouTube |
 | `src/features.ts` | What the visuals of a video move to: spectrum, level and beats |
+| `src/visuals/shape.ts` | The shapes a video is made in: landscape, vertical, square |
 | `src/visuals/clip.ts` | Where a video layer's clip is at each moment: loop, ping-pong, once, speed, restarts |
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
@@ -139,7 +140,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_SCRIPT=<js>` | Run this JavaScript in the window first; its result is printed as `[script] ...` |
 | `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `help`) to the window before the script runs |
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
-| `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
+| `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder, and the save dialog of a single export with the name it suggests in this folder |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
 | `DJMASTER_SHOT_VIDEO=<file>` | Answer the dialog for a template's video with this file |
 | `DJMASTER_SHOT_LUT=<file>` | Answer the dialog for a template's .cube LUT with this file |
@@ -165,8 +166,8 @@ by id, dispatch mouse and keyboard events, and call `window.api` directly.
   remembered.
 - **A test's function is sent to the window as text.** It can use its
   arguments and what a web page has, but nothing from the test file around it.
-- **Native dialogs cannot be scripted.** Call `window.api.render(...)` or use
-  `DJMASTER_SHOT_FOLDER` instead of clicking Export.
+- **Native dialogs cannot be scripted.** Set `DJMASTER_SHOT_FOLDER` and
+  Export and Export all write into it.
 - **Wait for changes to settle.** Edits are saved, and become undo steps,
   400 ms after the last change.
 - **Run it with a time limit.** A script that throws or waits forever leaves
@@ -275,6 +276,11 @@ Do not write test data there.
   clip is comes from `clipTime` in `visuals/clip.ts` for both; anything
   about a clip's timing has to go through it. Videos are never packed into
   a template's JSON: `media` names files (see VISUALS.md).
+- **A video has a shape**: landscape, vertical or square
+  (`visuals/shape.ts`), kept in a video's choice of template, so it is saved
+  and undone with it. The drawer measures sizes against the picture's short
+  side (`#unit` in `draw.ts`), so a template works in any shape, and one made
+  for landscape draws exactly as it did.
 - **A recording can be several files.** Recorders split long recordings at
   2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
   their numbers, or else by when each was written) and listed in

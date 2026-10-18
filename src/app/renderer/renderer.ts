@@ -16,6 +16,7 @@ import { Player } from './player.ts';
 import { isUnmixed, loudnessChangeDb, then, UNMIXED, type ChannelMix } from '../../channels.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
+import { SHAPES, shapeOf } from '../../visuals/shape.ts';
 import { originalPictureExtension } from '../video-files.ts';
 
 declare global {
@@ -135,6 +136,7 @@ function visualsOf(m: Mix): VisualsChoice | undefined {
 
 function videoMixOf(m: Mix): VideoMixInfo {
   const at = edges(m);
+  const visuals = visualsOf(m);
   return {
     path: recording!.path,
     recordingName: recording!.name.replace(/\.[^.]+$/, ''),
@@ -145,8 +147,9 @@ function videoMixOf(m: Mix): VideoMixInfo {
     end: at.end * HOP_SECONDS,
     artist: m.artist ?? '',
     album,
-    visuals: visualsOf(m),
-    template: templateOf(visualsOf(m)),
+    visuals,
+    shape: shapeOf(visuals?.shape),
+    template: templateOf(visuals),
     tracks: mixTracks(m),
     fadeIn: fades(m).in * HOP_SECONDS,
     fadeOut: fades(m).out * HOP_SECONDS,
@@ -2402,7 +2405,7 @@ function visualsChoice(value: unknown): VisualsChoice | null {
   if (!given || typeof given.template !== 'string' || typeof given.fields !== 'object' || given.fields === null) return null;
   const fields: Record<string, string | number> = {};
   for (const [key, field] of Object.entries(given.fields)) if (typeof field === 'string' || isNumber(field)) fields[key] = field;
-  return { template: given.template, fields };
+  return { template: given.template, fields, ...(given.shape !== undefined ? { shape: shapeOf(given.shape) } : {}) };
 }
 const isPreset = (value: unknown): value is string => LOUDNESS_PRESETS.some((preset) => preset.id === value);
 
@@ -2730,8 +2733,12 @@ function exportName(m: Mix): string {
 type ExportFormat = 'wav' | 'flac' | 'mp3' | 'm4a' | 'mp4' | 'original';
 const EXPORT_FORMATS: ExportFormat[] = ['wav', 'flac', 'mp3', 'm4a', 'mp4', 'original'];
 
-/** A video export's picture: 1080p at 30 frames a second, at the bitrate YouTube asks for. */
-const VIDEO = { width: 1920, height: 1080, fps: 30, kbps: 8000 };
+/**
+ * A video export's picture: 30 frames a second, at the bitrate YouTube asks
+ * for 1080p. Its size is its shape's (`SHAPES`): a vertical or square picture
+ * 1080 across has no more to it than a landscape one.
+ */
+const VIDEO = { fps: 30, kbps: 8000 };
 
 interface ExportSettings {
   format: ExportFormat;
@@ -2817,9 +2824,13 @@ function showExportSettings() {
   if (settings.format === 'wav' && sizes.some((bytes) => bytes > WAV_LIMIT_BYTES)) {
     note += ' Over 4 GB, a WAV is written in an extended form that some players and DJ gear cannot read. FLAC avoids this.';
   } else if (settings.format === 'mp4') {
-    const named = exportingMixes.map((m) => templateOf(visualsOf(m)).name);
+    const choices = exportingMixes.map((m) => visualsOf(m));
+    const named = choices.map((choice) => templateOf(choice).name);
     const which = new Set(named).size === 1 ? `the ${named[0]} template` : 'each mix\'s template';
-    note += ` A 1920 × 1080 picture of ${which}, chosen in the Video view, with the sound in AAC. Drawing the picture takes a while.`;
+    const shapes = new Set(choices.map((choice) => shapeOf(choice?.shape)));
+    const [shape] = shapes;
+    const picture = shapes.size === 1 ? `A ${SHAPES[shape].width} × ${SHAPES[shape].height} picture` : 'A picture in each mix\'s shape';
+    note += ` ${picture} of ${which}, chosen in the Video view, with the sound in AAC. Drawing the picture takes a while.`;
   } else if (settings.format === 'original') {
     const { width, height } = recording!.video!;
     note += ` The recording's own ${width} × ${height} picture with the mastered sound in AAC, as ${originalPictureExtension(recording!.video!.codec).toUpperCase()}.`
@@ -3012,6 +3023,7 @@ function channelsChanged() {
 
 function renderMix(m: Mix, output: string, track?: string) {
   const { gainDb, bassDb } = compute(m).detail;
+  const video = videoMixOf(m);
   return api.render({
     input: recording!.path,
     output,
@@ -3026,7 +3038,7 @@ function renderMix(m: Mix, output: string, track?: string) {
     fadeInSeconds: fades(m).in * HOP_SECONDS,
     fadeOutSeconds: fades(m).out * HOP_SECONDS,
     ...(isUnmixed(channelMix()) ? {} : { channels: channelMix() }),
-    ...(exportSettings.format === 'mp4' ? { video: { ...VIDEO, mix: videoMixOf(m) } } : {}),
+    ...(exportSettings.format === 'mp4' ? { video: { ...VIDEO, width: SHAPES[video.shape].width, height: SHAPES[video.shape].height, mix: video } } : {}),
     ...(exportSettings.format === 'original' ? { originalPicture: true, pictureDelay: pictureDelayMs / 1000 } : {}),
   });
 }

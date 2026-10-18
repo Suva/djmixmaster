@@ -129,7 +129,14 @@
           </span>
         </div>
         <div class="control" id="template-row">
-          <div class="control-head"><label for="template">Template</label></div>
+          <div class="control-head">
+            <label for="template">Template</label>
+            <div class="toggle" id="video-shape" role="group" aria-label="Shape of the video">
+              <button class="icon" data-shape="landscape" title="Landscape, 1920 × 1080: for YouTube and the like" aria-label="Landscape"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.75" y="4.25" width="12.5" height="7.5" rx="1.25"/></svg></button>
+              <button class="icon" data-shape="vertical" title="Vertical, 1080 × 1920: for phones, such as Shorts, Reels and TikTok" aria-label="Vertical"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><rect x="4.25" y="1.75" width="7.5" height="12.5" rx="1.25"/></svg></button>
+              <button class="icon" data-shape="square" title="Square, 1080 × 1080: for feeds that show a square" aria-label="Square"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.75" y="2.75" width="10.5" height="10.5" rx="1.25"/></svg></button>
+            </div>
+          </div>
           <div class="template-line">
             <select id="template"></select>
             <button id="template-edit" class="icon" title="Edit this template: its layers and their settings" aria-label="Edit the template"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5l3 3-8 8H2.5v-3zM9 4l3 3"/></svg></button>

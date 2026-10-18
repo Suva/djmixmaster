@@ -339,6 +339,8 @@ ipcMain.handle('pick-file', async () => {
 });
 
 ipcMain.handle('pick-output', async (_event, suggested: string) => {
+  // Automated checks cannot answer a dialog: the file goes into their folder, under the name suggested.
+  if (SCREENSHOT && process.env.DJMASTER_SHOT_FOLDER) return join(process.env.DJMASTER_SHOT_FOLDER, basename(suggested));
   const result = await dialog.showSaveDialog(window!, {
     defaultPath: suggested,
     // The format was chosen in the export dialog; the suggested name carries it.

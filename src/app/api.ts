@@ -1,5 +1,6 @@
 import type { MediaFile, Template } from '../visuals/template.ts';
 import type { ChannelMix } from '../channels.ts';
+import type { Shape } from '../visuals/shape.ts';
 import type { EncodeOptions, VideoInfo } from '../audio-io.ts';
 
 export type { VideoInfo } from '../audio-io.ts';
@@ -58,6 +59,8 @@ export interface VideoMixInfo {
   artist: string;
   album: string;
   visuals: VisualsChoice | undefined;
+  /** The shape the picture is drawn in: the one chosen, or landscape. */
+  shape: Shape;
   /**
    * The template itself, checked: the export's hidden page does not know the
    * user's own templates, and is to draw exactly what the view showed.
@@ -122,6 +125,8 @@ export interface FineWave {
 export interface VisualsChoice {
   template: string;
   fields: Record<string, string | number>;
+  /** The shape of the picture; absent for one chosen before there were shapes, which was landscape. */
+  shape?: Shape;
 }
 
 export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help';

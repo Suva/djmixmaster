@@ -162,6 +162,20 @@ export class FrameDrawer {
     this.#surface = canvas;
   }
 
+  /** The size of the picture being drawn. */
+  get size(): { width: number; height: number } {
+    return { width: this.#canvas.width, height: this.#canvas.height };
+  }
+
+  /**
+   * What sizes are measured against: the short side of the picture. In the
+   * usual landscape picture that is its height, as it always was; in a
+   * vertical one its width, so that a title or a ring still fits across.
+   */
+  get #unit(): number {
+    return Math.min(this.#canvas.width, this.#canvas.height);
+  }
+
   /** Where each layer was drawn in the last frame, by its place in the template; null for a layer not drawn, or without a box. */
   boxes: (LayerBox | null)[] = [];
   #index = 0;
@@ -256,7 +270,7 @@ export class FrameDrawer {
       case 'adjust': this.#filtered(`brightness(${Math.max(0, num(params, 'brightness'))}%) contrast(${Math.max(0, num(params, 'contrast'))}%)`); break;
       case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
       case 'kaleidoscope': this.#kaleidoscope(params); break;
-      case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#canvas.height); break;
+      case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#unit); break;
       case 'lut': this.#lut(params, frame); break;
     }
     into.restore();
@@ -418,14 +432,14 @@ export class FrameDrawer {
     const count = Math.max(0, Math.min(5000, Math.round(num(params, 'count'))));
     const burst = Math.max(0, Math.min(1000, Math.round(num(params, 'burst'))));
     const lifetime = Math.max(0.1, num(params, 'lifetime'));
-    const speed = (num(params, 'speed') / 100) * height;
+    const speed = (num(params, 'speed') / 100) * this.#unit;
     const direction = (num(params, 'direction') * Math.PI) / 180;
     const spread = (num(params, 'spread') * Math.PI) / 180;
-    const turbulence = (num(params, 'turbulence') / 100) * height * 0.2;
+    const turbulence = (num(params, 'turbulence') / 100) * this.#unit * 0.2;
     const twinkle = num(params, 'twinkle');
     const depth = num(params, 'twinkleDepth') / 100;
-    const sizeLow = (num(params, 'sizeLow') / 100) * height;
-    const sizeHigh = (num(params, 'sizeHigh') / 100) * height;
+    const sizeLow = (num(params, 'sizeLow') / 100) * this.#unit;
+    const sizeHigh = (num(params, 'sizeHigh') / 100) * this.#unit;
     const area = str(params, 'area');
     const opacity = ctx.globalAlpha;
     const t = frame.seconds;
@@ -532,7 +546,7 @@ export class FrameDrawer {
       s.globalAlpha = 1;
     }
     const shadow = col(params, 'shadowColour');
-    const blur = (num(params, 'shadowBlur') / 100) * height;
+    const blur = (num(params, 'shadowBlur') / 100) * this.#unit;
     if (shadow && blur > 0) {
       ctx.shadowColor = hexOf(shadow);
       ctx.shadowBlur = blur;
@@ -563,7 +577,7 @@ export class FrameDrawer {
     if (memory.changing !== undefined && memory.changing < 1) this.changing = true;
     const progress = memory.changing === undefined || change === 'cut' ? 1 : memory.changing;
 
-    const size = (num(params, 'size') / 100) * height;
+    const size = (num(params, 'size') / 100) * this.#unit;
     ctx.font = `${Math.round(num(params, 'weight'))} ${size}px ${fontStack(str(params, 'font'))}`;
     ctx.letterSpacing = `${(num(params, 'letterSpacing') / 100) * size}px`;
     ctx.textBaseline = 'alphabetic';
@@ -602,17 +616,17 @@ export class FrameDrawer {
       ctx.globalAlpha = opacity * alpha;
       const box = col(params, 'boxColour');
       if (box) {
-        const pad = (num(params, 'boxPadding') / 100) * height;
+        const pad = (num(params, 'boxPadding') / 100) * this.#unit;
         ctx.fillStyle = hexOf(box);
         ctx.beginPath();
         ctx.roundRect(left - pad, top + offset - pad, blockWidth + pad * 2, blockHeight + pad * 2, pad * 0.6);
         ctx.fill();
       }
       const shadow = col(params, 'shadowColour');
-      const blur = (num(params, 'shadowBlur') / 100) * height;
+      const blur = (num(params, 'shadowBlur') / 100) * this.#unit;
       ctx.shadowColor = shadow && blur > 0 ? hexOf(shadow) : 'transparent';
       ctx.shadowBlur = blur;
-      const outline = (num(params, 'outlineWidth') / 100) * height;
+      const outline = (num(params, 'outlineWidth') / 100) * this.#unit;
       const outlineColour = col(params, 'outlineColour');
       const fill = col(params, 'colour');
       let left_ = visible;
@@ -686,14 +700,16 @@ export class FrameDrawer {
     this.#place(params);
 
     if (str(params, 'form') === 'circle') {
-      const radius = (num(params, 'radius') / 100) * height;
+      const radius = (num(params, 'radius') / 100) * this.#unit;
+      // Round, the bars' length is a size like the radius, so that the ring keeps its proportions in any shape of picture.
+      const reach = (num(params, 'height') / 100) * this.#unit;
       this.#record(params, -radius, -radius, radius * 2, radius * 2, true);
       const step = (Math.PI * 2) / bars;
       ctx.lineCap = rounded ? 'round' : 'butt';
       for (let i = 0; i < bars; i++) {
         const value = memory.bars[i];
         const angle = i * step - Math.PI / 2;
-        const length = Math.max(1, value * h);
+        const length = Math.max(1, value * reach);
         ctx.strokeStyle = hexOf(colourOf(i, value));
         ctx.lineWidth = Math.max(1, radius * step * (1 - gap));
         ctx.beginPath();
@@ -738,17 +754,18 @@ export class FrameDrawer {
     this.#place(params);
     ctx.strokeStyle = hexOf(colour);
     ctx.fillStyle = hexOf(colour);
-    ctx.lineWidth = Math.max(1, (num(params, 'lineWidth') / 100) * height);
+    ctx.lineWidth = Math.max(1, (num(params, 'lineWidth') / 100) * this.#unit);
     ctx.lineJoin = 'round';
 
     if (str(params, 'form') === 'circle') {
-      const radius = (num(params, 'radius') / 100) * height;
+      const radius = (num(params, 'radius') / 100) * this.#unit;
+      const reach = (num(params, 'height') / 100) * this.#unit;
       this.#record(params, -radius, -radius, radius * 2, radius * 2, true);
       ctx.beginPath();
       for (let p = 0; p <= points; p++) {
         const value = levels[p % points];
         const angle = (p / points) * Math.PI * 2 - Math.PI / 2;
-        const r = radius + value * h * 0.5;
+        const r = radius + value * reach * 0.5;
         if (p === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
         else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
       }
@@ -786,7 +803,7 @@ export class FrameDrawer {
     // Only what is brighter than the threshold glows; blurred to the edges, as the Blur effect is.
     const threshold = num(params, 'threshold') / 100;
     const scratch = this.#extraCanvas(0);
-    this.#blurInto(this.#copyOfPicture(), scratch, (num(params, 'radius') / 100) * height,
+    this.#blurInto(this.#copyOfPicture(), scratch, (num(params, 'radius') / 100) * this.#unit,
       `brightness(${Math.max(0, 1 - threshold) * 100 + 20}%) contrast(${100 + threshold * 300}%)`);
     const s = scratch.getContext('2d')!;
     const tint = col(params, 'tint');

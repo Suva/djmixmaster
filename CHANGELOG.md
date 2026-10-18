@@ -15,6 +15,10 @@ are under "Not released yet" and appear there once they are.
   they are all in the list, ready to pick. Go up and down the list with the
   arrow keys to see each look on the picture at once. A template exported
   to share takes the LUTs it uses from the folder along with it.
+- **Vertical and square videos.** Three small buttons beside the template
+  in the Video view choose the shape: landscape for YouTube, vertical for
+  phones, square for feeds. Every template works in each, its title and its
+  shapes keeping their size across the picture.
 - **A fixed gain instead of levelling.** The switch at the top of the
   settings, "Even out tracks" or "Fixed gain", turns the whole mix up or down
   by one amount and leaves the tracks as they are. Loudness still chooses how

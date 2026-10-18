@@ -188,6 +188,10 @@ export function drawVideoFrame(
   const music = reader ? reader.at(seconds, dt) : { time: seconds, dt, length, progress: seconds / Math.max(1, length) };
   // So that a template can show something else where the recording has no picture of its own.
   music.hasVideo = mix.video ? 1 : 0;
+  // So that a template can lay itself out otherwise in a vertical or square picture.
+  const { width, height } = drawer.size;
+  music.portrait = height > width ? 1 : 0;
+  music.aspect = width / height;
   drawer.draw(layers, {
     seconds,
     dt,

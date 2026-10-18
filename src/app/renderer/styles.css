@@ -286,6 +286,10 @@ button.with-icon { display: flex; align-items: center; gap: 7px; }
 button.with-icon svg { color: var(--muted); }
 button.icon.round { width: 26px; height: 26px; border-radius: 50%; flex: none; font-weight: 600; }
 .toggle button.icon { width: 34px; height: auto; min-height: 32px; }
+/* The shape of the video: three small icons beside the Template label. */
+#template-row .control-head { align-items: center; }
+#video-shape button.icon { width: 26px; min-height: 22px; height: 22px; padding: 0; display: grid; place-items: center; }
+#video-shape button.icon svg { width: 14px; height: 14px; }
 #play { width: 48px; color: var(--accent); }
 #play:hover:not(:disabled) { color: #5be6ab; }
 #play .when-playing, #play.playing .when-paused { display: none; }

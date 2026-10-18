@@ -269,12 +269,19 @@ with the app stay as they are; editing one makes a copy of your own. A
 template's website and email open in your own browser and mail program when
 clicked; the app itself still contacts nothing.
 
-Exporting a mix as **MP4 video** draws every frame of it at 1920 × 1080, 30
-frames a second, with the sound in AAC. On an M1 Mac it takes about a sixth of
-the mix's length with the templates that come with the app, some 20 minutes
-for two hours; a template heavy with effects takes about three times as long.
-The first time, the recording is also listened to for the beats and the
-spectrum the template moves to, which takes about as long as its analysis.
+Exporting a mix as **MP4 video** draws every frame of it at 30 frames a
+second, with the sound in AAC, in the **shape** chosen with the small buttons
+beside the template: landscape (1920 × 1080), vertical (1080 × 1920) for
+phones, or square (1080 × 1080). The shape is kept with the mix, like its
+template. Every template works in each: positions follow the picture's width
+and height, and sizes its short side, so a title or a ring that fits a
+landscape picture still fits across a vertical one. A template can also lay
+itself out otherwise with `portrait` in an expression. On an M1 Mac the
+export takes about a sixth of the mix's length with the templates that come
+with the app, some 20 minutes for two hours; a template heavy with effects
+takes about three times as long. The first time, the recording is also
+listened to for the beats and the spectrum the template moves to, which
+takes about as long as its analysis.
 
 For a recording that is a video, a template's video layer can show the
 recording's own picture, in step with the music. If the picture runs ahead
