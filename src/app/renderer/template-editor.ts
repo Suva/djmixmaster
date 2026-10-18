@@ -135,6 +135,7 @@ export class TemplateEditor {
     $('editor-add').addEventListener('click', (event) => {
       event.stopPropagation();
       if (!menu.hidden) return close();
+      this.#showTab('layers');
       search.value = '';
       fill();
       menu.hidden = false;
@@ -169,6 +170,7 @@ export class TemplateEditor {
     const command = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl+';
     $('editor-group').title = `Group (${command}G): put the selected layer in a group of its own`;
     $('editor-ungroup').title = `Ungroup (Shift+${command}G): take the layers out of this group, and the group away`;
+    $('editor-add').title = `Add a layer (Shift+${command}N), in front of the selected one`;
     $('editor-duplicate').title = `Duplicate (${command}J): a copy of the selected layer, in front of it`;
     $('editor-group').addEventListener('click', () => this.groupSelected());
     $('editor-ungroup').addEventListener('click', () => this.ungroupSelected());
@@ -622,6 +624,12 @@ export class TemplateEditor {
         at.siblings.splice(at.index, 1, ...children);
       }
     }, () => freed);
+  }
+
+  /** Opens the menu of kinds of layer, as the + button does, ready to search. */
+  openAddMenu() {
+    if (!this.#template || !$('editor-add-menu').hidden) return;
+    $('editor-add').click();
   }
 
   /** Removes the selected layer, as Delete or Backspace does while the editor is open, wherever the layer was selected. */

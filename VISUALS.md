@@ -294,7 +294,7 @@ values into the ones a frame gets. None draws anything yet.
 
 - **A template is JSON:** `format`, `name`, `fields` (each with a `key`, a
   label, a kind and a default) and `layers` (each a `type` and its
-  `params`). The layer types so far are the ★ ones above: gradient,
+  `params`). The layer types so far are the ★ ones above: solid, gradient,
   particles, image, text, spectrum, waveform and glow; and effects that
   change the picture beneath them: colour split (`split`: straight, or from
   the centre as a lens does), glitch (slices torn sideways with the colours
@@ -302,7 +302,11 @@ values into the ones a frame gets. None draws anything yet.
   brightness and contrast (`adjust`), hue and saturation (`hue`), blur, and
   a kaleidoscope (a slice round the layer's position repeated all the way
   round, filled from the picture mirrored past its edges so that no corner is
-  left black), and a LUT (see "LUTs, as built" below).
+  left black), a vignette (edges darkened towards a colour round the layer's
+  position, in an oval of the picture's shape or a circle; clear out to
+  `size` of the way to the corners, then eased in over `softness` of the
+  rest), and a LUT (see "LUTs, as built" below). A solid colour (`solid`)
+  fills the whole picture, with no place or size of its own.
 - **Groups** are layers of the kind `group` whose `size` says how many of the
   layers after it are theirs, so that the list stays flat and everything that
   knows a layer by its place in it (outlines on the picture, what a layer

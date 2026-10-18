@@ -1486,7 +1486,7 @@ test('layers grouped with ⌘G, moved into groups, duplicated with ⌘J, ungroup
     ['Background', 'Ring', 'Group 1[2]', 'Logo', 'Artist', 'Logo', 'Artist', 'Mix and time', 'Now playing', 'glow']);
 });
 
-test('the + menu fits the window, scrolls, and finds a kind of layer by typing', { skip }, async () => {
+test('the + menu opens with Shift+⌘N, fits the window, scrolls, and finds a kind of layer by typing', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
     page.click('view-video');
     page.choose('template', 'ring');
@@ -1500,7 +1500,8 @@ test('the + menu fits the window, scrolls, and finds a kind of layer by typing',
       const box = menu.getBoundingClientRect();
       return box.top >= 0 && box.bottom <= window.innerHeight;
     };
-    page.click('editor-add');
+    // Shift+⌘N opens it, as the + button does.
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyN', key: 'N', shiftKey: true, metaKey: true, ctrlKey: true, bubbles: true }));
     const opened = { fits: inside(), focused: document.activeElement === search, kinds: names().length };
     search.value = 'glit';
     search.dispatchEvent(new Event('input'));
@@ -1522,11 +1523,36 @@ test('the + menu fits the window, scrolls, and finds a kind of layer by typing',
     return { listHeight, opened, found, added, closed, short };
   });
   assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
-  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 16 });
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 18 });
   assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
   assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
   assert.ok(seen.closed);
   assert.deepEqual(seen.short, { fits: true, scrolls: true }, 'with little room either side, it fits and scrolls');
+});
+
+test('a solid colour fills the picture, and a vignette darkens its edges and not its middle', { skip }, async () => {
+  const file = join(work, 'Vignette.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Vignette',
+    fields: [],
+    layers: [
+      { type: 'solid', params: { colour: '#808080' } },
+      { type: 'vignette', params: { colour: '#000000', size: 30, softness: 60 } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Vignette', 'the template to be added');
+    await page.wait(500);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const at = (x: number, y: number) => picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), Math.floor(picture.height * y), 1, 1).data[0];
+    return { middle: at(0.5, 0.5), side: at(0.97, 0.5), corner: at(0.01, 0.01) };
+  });
+  assert.equal(seen.middle, 128, 'the middle is the solid colour, untouched');
+  assert.ok(seen.side < 110 && seen.side > seen.corner, `darker at the side: ${seen.side}`);
+  assert.ok(seen.corner < 15, `darkest in the corner: ${seen.corner}`);
 });
 
 test('an effect in a group replaces the group\'s layers, rather than leaving them showing through', { skip }, async () => {

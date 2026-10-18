@@ -1904,10 +1904,10 @@ window.addEventListener('keydown', (event) => {
   if (typingIn(event.target)) return;
   // While a dialog is up, the keys belong to it.
   if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open) return;
-  // While a template is edited, as in an image editor: ⌘J duplicates a layer, ⌘G groups it, Shift+⌘G ungroups.
-  if (videoView.editing && (event.metaKey || event.ctrlKey) && (event.code === 'KeyJ' || event.code === 'KeyG')) {
+  // While a template is edited, as in an image editor: Shift+⌘N adds a layer, ⌘J duplicates one, ⌘G groups it, Shift+⌘G ungroups.
+  if (videoView.editing && (event.metaKey || event.ctrlKey) && (event.code === 'KeyJ' || event.code === 'KeyG' || (event.code === 'KeyN' && event.shiftKey))) {
     event.preventDefault();
-    videoView.layerCommand(event.code === 'KeyJ' ? 'duplicate' : event.shiftKey ? 'ungroup' : 'group');
+    videoView.layerCommand(event.code === 'KeyN' ? 'add' : event.code === 'KeyJ' ? 'duplicate' : event.shiftKey ? 'ungroup' : 'group');
     return;
   }
   // While a template is edited, Delete is for its layers, wherever one was selected; never the mix.
@@ -2632,6 +2632,7 @@ const HELP: [string, [string, string][]][] = [
     ['End', 'Jump to just before its end'],
   ]],
   ['Editing a video template', [
+    [`Shift+${COMMAND}N`, 'Add a layer: type to find its kind, Return to add it'],
     ['Drag a layer up or down', 'Put it in front of or behind others'],
     [`${OPTION}+↑ ↓`, 'Move the selected layer forward or back'],
     ['Double-click a layer', 'Rename it'],

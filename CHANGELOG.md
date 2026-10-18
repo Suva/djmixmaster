@@ -19,6 +19,13 @@ are under "Not released yet" and appear there once they are.
   in the Video view choose the shape: landscape for YouTube, vertical for
   phones, square for feeds. Every template works in each, its title and its
   shapes keeping their size across the picture.
+- **Solid colour and vignette layers.** A solid colour fills the picture in
+  one colour, a quick background or a tint with a blend. A vignette darkens
+  the edges towards a colour of your choice, as an oval of the picture's
+  shape or a circle; move its centre on the picture.
+- **Shift+⌘N adds a layer** while you edit a template (Shift+Ctrl+N on
+  Windows and Linux): the list of layers opens with its search ready, so
+  type a few letters and press Return.
 - **Fields are dragged into order.** In the template editor's Fields tab,
   drag a field's card up or down to change the order fields are filled in.
   Click a card and press Delete to remove it. The name and the kind of a

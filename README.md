@@ -236,12 +236,13 @@ chosen is kept with the mix.
 You can also make templates of your own, in an editor beside the picture that
 shows every change as it is made:
 
-- **Layers** that draw (gradients, glitter, pictures, video clips, text, the
+- **Layers** that draw (solid colours, gradients, glitter, pictures, video clips, text, the
   spectrum, the waveform) and effects that change what is beneath them (glow, colour split,
-  glitch, kaleidoscope, blur, brightness and contrast, hue and saturation,
+  glitch, kaleidoscope, vignette, blur, brightness and contrast, hue and saturation,
   and a LUT, a look from a .cube file kept in the template),
   with blends as in an image editor, and **groups** to keep them together.
-  Layers can be moved and resized on the picture itself.
+  Shift+⌘N (Shift+Ctrl+N) adds a layer: type a few letters of its kind and
+  press Return. Layers can be moved and resized on the picture itself.
 - **Anything can follow the music**: pick what a setting moves with, such as
   the bass or the beat, and by how much; or write an expression, such as
   `100 + 8 * smooth(bass, 0.02, 0.4)`.

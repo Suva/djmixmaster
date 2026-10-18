@@ -257,6 +257,7 @@ export class FrameDrawer {
     into.globalCompositeOperation = burn ? 'source-over' : BLENDS[str(params, 'blend')] ?? 'source-over';
     switch (layer.type) {
       case 'group': into.drawImage(group!, 0, 0); break;
+      case 'solid': this.#solid(params); break;
       case 'gradient': this.#gradient(params, frame); break;
       case 'particles': this.#particles(params, frame); break;
       case 'image': this.#image(params, frame); break;
@@ -270,6 +271,7 @@ export class FrameDrawer {
       case 'adjust': this.#filtered(`brightness(${Math.max(0, num(params, 'brightness'))}%) contrast(${Math.max(0, num(params, 'contrast'))}%)`); break;
       case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
       case 'kaleidoscope': this.#kaleidoscope(params); break;
+      case 'vignette': this.#vignette(params); break;
       case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#unit); break;
       case 'lut': this.#lut(params, frame); break;
     }
@@ -361,6 +363,49 @@ export class FrameDrawer {
 
   // -------------------------------------------------------------------------
   // Layers
+
+  #solid(params: ResolvedParams) {
+    const c = col(params, 'colour');
+    if (!c) return;
+    const { width, height } = this.#canvas;
+    this.#ctx.fillStyle = hexOf(c);
+    this.#ctx.fillRect(0, 0, width, height);
+  }
+
+  /**
+   * Edges darkened towards a colour, round the layer's position: clear out to
+   * `size` of the way to the corners, then reaching the colour over `softness`
+   * of the rest. Fitting the picture, it is an oval of the picture's shape;
+   * round, a circle whatever the shape.
+   */
+  #vignette(params: ResolvedParams) {
+    const c = col(params, 'colour');
+    if (!c) return;
+    const ctx = this.#ctx;
+    const { width, height } = this.#canvas;
+    const cx = (num(params, 'x') / 100) * width;
+    const cy = (num(params, 'y') / 100) * height;
+    // Reaching the corners from the middle: half the sides times √2 for an oval, half the diagonal for a circle.
+    const round = str(params, 'form') === 'round';
+    const rx = round ? Math.hypot(width, height) / 2 : (width / 2) * Math.SQRT2;
+    const ry = round ? rx : (height / 2) * Math.SQRT2;
+    const inner = Math.min(1, Math.max(0, num(params, 'size') / 100));
+    const outer = inner + (1 - inner) * Math.min(1, Math.max(0, num(params, 'softness') / 100));
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    // Eased rather than straight, so that the clear middle gives way without a visible edge.
+    const steps = 8;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const at = outer > inner ? inner + (outer - inner) * t : inner;
+      gradient.addColorStop(Math.min(1, at), hexOf({ ...c, a: c.a * t * t * (3 - 2 * t) }));
+    }
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(rx, ry);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(-cx / rx, -cy / ry, width / rx, height / ry);
+    ctx.restore();
+  }
 
   #gradient(params: ResolvedParams, frame: Frame) {
     const ctx = this.#ctx;

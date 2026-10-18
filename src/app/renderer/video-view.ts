@@ -586,9 +586,10 @@ export class VideoView {
     this.#editor.deleteSelected();
   }
 
-  /** The editor's shortcuts: ⌘J duplicates the selected layer, ⌘G groups it, Shift+⌘G ungroups. */
-  layerCommand(command: 'duplicate' | 'group' | 'ungroup') {
-    if (command === 'duplicate') this.#editor.duplicateSelected();
+  /** The editor's shortcuts: Shift+⌘N adds a layer, ⌘J duplicates the selected layer, ⌘G groups it, Shift+⌘G ungroups. */
+  layerCommand(command: 'add' | 'duplicate' | 'group' | 'ungroup') {
+    if (command === 'add') this.#editor.openAddMenu();
+    else if (command === 'duplicate') this.#editor.duplicateSelected();
     else if (command === 'group') this.#editor.groupSelected();
     else this.#editor.ungroupSelected();
   }

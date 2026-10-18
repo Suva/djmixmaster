@@ -90,6 +90,14 @@ export interface LayerSpec {
 
 /** The kinds of layer, with the parameters of each besides the common ones. The first set; see VISUALS.md for more. */
 export const LAYER_TYPES: Record<string, LayerSpec> = {
+  solid: {
+    label: 'Solid colour',
+    // The whole picture in one colour: it has no place or size of its own.
+    params: {
+      colour: colour('Colour', '#101830'),
+    },
+    common: ['visible', 'opacity', 'blend', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
   gradient: {
     label: 'Gradient',
     params: {
@@ -284,6 +292,18 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       angle: number('Taken from', 0, 0, 360, '°'),
       mirrored: toggle('Mirrored', true),
     },
+  },
+  vignette: {
+    label: 'Vignette',
+    effect: true,
+    // Darkens the edges of the picture beneath, round the layer's position.
+    params: {
+      colour: colour('Colour', '#000000'),
+      size: number('Clear middle', 50, 0, 100, '%'),
+      softness: number('Softness', 100, 0, 100, '%'),
+      form: choice('Form', 'fits the picture', ['fits the picture', 'round']),
+    },
+    common: ['visible', 'opacity', 'blend', 'x', 'y', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
   blur: {
     label: 'Blur',
