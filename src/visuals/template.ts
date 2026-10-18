@@ -339,6 +339,19 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     },
     common: ['visible', 'opacity', 'blend', 'x', 'y', 'scale', 'rotation', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
+  trails: {
+    label: 'Trails',
+    effect: true,
+    // What was beneath in the frames before, fading behind what is there now: echoes of all that moves.
+    // Zoom and turn act on the past each frame, round the layer's position, so trails can stream outwards or spiral.
+    params: {
+      length: number('Fades over', 1, 0.05, 10, 's'),
+      mode: choice('Leaves behind', 'echo', ['echo', 'bright parts', 'dark parts']),
+      zoom: number('Zoom', 0, -100, 100, '%/s'),
+      turn: number('Turn', 0, -180, 180, '°/s'),
+    },
+    common: ['visible', 'opacity', 'blend', 'x', 'y', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
   vignette: {
     label: 'Vignette',
     effect: true,

@@ -309,8 +309,14 @@ values into the ones a frame gets. None draws anything yet.
   flipped as one, its middle at the layer's position; past its edges nothing,
   the picture repeated, mirrored, or its outermost pixels drawn out, as
   Resolve's Transform has it; its outline on the picture moves and sizes it,
-  but clicking the picture never picks it, as it covers everything), and a
-  LUT (see "LUTs, as built" below). A solid colour (`solid`)
+  but clicking the picture never picks it, as it covers everything), trails
+  (the frames before fading behind the picture: as an echo, or leaving only
+  the bright or the dark parts behind; the past zoomed and turned round the
+  layer's position each frame. Faded by time, not by frame, so the preview
+  and the export leave the same trails. The past is kept in the layer's
+  memory in half floats: in bytes, a faint trail faded by a few percent a
+  frame rounds back to what it was and never goes. Paused, or after a jump,
+  there is no past), and a LUT (see "LUTs, as built" below). A solid colour (`solid`)
   fills the whole picture, with no place or size of its own.
 - **Layer styles**: every layer that draws, and every group, has a drop
   shadow (`dropShadow`, its colour, opacity, the angle the light comes from,

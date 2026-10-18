@@ -238,7 +238,7 @@ shows every change as it is made:
 
 - **Layers** that draw (solid colours, gradients, glitter, pictures, video clips, text, the
   spectrum, the waveform) and effects that change what is beneath them (glow, colour split,
-  glitch, kaleidoscope, vignette, transform, blur, brightness and contrast, hue and saturation,
+  glitch, kaleidoscope, vignette, transform, trails, blur, brightness and contrast, hue and saturation,
   and a LUT, a look from a .cube file kept in the template),
   with blends as in an image editor, and **groups** to keep them together.
   Any layer that draws, or a group, can have a drop shadow, a stroke, an

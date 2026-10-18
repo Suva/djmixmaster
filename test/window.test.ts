@@ -1533,7 +1533,7 @@ test('the + menu opens with Shift+⌘N, fits the window, scrolls, and finds a ki
     return { listHeight, opened, found, added, closed, short };
   });
   assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
-  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 19 });
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 20 });
   assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
   assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
   assert.ok(seen.closed);
@@ -1694,6 +1694,55 @@ test('layer styles: a drop shadow falls away from the light, a stroke and an out
   const lit = innerGlow.blue;
   assert.ok(lit.n > 100 && inside(lit) && Math.abs(lit.x - block.x) < 0.01 && Math.abs(lit.y - block.y) < 0.02, `the inner glow: ${JSON.stringify(lit)}`);
   assert.ok(innerGlow.white.n > 0 && innerGlow.white.n < block.n, 'the middle of the block still shows');
+});
+
+test('trails leave what moves behind while playing, and nothing while paused', { skip }, async () => {
+  const file = join(work, 'Trails.djmtemplate');
+  // A word swinging from side to side; trails switched on by a field.
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Trails',
+    fields: [{ key: 'on', label: 'On', kind: 'number', default: 0, min: 0, max: 100 }],
+    layers: [
+      { type: 'solid', params: { colour: '#000000' } },
+      { type: 'text', params: { text: 'I', size: 20, colour: '#ffffff', x: '50 + 35 * sin(time * 8)' } },
+      { type: 'trails', params: { visible: 'on > 50', length: 2, mode: 'bright parts' } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Trails', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    /** The share of the picture that is lit. */
+    const lit = () => {
+      const data = picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
+      let n = 0;
+      for (let i = 0; i < data.length; i += 16) if (data[i] > 40) n++;
+      return n / (data.length / 16);
+    };
+    const on = async (value: number) => {
+      const control = page.element<HTMLInputElement>('field-on');
+      control.value = String(value);
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const playing = () => page.element('play').classList.contains('playing');
+    page.key('Space');
+    await page.until(playing, 'playback to start');
+    await page.wait(1500);
+    const without = lit();
+    await on(100);
+    await page.wait(1500);
+    const withTrails = lit();
+    page.key('Space');
+    await page.until(() => !playing(), 'playback to stop');
+    // Paused, a change draws the picture again, without its past.
+    await on(99);
+    await page.wait(300);
+    return { without, withTrails, paused: lit() };
+  });
+  assert.ok(seen.withTrails > seen.without * 3, `trails light up much more: ${seen.withTrails} against ${seen.without}`);
+  assert.ok(seen.paused < seen.without * 1.5, `paused, only the word: ${seen.paused} against ${seen.without}`);
 });
 
 test('an effect in a group replaces the group\'s layers, rather than leaving them showing through', { skip }, async () => {

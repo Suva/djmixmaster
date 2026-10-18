@@ -19,6 +19,11 @@ are under "Not released yet" and appear there once they are.
   in the Video view choose the shape: landscape for YouTube, vertical for
   phones, square for feeds. Every template works in each, its title and its
   shapes keeping their size across the picture.
+- **Trails.** A trails layer leaves what moves beneath it behind, fading
+  over as long as you choose: as an echo, or only the bright parts (light
+  trails on a dark picture) or the dark ones. Zoom and turn the trail to
+  make it stream outwards or spiral. Trails show while the music plays; when
+  paused, the picture is shown as it is.
 - **Layer styles: drop shadow, stroke, outer glow, inner shadow and inner
   glow.** Any layer that draws, or a group, can have them, as in an image
   editor: open one in its settings and switch it on. A dot beside the

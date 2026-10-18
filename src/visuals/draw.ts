@@ -107,6 +107,9 @@ interface Memory {
   previous?: string;
   /** How far the change from `previous` to `shown` has got, 0 to 1. */
   changing?: number;
+  /** A trails layer's picture of the frames before, and a canvas to move it on with; both in half floats. */
+  trail?: OffscreenCanvas;
+  past?: OffscreenCanvas;
 }
 
 /** The switches of a layer's styles: any of them on, and the layer is drawn on its own. */
@@ -279,6 +282,7 @@ export class FrameDrawer {
       case 'kaleidoscope': this.#kaleidoscope(params); break;
       case 'vignette': this.#vignette(params); break;
       case 'transform': this.#transform(params); break;
+      case 'trails': this.#trails(params, frame, memory); break;
       case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#unit); break;
       case 'lut': this.#lut(params, frame); break;
     }
@@ -1376,6 +1380,79 @@ export class FrameDrawer {
     // An outline to move, turn and size it by on the picture: the picture's own edges, where they went.
     this.#record(params, -width / 2, -height / 2, width, height);
     this.#putBack(result);
+  }
+
+  /**
+   * The picture beneath with the frames before it fading behind: as an echo
+   * (the past mixed in), or leaving only its bright parts or its dark parts
+   * behind. The past is zoomed and turned round the layer's position each
+   * frame, by time rather than by frame, so the preview and the export, at
+   * different frame rates, leave the same trails. Paused, or after a jump,
+   * there is no past: the picture is shown as it is, edits and all.
+   */
+  #trails(params: ResolvedParams, frame: Frame, memory: Memory) {
+    const { width, height } = this.#canvas;
+    const copy = this.#copyOfPicture();
+    let trail = memory.trail;
+    const fresh = !trail || trail.width !== width || trail.height !== height;
+    // In half floats: in bytes, a faint trail faded by a few percent a frame rounds back to what it was, and never goes.
+    if (fresh) [trail, memory.past] = [new OffscreenCanvas(width, height), new OffscreenCanvas(width, height)];
+    memory.trail = trail;
+    const t = trail!.getContext('2d', { colorType: 'float16' })!;
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    t.globalAlpha = 1;
+    t.filter = 'none';
+    const dt = frame.dt;
+    if (fresh || dt <= 0 || dt > 1) {
+      t.globalCompositeOperation = 'copy';
+      t.drawImage(copy, 0, 0);
+      t.globalCompositeOperation = 'source-over';
+      return this.#putBack(trail!);
+    }
+    // After `length` seconds, a twentieth of a frame is left.
+    const keep = Math.exp((-3 * dt) / Math.max(0.01, num(params, 'length')));
+    // The past moved on: zoomed and turned round the layer's position, by as much as this frame's share of a second.
+    const past = memory.past!;
+    const p = past.getContext('2d', { colorType: 'float16' })!;
+    const cx = (num(params, 'x') / 100) * width;
+    const cy = (num(params, 'y') / 100) * height;
+    const zoom = Math.pow(Math.max(0.01, 1 + num(params, 'zoom') / 100), dt);
+    p.setTransform(1, 0, 0, 1, 0, 0);
+    p.globalAlpha = 1;
+    p.filter = 'none';
+    p.globalCompositeOperation = 'copy';
+    p.translate(cx, cy);
+    p.rotate((num(params, 'turn') * dt * Math.PI) / 180);
+    p.scale(zoom, zoom);
+    p.translate(-cx, -cy);
+    p.drawImage(trail!, 0, 0);
+    p.setTransform(1, 0, 0, 1, 0, 0);
+    const mode = str(params, 'mode');
+    if (mode === 'echo') {
+      // Now, with the past laid over it at what is left of it.
+      t.globalCompositeOperation = 'copy';
+      t.drawImage(copy, 0, 0);
+      t.globalCompositeOperation = 'source-over';
+      t.globalAlpha = keep;
+      t.drawImage(past, 0, 0);
+    } else {
+      // The past faded towards black (or white), then whichever is brighter (or darker) of it and now, pixel by pixel.
+      const bright = mode === 'bright parts';
+      p.globalCompositeOperation = 'destination-over';
+      p.fillStyle = bright ? '#000000' : '#ffffff';
+      p.fillRect(0, 0, width, height);
+      p.globalCompositeOperation = 'source-over';
+      p.globalAlpha = 1 - keep;
+      p.fillRect(0, 0, width, height);
+      p.globalAlpha = 1;
+      t.globalCompositeOperation = 'copy';
+      t.drawImage(copy, 0, 0);
+      t.globalCompositeOperation = bright ? 'lighten' : 'darken';
+      t.drawImage(past, 0, 0);
+    }
+    t.globalAlpha = 1;
+    t.globalCompositeOperation = 'source-over';
+    this.#putBack(trail!);
   }
 
   /** The picture and its mirror images, two by two: repeated, it goes on mirrored without end, with no seams. */
