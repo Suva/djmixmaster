@@ -1533,7 +1533,7 @@ test('the + menu opens with Shift+⌘N, fits the window, scrolls, and finds a ki
     return { listHeight, opened, found, added, closed, short };
   });
   assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
-  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 18 });
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 19 });
   assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
   assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
   assert.ok(seen.closed);
@@ -1563,6 +1563,137 @@ test('a solid colour fills the picture, and a vignette darkens its edges and not
   assert.equal(seen.middle, 128, 'the middle is the solid colour, untouched');
   assert.ok(seen.side < 110 && seen.side > seen.corner, `darker at the side: ${seen.side}`);
   assert.ok(seen.corner < 15, `darkest in the corner: ${seen.corner}`);
+});
+
+test('a transform moves, sizes and flips the picture beneath, with nothing, repeats, mirror images or drawn-out edges past it', { skip }, async () => {
+  const file = join(work, 'Transform.djmtemplate');
+  // White at the left to black at the right, made half as big round the middle; what is past its edges is chosen by a field.
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Transform',
+    fields: [
+      { key: 'edges', label: 'Edges', kind: 'choice', default: 'none', choices: ['none', 'repeat', 'mirror', 'extend'] },
+      { key: 'flip', label: 'Flip', kind: 'number', default: 0, min: 0, max: 1 },
+    ],
+    layers: [
+      { type: 'gradient', params: { colour1: '#ffffff', colour2: '#000000', angle: 0 } },
+      { type: 'transform', params: { scale: 50, edges: '%edges%', flipX: 'flip' } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Transform', 'the template to be added');
+    await page.wait(500);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const at = (x: number) => picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), Math.floor(picture.height / 2), 1, 1).data[0];
+    const set = async (key: string, value: string) => {
+      const control = page.element<HTMLInputElement>(`field-${key}`);
+      control.value = value;
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+      await page.wait(300);
+    };
+    const levels: Record<string, number> = {};
+    for (const edges of ['none', 'repeat', 'mirror', 'extend']) {
+      await set('edges', edges);
+      levels[edges] = at(0.02);
+    }
+    await set('edges', 'none');
+    const unflipped = at(0.35);
+    await set('flip', '1');
+    return { levels, unflipped, flipped: at(0.35) };
+  });
+  const { none, repeat, mirror, extend } = seen.levels;
+  assert.ok(none < 5, `nothing past the edges is black: ${none}`);
+  assert.ok(extend > 200, `drawn out, the white left edge goes on: ${extend}`);
+  // Just left of the half-size picture: repeated, the picture's right of middle (darker); mirrored, its left of middle.
+  assert.ok(repeat > 60 && repeat < mirror && mirror < 200, `repeat ${repeat}, mirror ${mirror}`);
+  assert.ok(seen.unflipped > 150 && seen.flipped < 100, `flipped across: ${seen.unflipped} then ${seen.flipped}`);
+});
+
+test('layer styles: a drop shadow falls away from the light, a stroke and an outer glow go all round, an inner shadow and an inner glow stay inside', { skip }, async () => {
+  const file = join(work, 'Styles.djmtemplate');
+  // A white block in the middle, each style switched on by a field, each in a colour of its own to be found by.
+  await writeFile(file, JSON.stringify({
+    format: 1,
+    name: 'Styles',
+    fields: [
+      // 0 none, 1 the shadow, 2 the stroke, 3 the glow, 4 the inner shadow, 5 the inner glow; up to 100 so that the slider's steps are whole.
+      { key: 'style', label: 'Style', kind: 'number', default: 0, min: 0, max: 100 },
+    ],
+    layers: [
+      { type: 'solid', params: { colour: '#000000' } },
+      {
+        type: 'text',
+        params: {
+          text: 'I', size: 10, colour: '#ffffff', boxColour: '#ffffff', boxPadding: 3,
+          dropShadow: 'style == 1', dropColour: '#00ff00', dropOpacity: 100, dropDistance: 3, dropSize: 0, dropAngle: 135,
+          stroke: 'style == 2', strokeColour: '#ff0000', strokeWidth: 1,
+          outerGlow: 'style == 3', glowColour: '#0000ff', glowSize: 3, glowSpread: 50,
+          innerShadow: 'style == 4', innerShadowColour: '#00ff00', innerShadowOpacity: 100, innerShadowDistance: 1, innerShadowSize: 0, innerShadowAngle: 135,
+          innerGlow: 'style == 5', innerGlowColour: '#0000ff', innerGlowOpacity: 100, innerGlowSize: 1, innerGlowChoke: 50,
+        },
+      },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Styles', 'the template to be added');
+    await page.wait(500);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    /** Where each colour is: how many pixels, and the middle of them, in parts of the picture. */
+    const find = () => {
+      const { width, height } = picture;
+      const data = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
+      const found: Record<string, { n: number; x: number; y: number; left: number; right: number }> = {};
+      for (const name of ['white', 'red', 'green', 'blue']) found[name] = { n: 0, x: 0, y: 0, left: 1, right: 0 };
+      for (let i = 0; i < data.length; i += 4) {
+        const [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+        const name = r > 200 && g > 200 && b > 200 ? 'white' : r > 200 && g < 60 && b < 60 ? 'red' : g > 200 && r < 60 && b < 60 ? 'green' : b > 120 && r < 60 && g < 60 ? 'blue' : '';
+        if (!name) continue;
+        const x = ((i / 4) % width) / width;
+        const y = Math.floor(i / 4 / width) / height;
+        const f = found[name];
+        f.n++;
+        f.x += x;
+        f.y += y;
+        f.left = Math.min(f.left, x);
+        f.right = Math.max(f.right, x);
+      }
+      for (const f of Object.values(found)) if (f.n) [f.x, f.y] = [f.x / f.n, f.y / f.n];
+      return found;
+    };
+    const results: Record<string, ReturnType<typeof find>> = {};
+    for (const [n, style] of ['none', 'shadow', 'stroke', 'glow', 'innerShadow', 'innerGlow'].entries()) {
+      const control = page.element<HTMLInputElement>('field-style');
+      control.value = String(n);
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      await page.wait(300);
+      results[style] = find();
+    }
+    return results;
+  });
+  const { none, shadow, stroke, glow, innerShadow, innerGlow } = seen;
+  assert.ok(none.white.n > 1000 && !none.red.n && !none.green.n && !none.blue.n, 'without a style, the block alone');
+  // Light from 135°, up and to the left: the shadow falls down and to the right.
+  assert.ok(shadow.green.n > 100 && shadow.green.x > shadow.white.x && shadow.green.y > shadow.white.y, `the shadow: ${JSON.stringify(shadow.green)}`);
+  assert.ok(Math.abs(shadow.white.n - none.white.n) < none.white.n * 0.02, 'the layer is drawn over its shadow');
+  // All round: past the block on both sides, centred on it.
+  for (const [name, found, colour] of [['stroke', stroke, 'red'], ['glow', glow, 'blue']] as const) {
+    const ring = found[colour];
+    assert.ok(ring.n > 100 && ring.left < found.white.left && ring.right > found.white.right, `the ${name} goes round: ${JSON.stringify(ring)}`);
+    assert.ok(Math.abs(ring.x - found.white.x) < 0.01 && Math.abs(ring.y - found.white.y) < 0.02, `the ${name} is centred on the layer`);
+  }
+  // Inside the block: the inner shadow along the edges nearest the light, up and to the left; the inner glow along all of them.
+  const block = none.white;
+  const inside = (f: { left: number; right: number }) => f.left >= block.left - 0.002 && f.right <= block.right + 0.002;
+  const shade = innerShadow.green;
+  assert.ok(shade.n > 100 && inside(shade) && shade.x < block.x && shade.y < block.y, `the inner shadow: ${JSON.stringify(shade)}`);
+  const lit = innerGlow.blue;
+  assert.ok(lit.n > 100 && inside(lit) && Math.abs(lit.x - block.x) < 0.01 && Math.abs(lit.y - block.y) < 0.02, `the inner glow: ${JSON.stringify(lit)}`);
+  assert.ok(innerGlow.white.n > 0 && innerGlow.white.n < block.n, 'the middle of the block still shows');
 });
 
 test('an effect in a group replaces the group\'s layers, rather than leaving them showing through', { skip }, async () => {

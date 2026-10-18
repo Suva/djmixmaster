@@ -238,9 +238,12 @@ shows every change as it is made:
 
 - **Layers** that draw (solid colours, gradients, glitter, pictures, video clips, text, the
   spectrum, the waveform) and effects that change what is beneath them (glow, colour split,
-  glitch, kaleidoscope, vignette, blur, brightness and contrast, hue and saturation,
+  glitch, kaleidoscope, vignette, transform, blur, brightness and contrast, hue and saturation,
   and a LUT, a look from a .cube file kept in the template),
   with blends as in an image editor, and **groups** to keep them together.
+  Any layer that draws, or a group, can have a drop shadow, a stroke, an
+  outer glow, an inner shadow and an inner glow, as layer styles in an image
+  editor.
   Shift+⌘N (Shift+Ctrl+N) adds a layer: type a few letters of its kind and
   press Return. Layers can be moved and resized on the picture itself.
 - **Anything can follow the music**: pick what a setting moves with, such as

@@ -79,6 +79,40 @@ export const COMMON_PARAMS: Record<string, ParamSpec> = {
   fadeOut: number('Fade out', 0, 0, 30, 's'),
 };
 
+/**
+ * Layer styles, as an image editor has them: made from the shape of what a
+ * layer draws, and put beneath it. Every layer that draws has them, and
+ * groups; effects do not. Sizes are in percent of the picture's short side.
+ */
+export const STYLE_PARAMS: Record<string, ParamSpec> = {
+  dropShadow: toggle('Drop shadow', false),
+  dropColour: colour('Colour', '#000000'),
+  dropOpacity: number('Opacity', 60, 0, 100, '%'),
+  dropAngle: number('Light from', 120, 0, 360, '°'),
+  dropDistance: number('Distance', 0.8, 0, 10, '%'),
+  dropSize: number('Softness', 1, 0, 10, '%'),
+  stroke: toggle('Stroke', false),
+  strokeColour: colour('Colour', '#ffffff'),
+  strokeOpacity: number('Opacity', 100, 0, 100, '%'),
+  strokeWidth: number('Width', 0.3, 0, 5, '%'),
+  outerGlow: toggle('Outer glow', false),
+  glowColour: colour('Colour', '#fff2b0'),
+  glowOpacity: number('Opacity', 75, 0, 100, '%'),
+  glowSize: number('Size', 2, 0, 10, '%'),
+  glowSpread: number('Spread', 0, 0, 100, '%'),
+  innerShadow: toggle('Inner shadow', false),
+  innerShadowColour: colour('Colour', '#000000'),
+  innerShadowOpacity: number('Opacity', 60, 0, 100, '%'),
+  innerShadowAngle: number('Light from', 120, 0, 360, '°'),
+  innerShadowDistance: number('Distance', 0.5, 0, 10, '%'),
+  innerShadowSize: number('Softness', 1, 0, 10, '%'),
+  innerGlow: toggle('Inner glow', false),
+  innerGlowColour: colour('Colour', '#fff2b0'),
+  innerGlowOpacity: number('Opacity', 75, 0, 100, '%'),
+  innerGlowSize: number('Size', 2, 0, 10, '%'),
+  innerGlowChoke: number('Choke', 0, 0, 100, '%'),
+};
+
 export interface LayerSpec {
   label: string;
   /** Layers that change what is beneath them instead of drawing their own picture. */
@@ -293,6 +327,18 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       mirrored: toggle('Mirrored', true),
     },
   },
+  transform: {
+    label: 'Transform',
+    effect: true,
+    // Moves, turns and sizes the whole picture beneath, as one: its middle goes to the layer's position.
+    // What shows past the picture's edges, as an editor's Transform has it: nothing, the picture again, mirrored, or its edges drawn out.
+    params: {
+      edges: choice('Past the edges', 'none', ['none', 'repeat', 'mirror', 'extend']),
+      flipX: toggle('Flip across', false),
+      flipY: toggle('Flip down', false),
+    },
+    common: ['visible', 'opacity', 'blend', 'x', 'y', 'scale', 'rotation', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
   vignette: {
     label: 'Vignette',
     effect: true,
@@ -325,11 +371,11 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
 
 /**
  * Every setting a layer of this kind has: those every layer has that apply to
- * it, then its own.
+ * it, its styles if it draws, then its own.
  */
 export function settingsOf(spec: LayerSpec): Record<string, ParamSpec> {
   const common = spec.common ? Object.fromEntries(spec.common.map((key) => [key, COMMON_PARAMS[key]])) : COMMON_PARAMS;
-  return { ...common, ...spec.params };
+  return { ...common, ...(spec.effect ? {} : STYLE_PARAMS), ...spec.params };
 }
 
 /**

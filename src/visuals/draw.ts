@@ -11,7 +11,7 @@ import { fromHsl, mixColours, parseHex, turnHue, type Colour } from './colour.ts
 import { BAND_COUNT, HIGHEST_HZ, LOWEST_HZ } from '../features.ts';
 import type { Values } from './expression.ts';
 import { fontStack } from './fonts.ts';
-import { hexOf, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
+import { hexOf, LAYER_TYPES, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
 import type { ClipTiming, Playback } from './clip.ts';
 import { applyLut, type Lut } from './lut.ts';
 
@@ -108,6 +108,9 @@ interface Memory {
   /** How far the change from `previous` to `shown` has got, 0 to 1. */
   changing?: number;
 }
+
+/** The switches of a layer's styles: any of them on, and the layer is drawn on its own. */
+const STYLES = ['dropShadow', 'outerGlow', 'stroke', 'innerShadow', 'innerGlow'];
 
 /** The canvas's own way of blending, for each blend a template can name; linear burn it has not, and is done by hand. */
 const BLENDS: Record<string, GlobalCompositeOperation> = {
@@ -248,13 +251,16 @@ export class FrameDrawer {
     this.#index = index;
     // Linear burn, which the canvas has not: the layer is drawn on its own, then burnt in.
     const burn = str(params, 'blend') === 'linear burn';
+    // A layer with a style (a shadow, a stroke, a glow) is drawn on its own too, the style made from its shape.
+    const styled = !LAYER_TYPES[layer.type]?.effect && STYLES.some((key) => params[key] === true);
+    const alone = burn || styled;
     const [beneath, onto] = [this.#surface, this.#ctx];
-    if (burn) this.#ctx = this.#layerCanvas();
+    if (alone) this.#ctx = this.#layerCanvas();
     const into = this.#ctx;
     into.save();
-    // A burnt layer is drawn whole, and mixed in at its opacity once burnt.
-    into.globalAlpha = burn ? 1 : Math.min(1, opacity);
-    into.globalCompositeOperation = burn ? 'source-over' : BLENDS[str(params, 'blend')] ?? 'source-over';
+    // A layer drawn on its own is drawn whole, and mixed in at its opacity after.
+    into.globalAlpha = alone ? 1 : Math.min(1, opacity);
+    into.globalCompositeOperation = alone ? 'source-over' : BLENDS[str(params, 'blend')] ?? 'source-over';
     switch (layer.type) {
       case 'group': into.drawImage(group!, 0, 0); break;
       case 'solid': this.#solid(params); break;
@@ -272,14 +278,191 @@ export class FrameDrawer {
       case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
       case 'kaleidoscope': this.#kaleidoscope(params); break;
       case 'vignette': this.#vignette(params); break;
+      case 'transform': this.#transform(params); break;
       case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#unit); break;
       case 'lut': this.#lut(params, frame); break;
     }
     into.restore();
-    if (burn) {
-      this.#ctx = onto;
-      this.#linearBurn(Math.min(1, opacity), beneath, onto);
+    if (!alone) return;
+    this.#ctx = onto;
+    if (styled) this.#style(params);
+    if (burn) return this.#linearBurn(Math.min(1, opacity), beneath, onto);
+    onto.save();
+    onto.setTransform(1, 0, 0, 1, 0, 0);
+    onto.globalAlpha = Math.min(1, opacity);
+    onto.globalCompositeOperation = BLENDS[str(params, 'blend')] ?? 'source-over';
+    onto.filter = 'none';
+    onto.drawImage(this.#extraCanvas(6), 0, 0);
+    onto.restore();
+  }
+
+  // -------------------------------------------------------------------------
+  // Layer styles
+
+  /**
+   * Puts a layer's styles round what it drew on its own canvas (the 6th),
+   * as an image editor does, all made from its shape: beneath it a drop
+   * shadow, then an outer glow, then a stroke round the outside; over it,
+   * inside its shape, an inner shadow, then an inner glow. Sizes are in
+   * percent of the picture's short side, as everywhere.
+   */
+  #style(params: ResolvedParams) {
+    const { width, height } = this.#canvas;
+    const content = this.#extraCanvas(6);
+    const out = this.#extraCanvas(9);
+    const o = out.getContext('2d')!;
+    o.setTransform(1, 0, 0, 1, 0, 0);
+    o.globalAlpha = 1;
+    o.globalCompositeOperation = 'source-over';
+    o.filter = 'none';
+    o.clearRect(0, 0, width, height);
+    const px = (key: string) => (Math.max(0, num(params, key)) / 100) * this.#unit;
+    const amount = (key: string) => Math.min(1, Math.max(0, num(params, key) / 100));
+    /** Draws a shape onto the result, blurred so that `soft` is about how far it fades out. */
+    const lay = (shape: OffscreenCanvas, alpha: number, soft: number, dx = 0, dy = 0) => {
+      o.globalAlpha = alpha;
+      o.filter = soft > 0 ? `blur(${soft / 2}px)` : 'none';
+      o.drawImage(shape, dx, dy);
+      o.filter = 'none';
+      o.globalAlpha = 1;
+    };
+    if (params.dropShadow === true) {
+      const shape = this.#silhouette(content, col(params, 'dropColour'));
+      // The angle is where the light comes from, as in an image editor: the shadow falls the other way.
+      const angle = (num(params, 'dropAngle') * Math.PI) / 180;
+      const distance = px('dropDistance');
+      if (shape) lay(shape, amount('dropOpacity'), px('dropSize'), -Math.cos(angle) * distance, Math.sin(angle) * distance);
     }
+    if (params.outerGlow === true) {
+      const shape = this.#silhouette(content, col(params, 'glowColour'));
+      // Spread makes that much of the glow's size solid before it fades.
+      const size = px('glowSize');
+      const spread = amount('glowSpread');
+      if (shape) lay(this.#dilate(shape, size * spread), amount('glowOpacity'), size * (1 - spread));
+    }
+    if (params.stroke === true) {
+      const shape = this.#silhouette(content, col(params, 'strokeColour'));
+      if (shape) lay(this.#dilate(shape, px('strokeWidth')), amount('strokeOpacity'), 0);
+    }
+    o.drawImage(content, 0, 0);
+    if (params.innerShadow === true) {
+      const angle = (num(params, 'innerShadowAngle') * Math.PI) / 180;
+      const distance = px('innerShadowDistance');
+      this.#inner(o, content, col(params, 'innerShadowColour'), amount('innerShadowOpacity'), px('innerShadowSize'), 0, -Math.cos(angle) * distance, Math.sin(angle) * distance);
+    }
+    if (params.innerGlow === true) {
+      // Choke makes that much of the glow's size solid before it fades, as spread does outside.
+      const size = px('innerGlowSize');
+      const choke = amount('innerGlowChoke');
+      this.#inner(o, content, col(params, 'innerGlowColour'), amount('innerGlowOpacity'), size * (1 - choke), size * choke, 0, 0);
+    }
+    // Back where the layer is taken from, to be mixed in as it would have been without a style.
+    const c = content.getContext('2d')!;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'copy';
+    c.filter = 'none';
+    c.drawImage(out, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * A style inside the shape on `content`, laid over it on `onto`: what is
+   * outside the shape, in one colour, grown inwards by `grow`, moved, blurred
+   * by `soft`, and cut to the shape. An inner shadow is moved; an inner glow
+   * is not, and comes in from every edge.
+   */
+  #inner(onto: OffscreenCanvasRenderingContext2D, content: OffscreenCanvas, colour: Colour | null, alpha: number, soft: number, grow: number, dx: number, dy: number) {
+    if (!colour || alpha <= 0) return;
+    const { width, height } = this.#canvas;
+    const outside = this.#extraCanvas(10);
+    const s = outside.getContext('2d')!;
+    s.setTransform(1, 0, 0, 1, 0, 0);
+    s.globalAlpha = 1;
+    s.filter = 'none';
+    s.globalCompositeOperation = 'copy';
+    s.fillStyle = hexOf(colour);
+    s.fillRect(0, 0, width, height);
+    s.globalCompositeOperation = 'destination-out';
+    s.drawImage(content, 0, 0);
+    s.globalCompositeOperation = 'source-over';
+    const grown = this.#dilate(outside, grow);
+    const cut = this.#extraCanvas(13);
+    const c = cut.getContext('2d')!;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1;
+    c.filter = 'none';
+    // Past the picture's edges is not outside the shape: a shape running off the picture has no inner edge there.
+    c.clearRect(0, 0, width, height);
+    c.globalCompositeOperation = 'source-over';
+    c.filter = soft > 0 ? `blur(${soft / 2}px)` : 'none';
+    c.drawImage(grown, dx, dy);
+    c.filter = 'none';
+    c.globalCompositeOperation = 'destination-in';
+    c.drawImage(content, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+    onto.globalAlpha = alpha;
+    onto.drawImage(cut, 0, 0);
+    onto.globalAlpha = 1;
+  }
+
+  /** The shape of what is on `source`, in one colour, on the 10th canvas; null for no colour. */
+  #silhouette(source: OffscreenCanvas, colour: Colour | null): OffscreenCanvas | null {
+    if (!colour) return null;
+    const shape = this.#extraCanvas(10);
+    const s = shape.getContext('2d')!;
+    s.setTransform(1, 0, 0, 1, 0, 0);
+    s.globalAlpha = 1;
+    s.filter = 'none';
+    s.globalCompositeOperation = 'copy';
+    s.drawImage(source, 0, 0);
+    s.globalCompositeOperation = 'source-in';
+    s.fillStyle = hexOf(colour);
+    s.fillRect(0, 0, s.canvas.width, s.canvas.height);
+    s.globalCompositeOperation = 'source-over';
+    return shape;
+  }
+
+  /**
+   * A shape grown by `radius` pixels all round. A canvas cannot do it in one
+   * go, so the shape is moved along four directions, across and down, then
+   * the two diagonals, and laid over itself each time; that grows it into an
+   * octagon, near enough to a circle. Each direction takes doublings (1, 2,
+   * 4… pixels), so a thick stroke costs a few draws more than a thin one.
+   */
+  #dilate(source: OffscreenCanvas, radius: number): OffscreenCanvas {
+    if (radius < 0.5) return source;
+    // A square of half side a and a diamond reaching b, with a + b = radius along the sides and along the diagonals.
+    const a = radius * (Math.SQRT2 - 1);
+    const half = (radius - a) / 2;
+    const buffers = [this.#extraCanvas(11), this.#extraCanvas(12)];
+    let current = source;
+    let n = 0;
+    const onto = (from: OffscreenCanvas, dx: number, dy: number, first: boolean) => {
+      const target = buffers[n++ % 2];
+      const t = target.getContext('2d')!;
+      t.setTransform(1, 0, 0, 1, 0, 0);
+      t.globalAlpha = 1;
+      t.filter = 'none';
+      t.globalCompositeOperation = 'copy';
+      t.drawImage(from, first ? dx : 0, first ? dy : 0);
+      if (!first) {
+        t.globalCompositeOperation = 'source-over';
+        t.drawImage(from, dx, dy);
+      }
+      return target;
+    };
+    for (const [ux, uy, reach] of [[1, 0, a], [0, 1, a], [1, 1, half], [1, -1, half]]) {
+      if (reach < 0.25) continue;
+      // Every move from -reach to reach along (ux, uy): moved back to the start, then covered forwards in doublings.
+      current = onto(current, -reach * ux, -reach * uy, true);
+      for (let covered = 0; covered < reach * 2;) {
+        const step = Math.min(covered + 1, reach * 2 - covered);
+        current = onto(current, step * ux, step * uy, false);
+        covered += step;
+      }
+    }
+    return current;
   }
 
   /** How deep in groups the drawing is; each depth has its own canvas. */
@@ -1112,17 +1295,7 @@ export class FrameDrawer {
     r.clearRect(0, 0, width, height);
     // The picture mirrored past its edges, without end: a slice reaching further than the picture does
     // goes on into its reflection rather than into black.
-    const tile = this.#extraCanvas(5, width * 2, height * 2);
-    const t = tile.getContext('2d')!;
-    t.globalAlpha = 1;
-    t.globalCompositeOperation = 'copy';
-    for (const [fx, fy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-      t.setTransform(fx, 0, 0, fy, fx < 0 ? width * 2 : 0, fy < 0 ? height * 2 : 0);
-      t.drawImage(copy, 0, 0);
-      t.globalCompositeOperation = 'source-over';
-    }
-    t.setTransform(1, 0, 0, 1, 0, 0);
-    const pattern = r.createPattern(tile, 'repeat')!;
+    const pattern = r.createPattern(this.#mirrorTile(copy), 'repeat')!;
     for (let i = 0; i < segments; i++) {
       r.save();
       r.translate(cx, cy);
@@ -1143,6 +1316,82 @@ export class FrameDrawer {
       r.restore();
     }
     this.#putBack(result);
+  }
+
+  /**
+   * The picture beneath moved to the layer's position, turned, sized and
+   * flipped. Past its edges: nothing (black, or see-through in a group), the
+   * picture repeated, the picture mirrored so that each copy meets the next
+   * without a seam, or its outermost pixels drawn out.
+   */
+  #transform(params: ResolvedParams) {
+    const { width, height } = this.#canvas;
+    const copy = this.#copyOfPicture();
+    const result = this.#extraCanvas(0);
+    const r = result.getContext('2d')!;
+    const zoom = Math.max(0.01, num(params, 'scale') / 100);
+    const where = new DOMMatrix()
+      .translate((num(params, 'x') / 100) * width, (num(params, 'y') / 100) * height)
+      .rotate(num(params, 'rotation'))
+      .scale(params.flipX === true ? -zoom : zoom, params.flipY === true ? -zoom : zoom)
+      .translate(-width / 2, -height / 2);
+    // The part of the picture's own space that lands in the frame: its corners taken back through the move.
+    const back = where.inverse();
+    const corners = [[0, 0], [width, 0], [0, height], [width, height]].map(([x, y]) => back.transformPoint({ x, y }));
+    const left = Math.floor(Math.min(...corners.map((c) => c.x))) - 1;
+    const top = Math.floor(Math.min(...corners.map((c) => c.y))) - 1;
+    const right = Math.ceil(Math.max(...corners.map((c) => c.x))) + 1;
+    const bottom = Math.ceil(Math.max(...corners.map((c) => c.y))) + 1;
+
+    r.setTransform(1, 0, 0, 1, 0, 0);
+    r.globalAlpha = 1;
+    r.globalCompositeOperation = 'source-over';
+    r.filter = 'none';
+    r.clearRect(0, 0, width, height);
+    // Outside a group nothing past the edges is black, as the picture starts; inside one, see-through.
+    if (this.#depth === 0) {
+      r.fillStyle = '#000000';
+      r.fillRect(0, 0, width, height);
+    }
+    r.setTransform(where);
+    const edges = str(params, 'edges');
+    if (edges === 'repeat' || edges === 'mirror') {
+      r.fillStyle = r.createPattern(edges === 'mirror' ? this.#mirrorTile(copy) : copy, 'repeat')!;
+      r.fillRect(left, top, right - left, bottom - top);
+    } else if (edges === 'extend') {
+      // The edge rows and columns stretched out to the frame's reach, the corner pixels into the corners.
+      const [x0, y0, x1, y1] = [Math.min(0, left), Math.min(0, top), Math.max(width, right), Math.max(height, bottom)];
+      const parts: [number, number, number, number, number, number, number, number][] = [
+        [0, 0, width, height, 0, 0, width, height],
+        [0, 0, 1, height, x0, 0, -x0, height], [width - 1, 0, 1, height, width, 0, x1 - width, height],
+        [0, 0, width, 1, 0, y0, width, -y0], [0, height - 1, width, 1, 0, height, width, y1 - height],
+        [0, 0, 1, 1, x0, y0, -x0, -y0], [width - 1, 0, 1, 1, width, y0, x1 - width, -y0],
+        [0, height - 1, 1, 1, x0, height, -x0, y1 - height], [width - 1, height - 1, 1, 1, width, height, x1 - width, y1 - height],
+      ];
+      for (const [sx, sy, sw, sh, dx, dy, dw, dh] of parts) if (dw > 0 && dh > 0) r.drawImage(copy, sx, sy, sw, sh, dx, dy, dw, dh);
+    } else {
+      r.drawImage(copy, 0, 0);
+    }
+    r.setTransform(1, 0, 0, 1, 0, 0);
+    // An outline to move, turn and size it by on the picture: the picture's own edges, where they went.
+    this.#record(params, -width / 2, -height / 2, width, height);
+    this.#putBack(result);
+  }
+
+  /** The picture and its mirror images, two by two: repeated, it goes on mirrored without end, with no seams. */
+  #mirrorTile(copy: OffscreenCanvas): OffscreenCanvas {
+    const { width, height } = this.#canvas;
+    const tile = this.#extraCanvas(5, width * 2, height * 2);
+    const t = tile.getContext('2d')!;
+    t.globalAlpha = 1;
+    t.globalCompositeOperation = 'copy';
+    for (const [fx, fy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      t.setTransform(fx, 0, 0, fy, fx < 0 ? width * 2 : 0, fy < 0 ? height * 2 : 0);
+      t.drawImage(copy, 0, 0);
+      t.globalCompositeOperation = 'source-over';
+    }
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    return tile;
   }
 
   /** A clear canvas the size of the picture for a layer to draw on alone, to be blended by hand. */

@@ -19,6 +19,15 @@ are under "Not released yet" and appear there once they are.
   in the Video view choose the shape: landscape for YouTube, vertical for
   phones, square for feeds. Every template works in each, its title and its
   shapes keeping their size across the picture.
+- **Layer styles: drop shadow, stroke, outer glow, inner shadow and inner
+  glow.** Any layer that draws, or a group, can have them, as in an image
+  editor: open one in its settings and switch it on. A dot beside the
+  heading shows which are on. Like every setting, they can follow the
+  music.
+- **Transform layer.** Moves, turns, sizes and flips everything beneath it
+  as one, as Resolve's Transform does. Choose what shows past the edges:
+  nothing, the picture repeated, mirrored without seams, or its edges drawn
+  out. Drag its outline on the picture to move and size it.
 - **Try blends with the arrow keys.** A layer's blend is chosen from a list
   like the LUTs': press ↑ or ↓ on it, or go through the open list, and the
   picture shows each blend as you reach it. The blends are sorted by what

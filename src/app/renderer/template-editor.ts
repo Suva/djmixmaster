@@ -8,7 +8,7 @@
 // template keeps them in drawing order, back first.
 
 import {
-  ABOUT_LIMITS, aboutProblem, COMMON_PARAMS, LAYER_TYPES, LUT_PREFIX, MEDIA_PREFIX, settingsOf,
+  ABOUT_LIMITS, aboutProblem, COMMON_PARAMS, LAYER_TYPES, LUT_PREFIX, MEDIA_PREFIX, settingsOf, STYLE_PARAMS,
   type Layer, type MediaFile, type TemplateAbout, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
 import { layerSettings, SHOWN_AS } from './layer-settings.ts';
@@ -54,11 +54,11 @@ const DRAG_START_PX = 4;
 /** Changes closer together than this, of the same kind, undo as one: typing a name, say. */
 const MERGE_MS = 1000;
 
-/** A new layer of a kind, with every setting at its default. */
+/** A new layer of a kind, with every setting at its default; its styles are left out, all off until one is wanted. */
 function newLayer(type: string): Layer {
   const spec = LAYER_TYPES[type];
   const params: Record<string, ParamValue> = {};
-  for (const [key, param] of Object.entries(settingsOf(spec))) params[key] = param.default;
+  for (const [key, param] of Object.entries(settingsOf(spec))) if (!(key in STYLE_PARAMS)) params[key] = param.default;
   return { type, params };
 }
 

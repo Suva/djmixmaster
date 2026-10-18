@@ -11,7 +11,7 @@
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { toHex, type Colour } from '../../visuals/colour.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, FOLDER_LUT_PREFIX, folderLutsOf, LUT_PREFIX, MEDIA_PREFIX, RECORDING_VIDEO, settingsOf, LAYER_TYPES, TEXT_VARIABLES,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, FOLDER_LUT_PREFIX, folderLutsOf, LUT_PREFIX, MEDIA_PREFIX, RECORDING_VIDEO, settingsOf, LAYER_TYPES, STYLE_PARAMS, TEXT_VARIABLES,
   type Layer, type MediaFile, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
 import type { PackedLut } from '../../visuals/lut.ts';
@@ -82,6 +82,11 @@ export function freeName(wanted: string, taken: Iterable<string>): string {
 /** Settings shown under the layer's own, folded away until wanted. */
 const GROUPS: [string, string[], boolean][] = [
   ['Placement', ['x', 'y', 'anchor', 'scale', 'rotation'], true],
+  ['Drop shadow', ['dropShadow', 'dropColour', 'dropOpacity', 'dropAngle', 'dropDistance', 'dropSize'], false],
+  ['Stroke', ['stroke', 'strokeColour', 'strokeOpacity', 'strokeWidth'], false],
+  ['Outer glow', ['outerGlow', 'glowColour', 'glowOpacity', 'glowSize', 'glowSpread'], false],
+  ['Inner shadow', ['innerShadow', 'innerShadowColour', 'innerShadowOpacity', 'innerShadowAngle', 'innerShadowDistance', 'innerShadowSize'], false],
+  ['Inner glow', ['innerGlow', 'innerGlowColour', 'innerGlowOpacity', 'innerGlowSize', 'innerGlowChoke'], false],
   ['Timing', ['from', 'until', 'fadeIn', 'fadeOut'], false],
 ];
 /** The settings above the list of layers, as an image editor has them, and not among the others. */
@@ -132,6 +137,16 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
     const summary = document.createElement('summary');
     summary.textContent = title;
     details.append(summary);
+    // A style's heading has a dot while it is on, so that it shows folded away.
+    if (keys[0] in STYLE_PARAMS) {
+      const dot = document.createElement('span');
+      dot.className = 'style-on';
+      dot.title = `${title} is on`;
+      summary.append(dot);
+      const show = () => (dot.hidden = context.live()?.[keys[0]] !== true);
+      show();
+      ticks.set(`style:${keys[0]}`, show);
+    }
     const all = settingsOf(spec);
     for (const key of keys) if (all[key]) details.append(setting(key, all[key]));
     return details;

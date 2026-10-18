@@ -305,8 +305,28 @@ values into the ones a frame gets. None draws anything yet.
   left black), a vignette (edges darkened towards a colour round the layer's
   position, in an oval of the picture's shape or a circle; clear out to
   `size` of the way to the corners, then eased in over `softness` of the
-  rest), and a LUT (see "LUTs, as built" below). A solid colour (`solid`)
+  rest), a transform (the whole picture beneath moved, turned, sized and
+  flipped as one, its middle at the layer's position; past its edges nothing,
+  the picture repeated, mirrored, or its outermost pixels drawn out, as
+  Resolve's Transform has it; its outline on the picture moves and sizes it,
+  but clicking the picture never picks it, as it covers everything), and a
+  LUT (see "LUTs, as built" below). A solid colour (`solid`)
   fills the whole picture, with no place or size of its own.
+- **Layer styles**: every layer that draws, and every group, has a drop
+  shadow (`dropShadow`, its colour, opacity, the angle the light comes from,
+  distance and softness), a stroke round the outside (`stroke`) and an outer
+  glow (`outerGlow`, with a spread that makes part of it solid), and inside
+  the shape an inner shadow (`innerShadow`) and an inner glow (`innerGlow`,
+  with a choke), all off until switched on (`STYLE_PARAMS` in
+  `template.ts`). The inner ones are made from what is outside the shape,
+  moved or grown inwards, blurred and cut to the shape; past the picture's
+  edges counts as inside, so a shape running off the picture has no inner
+  edge there. Such a layer is drawn
+  on a canvas of its own, as linear burn is; the styles are made from its
+  shape, put beneath it (the inner ones over it), and the whole is mixed in at its blend and opacity
+  (`#style` in `draw.ts`). The canvas cannot grow a shape, so the stroke and
+  the glow's spread move the shape along four directions in doublings and
+  lay it over itself, which makes an octagon, near enough to round.
 - **Groups** are layers of the kind `group` whose `size` says how many of the
   layers after it are theirs, so that the list stays flat and everything that
   knows a layer by its place in it (outlines on the picture, what a layer

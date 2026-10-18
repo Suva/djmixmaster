@@ -122,7 +122,8 @@ export class PictureHandles {
       index = -1;
       for (let i = boxes.length - 1; i >= 0; i--) {
         const box = boxes[i];
-        if (!box) continue;
+        // An effect that has an outline, such as a transform's, covers the whole picture: picked in the list, not here.
+        if (!box || LAYER_TYPES[this.#context.layer(i)?.type ?? '']?.effect) continue;
         const local = PictureHandles.#local(box, at.x, at.y);
         if (local.x >= Math.min(box.left, box.left + box.w) && local.x <= Math.max(box.left, box.left + box.w)
           && local.y >= Math.min(box.top, box.top + box.h) && local.y <= Math.max(box.top, box.top + box.h)) {
