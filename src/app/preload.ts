@@ -23,6 +23,7 @@ const api: Api = {
   openDownloadPage: () => ipcRenderer.send('open-download-page'),
   openLink: (url) => ipcRenderer.send('open-link', url),
   skipVersion: (version) => ipcRenderer.send('skip-version', version),
+  checkPicture: (name, area) => ipcRenderer.invoke('check-picture', name, area),
   settings: () => ipcRenderer.invoke('settings'),
   chooseFolder: (which) => ipcRenderer.invoke('choose-folder', which),
   defaultFolder: (which) => ipcRenderer.invoke('default-folder', which),

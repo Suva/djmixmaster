@@ -1,0 +1,6 @@
+[
+  { "title": "Getting started", "pages": ["index", "install"] },
+  { "title": "Mastering", "pages": ["recording", "checkup", "levelling", "tracks", "export-audio"] },
+  { "title": "Video", "pages": ["video", "export-video", "templates", "layer-types", "layer-settings", "blending-and-groups", "formulas", "functions", "fields", "sharing", "performance"] },
+  { "title": "More", "pages": ["shortcuts", "help"] }
+]

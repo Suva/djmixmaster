@@ -13,6 +13,8 @@ import { isNewer, parseVersion } from '../version.ts';
 /** GitHub's public list entry for the newest full release; pre-releases are not offered. */
 const FEED = process.env.DJMASTER_UPDATE_FEED ?? 'https://api.github.com/repos/Suva/djmixmaster/releases/latest';
 export const DOWNLOAD_PAGE = 'https://suva.github.io/djmixmaster/';
+/** The manual, on the website, for the version released last. */
+export const MANUAL_PAGE = `${DOWNLOAD_PAGE}manual/`;
 const TIMEOUT_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 

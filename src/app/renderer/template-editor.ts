@@ -118,6 +118,7 @@ export class TemplateEditor {
           const b = document.createElement('button');
           b.type = 'button';
           b.textContent = LAYER_TYPES[type].label;
+          b.title = LAYER_TYPES[type].description;
           b.dataset.type = type;
           b.addEventListener('click', () => choose(type));
           items.append(b);

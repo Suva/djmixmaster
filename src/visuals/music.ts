@@ -13,6 +13,28 @@ export const MUSIC_NAMES = [
   'time', 'progress', 'length', 'dt', 'hasVideo', 'portrait', 'aspect',
 ] as const;
 
+/** What each music value is, for the manual. */
+export const MUSIC_ABOUT: Record<(typeof MUSIC_NAMES)[number], string> = {
+  bass: 'How loud the bass is right now, 0 to 1, from the quietest to the loudest the mix gets.',
+  lowMids: 'The same for the low mids: the body of the bass line, toms, warm pads.',
+  mids: 'The same for the mids: vocals, leads, most of the melody.',
+  highs: 'The same for the highs: hats, cymbals, air.',
+  level: 'How loud the whole sound is right now, 0 to 1.',
+  beat: 'Jumps up on each kick, as far as the kick was strong, and falls back to 0 before the next.',
+  beatPhase: 'Goes from 0 to 1 between one beat and the next, for motion in time with the music.',
+  barPhase: 'Goes from 0 to 1 over every four beats.',
+  beats: 'The beats counted from the start of the mix, with the fraction of the one going on: 12.5 is half way through the thirteenth.',
+  tempo: 'The tempo in beats per minute.',
+  energy: 'Moves slowly: high in a drop, low in a breakdown, 0 to 1.',
+  time: 'Seconds since the start of the mix.',
+  progress: 'How far through the mix, 0 at the start to 1 at the end.',
+  length: 'The length of the mix in seconds.',
+  dt: 'Seconds since the frame before: a thirtieth of a second in an export.',
+  hasVideo: '1 when the recording is a video with a picture of its own, 0 when not.',
+  portrait: '1 when the picture is taller than it is wide (the vertical shape), 0 when not.',
+  aspect: 'The picture\'s width over its height: 1.78 landscape, 0.56 vertical, 1 square.',
+};
+
 /** Where each group of bands starts, in Hz; it ends where the next starts. */
 const GROUPS: [string, number][] = [['bass', LOWEST_HZ], ['lowMids', 150], ['mids', 600], ['highs', 2500]];
 /** Seconds the energy is averaged over: long enough to tell a drop from a breakdown, not a beat from the next. */

@@ -914,6 +914,7 @@ test('"Moves with…" makes a setting follow the music, and is read back from wh
     radius().querySelector<HTMLButtonElement>('.motion-button')!.click();
     const readBack = [radius().querySelector<HTMLSelectElement>('.motion select')!.value, radius().querySelector<HTMLInputElement>('.motion input[type="range"]')!.value];
 
+
     // Stop moving, then undo.
     [...radius().querySelectorAll<HTMLButtonElement>('.motion button')].find((b) => b.textContent === 'Stop moving')!.click();
     const stopped = radius().querySelector<HTMLInputElement>('input[type="number"]')?.value;
@@ -922,8 +923,22 @@ test('"Moves with…" makes a setting follow the music, and is read back from wh
     await page.wait(100);
     const undone = expression();
     await page.wait(600);
-    return { opened, waving, readBack, stopped, undone };
+
+    // A formula typed with the panel open: shown in it while it is one the panel could have written; closed when not.
+    const typeIn = (text: string) => {
+      const input = radius().querySelector<HTMLInputElement>('.expr-input')!;
+      input.value = text;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    if (radius().querySelector<HTMLElement>('.motion')!.hidden) radius().querySelector<HTMLButtonElement>('.motion-button')!.click();
+    typeIn('20 + 5 * smooth(bass, 0.05, 0.5)');
+    const typed = [radius().querySelector<HTMLSelectElement>('.motion select')!.value, radius().querySelector<HTMLInputElement>('.motion input[type="range"]')!.value];
+    typeIn('20 + bass');
+    const closedByTyping = radius().querySelector<HTMLElement>('.motion')!.hidden;
+    return { opened, waving, readBack, typed, closedByTyping, stopped, undone };
   });
+  assert.deepEqual(seen.typed, ['bass', '5'], 'the open panel follows a formula typed');
+  assert.ok(seen.closedByTyping, 'and closes for one it could not have written');
   assert.equal(seen.opened, '17 + 5 * smooth(bass, 0.05, 0.5)');
   assert.equal(seen.waving, '17 + 3 * sine(time / 4)');
   assert.deepEqual(seen.readBack, ['wave', '3']);

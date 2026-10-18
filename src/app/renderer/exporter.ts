@@ -102,18 +102,46 @@ async function draw(
   const frames = Math.round((mix.end - mix.start) * job.fps);
   const dt = 1 / job.fps;
   const keyframeEvery = Math.round(KEYFRAME_SECONDS * job.fps);
+  // Asked for (DJMASTER_PROFILE), where the time goes: each stage of a frame, and with =layers each layer,
+  // which waits for each and so slows the drawing; the stages alone are as fast as an export.
+  const profiling = location.search.includes('profile');
+  const stages = new Map<string, number>();
+  if (location.search.includes('profile=layers')) drawer.profile = new Map();
+  let mark = performance.now();
+  const stage = (name: string) => {
+    if (!profiling) return;
+    const now = performance.now();
+    stages.set(name, (stages.get(name) ?? 0) + now - mark);
+    mark = now;
+  };
+  const began = performance.now();
   for (let i = 0; i < frames; i++) {
     if (failure) throw new Error(failure);
     // The videos' frames for this moment, decoded before the frame is drawn.
     await videos.prepare(clipRequests(mix, layers, reader, i / job.fps));
+    stage('clip frames');
     drawVideoFrame(drawer, layers, reader, mix, i / job.fps, dt, images, videos, dt, luts);
+    stage('drawing');
     const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / job.fps), duration: Math.round(1e6 / job.fps) });
     encoder.encode(frame, { keyFrame: i % keyframeEvery === 0 });
     frame.close();
+    stage('handing to the encoder');
     // Wait for the encoder rather than queue up frames: memory stays flat however long the mix.
     while (encoder.encodeQueueSize > 4) await new Promise((done) => encoder.addEventListener('dequeue', done, { once: true }));
+    stage('waiting for the encoder');
     if (pendingBytes >= BATCH_BYTES) await send();
+    stage('sending to ffmpeg');
     if (i % job.fps === 0) api.videoProgress(i / frames);
+  }
+  if (profiling) {
+    const per = (ms: number) => `${(ms / frames).toFixed(2)} ms`;
+    const lines = [`${frames} frames at ${job.width}×${job.height} in ${((performance.now() - began) / 1000).toFixed(1)} s: ${per(performance.now() - began)} a frame`];
+    for (const [name, ms] of stages) lines.push(`  ${name}: ${per(ms)}`);
+    if (drawer.profile) {
+      lines.push('  of the drawing, by layer (each waited for, so together more than unprofiled):');
+      for (const [name, ms] of drawer.profile) lines.push(`    ${name}: ${per(ms)}`);
+    }
+    console.log(`profile\n${lines.join('\n')}`);
   }
   await encoder.flush();
   if (failure) throw new Error(failure);

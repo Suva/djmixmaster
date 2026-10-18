@@ -115,6 +115,8 @@ export const STYLE_PARAMS: Record<string, ParamSpec> = {
 
 export interface LayerSpec {
   label: string;
+  /** What it is for, in a sentence or two, for the + menu and the manual. */
+  description: string;
   /** Layers that change what is beneath them instead of drawing their own picture. */
   effect?: boolean;
   params: Record<string, ParamSpec>;
@@ -126,6 +128,7 @@ export interface LayerSpec {
 export const LAYER_TYPES: Record<string, LayerSpec> = {
   solid: {
     label: 'Solid colour',
+    description: 'Fills the whole picture with one colour: a plain background, or with a blend, a tint over what is beneath.',
     // The whole picture in one colour: it has no place or size of its own.
     params: {
       colour: colour('Colour', '#101830'),
@@ -134,6 +137,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   gradient: {
     label: 'Gradient',
+    description: 'Two or three colours blending into each other, in a line, in circles or round a point. It can turn slowly and shift its colours over time.',
     params: {
       kind: choice('Kind', 'linear', ['linear', 'radial', 'conic']),
       colour1: colour('Colour 1', '#101830'),
@@ -146,6 +150,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   particles: {
     label: 'Glitter',
+    description: 'Points of light that drift, twinkle and fade, in up to three colours. They can burst out on the beat.',
     params: {
       count: number('Count', 300, 0, 5000),
       sizeLow: number('Smallest', 0.2, 0, 5, '%'),
@@ -167,6 +172,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   image: {
     label: 'Image',
+    description: 'A picture, such as a logo or a photo, placed and sized on the picture. A field can let whoever uses the template choose their own.',
     params: {
       image: { kind: 'image', label: 'Image', default: '' },
       fit: choice('Fit', 'contain', ['contain', 'cover', 'stretch', 'natural']),
@@ -183,6 +189,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   video: {
     label: 'Video',
+    description: 'A video clip: looped, played once or back and forth, at any speed, and started again on the beat, the bar or each track. A clip made on green or black can have that keyed out. It can also show the recording\'s own picture.',
     params: {
       video: { kind: 'video', label: 'Video', default: '' },
       playback: choice('Plays', 'loop', [...PLAYBACKS]),
@@ -209,6 +216,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   text: {
     label: 'Text',
+    description: 'Words on the picture, such as the artist, the mix\'s name or the track playing, written with %variables% that fill themselves in. A change of text can cut, fade, slide or type itself in.',
     params: {
       text: { kind: 'text', label: 'Text', default: '%mixName%' },
       font: { kind: 'font', label: 'Font', default: 'Sans' },
@@ -233,6 +241,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   spectrum: {
     label: 'Spectrum',
+    description: 'Bars that rise and fall with the music, from the bass on one side to the highs on the other, in a row or round a circle.',
     params: {
       bars: number('Bars', 48, 4, 256),
       lowHz: number('Lowest', 30, 20, 1000, 'Hz'),
@@ -254,6 +263,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   waveform: {
     label: 'Waveform',
+    description: 'The shape of the sound as it goes by, as a line or as filled bars, straight or round a circle.',
     params: {
       style: choice('Style', 'mirrored', ['line', 'filled', 'mirrored']),
       seconds: number('Time shown', 4, 0.01, 30, 's'),
@@ -267,6 +277,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   glow: {
     label: 'Glow',
+    description: 'Makes the bright parts of the picture beneath shine, spreading their light around them.',
     effect: true,
     params: {
       threshold: number('Threshold', 60, 0, 100, '%'),
@@ -277,12 +288,14 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   group: {
     label: 'Group',
+    description: 'Holds layers together, to show, fade, blend and move them as one. An effect inside a group changes only the group\'s own layers.',
     // Its layers are drawn together, then laid on the picture as one: shown or not, faded, mixed in.
     params: {},
     common: ['visible', 'opacity', 'blend', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
   split: {
     label: 'Colour split',
+    description: 'Pushes the red and the blue of the picture beneath apart, as a cheap lens does, in one direction or out from the middle.',
     effect: true,
     params: {
       form: choice('Form', 'straight', ['straight', 'from the centre']),
@@ -292,6 +305,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   glitch: {
     label: 'Glitch',
+    description: 'Tears the picture beneath into slices thrown sideways, with the colours split, as a damaged video does.',
     effect: true,
     params: {
       amount: number('How often', 30, 0, 100, '%'),
@@ -303,6 +317,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   adjust: {
     label: 'Brightness and contrast',
+    description: 'Makes the picture beneath brighter or darker, and its contrast stronger or weaker.',
     effect: true,
     params: {
       brightness: number('Brightness', 100, 0, 300, '%'),
@@ -311,6 +326,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   hue: {
     label: 'Hue and saturation',
+    description: 'Turns the colours of the picture beneath round the colour wheel, and makes them richer, greyer, lighter or darker.',
     effect: true,
     params: {
       hue: number('Hue', 0, -180, 180, '°'),
@@ -320,6 +336,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   kaleidoscope: {
     label: 'Kaleidoscope',
+    description: 'Repeats a slice of the picture beneath all the way round a point, mirrored or not, as a kaleidoscope does.',
     effect: true,
     params: {
       segments: number('Segments', 6, 2, 24),
@@ -329,6 +346,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   transform: {
     label: 'Transform',
+    description: 'Moves, turns, sizes and flips everything beneath it as one. Past the picture\'s edges it shows nothing, the picture repeated, mirrored, or its edges drawn out.',
     effect: true,
     // Moves, turns and sizes the whole picture beneath, as one: its middle goes to the layer's position.
     // What shows past the picture's edges, as an editor's Transform has it: nothing, the picture again, mirrored, or its edges drawn out.
@@ -341,6 +359,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   trails: {
     label: 'Trails',
+    description: 'Leaves what moves beneath it behind as it goes, fading: as an echo, or only its bright or dark parts. The trail can zoom and turn as it fades.',
     effect: true,
     // What was beneath in the frames before, fading behind what is there now: echoes of all that moves.
     // Zoom and turn act on the past each frame, round the layer's position, so trails can stream outwards or spiral.
@@ -354,6 +373,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   vignette: {
     label: 'Vignette',
+    description: 'Darkens the edges of the picture towards a colour, leaving the middle clear, round a point you choose.',
     effect: true,
     // Darkens the edges of the picture beneath, round the layer's position.
     params: {
@@ -366,6 +386,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   blur: {
     label: 'Blur',
+    description: 'Softens the picture beneath, evenly out to its edges.',
     effect: true,
     params: {
       radius: number('Radius', 0.5, 0, 10, '%'),
@@ -373,6 +394,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   lut: {
     label: 'LUT',
+    description: 'Gives the picture beneath a look from a colour lookup table (a .cube file), as made in Resolve, Premiere and the like.',
     effect: true,
     // A look for the whole picture beneath: it has no place or size of its own. Opacity says how much of the look.
     params: {
@@ -528,6 +550,28 @@ export const TEXT_VARIABLES = [
   'artist', 'title', 'album', 'recordingName', 'date',
   'currentTrack', 'currentArtist', 'currentTitle', 'trackNumber', 'trackCount', 'nextTrack', 'tempo',
 ] as const;
+
+/** What each text variable gives, for the manual. */
+export const TEXT_ABOUT: Record<(typeof TEXT_VARIABLES)[number], string> = {
+  mixName: 'The mix\'s name.',
+  mixNumber: 'Which mix of the recording it is: 1, 2…',
+  mixCount: 'How many mixes the recording has.',
+  mixLength: 'How long the mix is, as 1:02:50.',
+  elapsed: 'How far into the mix, as a clock.',
+  remaining: 'How long is left of the mix, as a clock.',
+  artist: 'The mix\'s artist.',
+  title: 'The mix\'s title: its name.',
+  album: 'The recording\'s album, as set for the export\'s tags.',
+  recordingName: 'The recording\'s file name.',
+  date: 'Today\'s date.',
+  currentTrack: 'The track playing, as Artist - Title. Empty where no track is marked, so a text of it alone hides.',
+  currentArtist: 'The artist of the track playing.',
+  currentTitle: 'The title of the track playing.',
+  trackNumber: 'Which track of the mix is playing.',
+  trackCount: 'How many tracks the mix has.',
+  nextTrack: 'The track after the one playing.',
+  tempo: 'The tempo, in beats per minute, as a whole number.',
+};
 
 export type TextValues = Record<string, string | number>;
 

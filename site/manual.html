@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{TITLE}} · DJ Mix Master manual</title>
+  <link rel="icon" href="../icon.png">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body class="manual-page">
+  <div class="wrap">
+    <header>
+      <img src="../icon.png" alt="">
+      <a class="name" href="../">DJ Mix Master</a>
+      <span class="spacer"></span>
+      <a href="index.html">Manual</a>
+      <a href="../changes.html">What's new</a>
+      <a href="../">Download</a>
+      <a href="{{REPOSITORY_URL}}">Source on GitHub</a>
+    </header>
+    <div class="manual">
+      <details class="manual-nav" open>
+        <summary>Contents</summary>
+        {{NAV}}
+      </details>
+      <script>
+        // On a phone the contents start folded, so the page is the first thing seen.
+        if (matchMedia('(max-width: 820px)').matches) document.querySelector('.manual-nav').open = false;
+      </script>
+      <main class="manual-text">
+        {{CONTENT}}
+        {{PAGER}}
+      </main>
+    </div>
+    <footer>
+      <p>Something wrong or missing in the manual? <a href="{{REPOSITORY_URL}}/issues">Say so on GitHub</a>.</p>
+      <p>DJ Mix Master is free software under the <a href="{{REPOSITORY_URL}}/blob/main/LICENSE">GNU General Public License</a>, version 3 or later. It comes without any warranty.</p>
+    </footer>
+  </div>
+</body>
+</html>

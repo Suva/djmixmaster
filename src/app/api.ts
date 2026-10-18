@@ -187,6 +187,8 @@ export interface Api {
   openLink(url: string): void;
   /** Stops the notice about this version from coming back. */
   skipVersion(version: string): void;
+  /** Check mode only: saves a picture of the window, or of an area of it, beside the check's picture under `name`. */
+  checkPicture(name: string, area?: { x: number; y: number; width: number; height: number }): Promise<void>;
   /** The choices of the Settings dialog, as they are now. */
   settings(): Promise<AppSettings>;
   /** Asks for a folder and uses it from now on; gives the settings after. */

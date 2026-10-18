@@ -12,7 +12,7 @@ on:
     types: [completed]
   push:
     branches: [main]
-    paths: ['site/**', 'CHANGELOG.md', 'scripts/build-site.mjs', '.github/workflows/site.yml']
+    paths: ['site/**', 'CHANGELOG.md', 'scripts/build-site.mjs', 'scripts/site/**', '.github/workflows/site.yml']
   workflow_dispatch:
 
 permissions:
@@ -54,9 +54,21 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      # The manual describes the version people download: it is built from the newest release's sources.
+      - name: Take the manual from the newest release
+        run: |
+          tag=$(gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName')
+          if [ -n "$tag" ]; then
+            git worktree add "$RUNNER_TEMP/release" "$tag"
+            echo "MANUAL_ROOT=$RUNNER_TEMP/release" >> "$GITHUB_ENV"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Fill in the newest release and build the page
         run: node scripts/build-site.mjs
         env:

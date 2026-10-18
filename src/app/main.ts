@@ -22,7 +22,7 @@ import { VIDEO_EXTENSIONS } from './video-files.ts';
 import { PING_PONG_MOST_SECONDS } from '../visuals/clip.ts';
 import { extractZipEntry, isZip, readZip, readZipEntry, writeZip } from './zip.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
-import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, setAutomatic, skipVersion } from './updates.ts';
+import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, MANUAL_PAGE, setAutomatic, skipVersion } from './updates.ts';
 
 // The same name, and so the same data folder, whether run from the project or as the packaged app.
 app.setName('DJ Mix Master');
@@ -675,7 +675,7 @@ async function renderVideo(request: RenderRequest): Promise<unknown> {
         show: false,
         webPreferences: { preload: join(__dirname, 'preload.cjs'), backgroundThrottling: false },
       });
-      if (SCREENSHOT) drawer.webContents.on('console-message', (event) => console.log(`[exporter] ${event.message}`));
+      if (SCREENSHOT || process.env.DJMASTER_PROFILE) drawer.webContents.on('console-message', (event) => console.log(`[exporter] ${event.message}`));
       let finished = false;
       const finish = (failure: string | null) => {
         if (finished) return;
@@ -699,7 +699,9 @@ async function renderVideo(request: RenderRequest): Promise<unknown> {
         if (!finished) finish(`Packing the video failed: ${complaint.trim() || `exit code ${code}`}`);
       });
       drawer.webContents.once('did-finish-load', () => drawer.webContents.send('video-job', video));
-      drawer.loadURL(`${ORIGIN}/exporter.html`);
+      // DJMASTER_PROFILE: the exporter says where each frame's time went, for finding what is slow; =layers, also each layer's.
+      const profile = process.env.DJMASTER_PROFILE;
+      drawer.loadURL(`${ORIGIN}/exporter.html${profile ? `?profile=${profile === 'layers' ? 'layers' : 'stages'}` : ''}`);
     });
     return result;
   } catch (error) {
@@ -1289,6 +1291,16 @@ async function runCheck() {
   app.quit();
 }
 
+// In check mode only: a picture of the window, or of part of it (in the page's own units), saved beside the check's
+// own picture under this name; .jpg for a photograph-like one. For the manual's pictures (scripts/manual-pictures.mjs).
+ipcMain.handle('check-picture', async (_event, name: string, area?: { x: number; y: number; width: number; height: number }) => {
+  if (!SCREENSHOT || !window) throw new Error('Pictures of the window are taken in check mode only');
+  const rect = area && { x: Math.round(area.x), y: Math.round(area.y), width: Math.round(area.width), height: Math.round(area.height) };
+  const image = await window.webContents.capturePage(rect);
+  const file = join(dirname(SCREENSHOT), basename(String(name)));
+  await writeFile(file, /\.jpe?g$/i.test(file) ? image.toJPEG(88) : image.toPNG());
+});
+
 ipcMain.on('painted', async (_event, path: string) => {
   writeStored(lastRecordingFile(), JSON.stringify({ path })).catch((error) =>
     console.error('Could not note the recording for next time:', error),
@@ -1482,6 +1494,7 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
+        { label: 'User Manual', click: () => shell.openExternal(MANUAL_PAGE) },
         { label: 'Gestures and Shortcuts', accelerator: 'F1', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
         { type: 'separator' },
         { label: 'Check for Updates…', click: checkForUpdatesNow },

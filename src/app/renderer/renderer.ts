@@ -1,3 +1,4 @@
+import { shortcuts } from '../shortcuts.ts';
 import { settingsDialog } from './settings.ts';
 import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
 import { isLossy, LOSSY_HEADROOM_DB, type EncodeOptions } from '../../encode-options.ts';
@@ -2617,72 +2618,7 @@ $('split-here').title = `Split at playhead (${COMMAND}E): cut this mix in two wh
 $('undo').title = `Undo the last change (${COMMAND}Z)`;
 $('redo').title = `Redo the change just undone (Shift+${COMMAND}Z)`;
 
-const HELP: [string, [string, string][]][] = [
-  ['The recording, at the top', [
-    ['Drag across a free part', 'Mark a new mix'],
-    ['Double-click a free part', 'Fill it with a new mix'],
-    ['Drag a mix\'s edge', 'Move where it starts or ends'],
-    ['Drag the middle of a mix', 'Move it'],
-    ['Click inside a mix', 'Select it and put the playhead there'],
-    ['Click a mix\'s edge', 'Jump to its start, or just before its end'],
-    ['Scroll, or pinch', 'Zoom in and out'],
-    ['Swipe sideways', 'Move along the recording'],
-    ['Orange, red and white marks', 'Silences, clipping and possible dropouts'],
-  ]],
-  ['The mix, below it', [
-    ['Click', 'Put the playhead there'],
-    ['Scroll, or pinch', 'Zoom in and out'],
-    ['Swipe sideways', 'Move along the mix'],
-    ['Drag a square handle inwards', 'Fade in or out; back to the corner removes it'],
-    ['Drag across the gain lane', 'Mark a stretch to adjust by hand'],
-    ['Drag a marked stretch up or down', 'Raise or lower it'],
-    ['Drag a stretch\'s edge', 'Make it longer or shorter'],
-    ['Double-click a stretch', 'Remove it (or point at it and press Backspace)'],
-    ['Drag a track marker', 'Move where the track starts'],
-    ['Double-click a track\'s name', 'Type it in, as Artist - Title'],
-  ]],
-  ['Playback', [
-    ['Space', 'Play or pause'],
-    ['A', 'Bypass processing, to hear the recording as it is, and back'],
-    ['← →', 'Back or forward 5 seconds'],
-    [`Shift+← →, ${OPTION}+← →`, '30 seconds, 1 second'],
-    ['I, O', 'Start, or end, the mix at the playhead'],
-    [`${COMMAND}E`, 'Split the mix at the playhead'],
-    ['M', 'Mark a track starting at the playhead'],
-    ['J, K, L', 'Run backwards, stop, run forwards; press J or L again to go faster'],
-    ['Return', 'Jump to the start of the mix'],
-    ['End', 'Jump to just before its end'],
-  ]],
-  ['Editing a video template', [
-    [`Shift+${COMMAND}N`, 'Add a layer: type to find its kind, Return to add it'],
-    ['Drag a layer up or down', 'Put it in front of or behind others'],
-    [`${OPTION}+↑ ↓`, 'Move the selected layer forward or back'],
-    ['Double-click a layer', 'Rename it'],
-    ['Drag a number box sideways', 'Change it; with Shift, finer'],
-    ['Click the picture', 'Select the layer there'],
-    ['Drag a layer\'s outline, or a corner', 'Move it, or resize it; with Shift, keeping its proportions'],
-    ['Backspace', 'Delete the selected layer'],
-    [`${COMMAND}J`, 'Duplicate the selected layer'],
-    [`${COMMAND}G, Shift+${COMMAND}G`, 'Group the selected layer, ungroup a group'],
-    ['Drag a layer onto a group', 'Put it in the group'],
-    [`${COMMAND}-click, Shift-click a layer`, 'Select several, or a run of them, to group, delete, duplicate or drag together'],
-    ['Drag a field up or down', `Change the order fields are filled in; or click it and press ${OPTION}+↑ ↓`],
-    ['Click a field, Backspace', 'Remove it'],
-    [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo changes to the template'],
-  ]],
-  ['Everything else', [
-    [`${COMMAND}Z, Shift+${COMMAND}Z`, 'Undo, redo'],
-    ['Backspace', 'Delete the track marker last clicked, or else the selected mix; the only mix goes back to the whole recording'],
-    ['Tab', 'Switch between the Mastering and the Video view'],
-    [`${COMMAND}O`, 'Open a recording'],
-    [`Shift+${COMMAND}W`, 'Close the recording'],
-    ['Esc', 'Cancel an analysis or an export'],
-    ['? or F1', 'Show this sheet'],
-    [`${COMMAND},`, 'Settings: the folders for template videos and LUTs, and the check for updates'],
-    ['Double-click a mix\'s tab', 'Rename it'],
-    ['Rest the pointer on a control', 'See what it does'],
-  ]],
-];
+const HELP = shortcuts({ command: COMMAND, option: OPTION });
 
 $('help-content').replaceChildren(
   ...HELP.map(([title, rows]) => {
@@ -2712,6 +2648,7 @@ function showHelp() {
 
 $('help').addEventListener('click', showHelp);
 $('help-close').addEventListener('click', () => helpDialog.close());
+$('help-manual').addEventListener('click', () => api.openLink('https://suva.github.io/djmixmaster/manual/'));
 
 const settings = settingsDialog(api);
 $('open-settings').title = `Settings (${COMMAND},)`;

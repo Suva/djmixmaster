@@ -185,6 +185,20 @@ export class FrameDrawer {
   /** Where each layer was drawn in the last frame, by its place in the template; null for a layer not drawn, or without a box. */
   boxes: (LayerBox | null)[] = [];
   #index = 0;
+  /**
+   * When set, the time each layer takes is added up here, by its place and
+   * kind, in milliseconds: for finding what is slow. The canvas hands its
+   * work to the graphics card and goes on, so each layer waits for the card
+   * to finish before it is counted; that makes drawing slower while it is on.
+   * A group's time includes its layers'.
+   */
+  profile: Map<string, number> | null = null;
+
+  /** Waits for the graphics card to finish what it was given for this canvas: reading a pixel back makes it. */
+  #finish() {
+    this.#ctx.getImageData(0, 0, 1, 1);
+  }
+
   /** Whether the last frame had a change of text under way: paused, the frames after it are still needed. */
   changing = false;
 
@@ -241,6 +255,19 @@ export class FrameDrawer {
   }
 
   #drawLayer(layers: PreparedLayer[], index: number, inside: number, frame: Frame) {
+    if (!this.profile) return this.#drawLayerNow(layers, index, inside, frame);
+    this.#finish();
+    const start = performance.now();
+    this.#drawLayerNow(layers, index, inside, frame);
+    this.#finish();
+    const layer = layers[index];
+    const params = layer.resolve(frame.music, frame.text);
+    const styled = STYLES.filter((key) => params[key] === true);
+    const name = `${index} ${layer.type}${styled.length ? ` + ${styled.join(', ')}` : ''}`;
+    this.profile.set(name, (this.profile.get(name) ?? 0) + performance.now() - start);
+  }
+
+  #drawLayerNow(layers: PreparedLayer[], index: number, inside: number, frame: Frame) {
     const layer = layers[index];
     this.#index = index;
     const params = layer.resolve(frame.music, frame.text);

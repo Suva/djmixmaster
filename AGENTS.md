@@ -83,6 +83,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
 | `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
 | `src/app/renderer/meter.ts` | The level meter beside the curves |
+| `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the help sheet and the manual |
 | `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
@@ -148,6 +149,8 @@ environment variables switch on:
 | `DJMASTER_SHOT_TRACKLIST=<file>` | Answer the dialog for a track list to import with this file |
 | `DJMASTER_SHOT_TEMPLATE=<file>` | Answer the dialog for a template to import with this file. A template exported is saved into `DJMASTER_SHOT_FOLDER`, and one deleted is removed rather than moved to the Trash |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
+| `DJMASTER_PROFILE=stages` | A video export prints where each frame's time went: the clips' frames, drawing, encoding, sending to ffmpeg. Works outside check mode too |
+| `DJMASTER_PROFILE=layers` | As `stages`, and the time of each layer. Each layer is waited for on the graphics card, so drawing is slower while it is on |
 
 ```bash
 DJMASTER_SHOT=/tmp/shot.png DJMASTER_SHOT_DATA=/tmp/djm-data \
@@ -335,14 +338,15 @@ npm keeps in step). `npm version` updates both, commits, and creates the
 matching tag; pushing the tag makes GitHub build and publish the installers.
 
 ```bash
-node scripts/screenshot.mjs vp-test.wav   # a new picture for the website; commit it
+node scripts/screenshot.mjs vp-test.wav        # a new picture for the website
+node scripts/manual-pictures.mjs vp-test.wav   # new pictures for the manual; commit both
 npm version minor -m "Release %s"   # or: patch, major, or an exact number
 git push --follow-tags
 ```
 
-- Always take a new screenshot first (see "The website" below), so that the
-  website and the README show the window as it is in this release. Commit it
-  before running `npm version`.
+- Always take new pictures first (see "The website" below), so that the
+  website, the manual and the README show the window as it is in this
+  release. Look at them, and commit them before running `npm version`.
 - The working folder has to be clean first.
 - `npm version` turns "Not released yet" in `CHANGELOG.md` into a heading for
   the new version (`scripts/release-changelog.mjs`), and stops if there is
@@ -353,12 +357,47 @@ git push --follow-tags
 
 ## The website
 
-`site/` holds the website: a front page, and a "What's new" page made from
-the released part of `CHANGELOG.md`. `scripts/build-site.mjs` fills in the
+`site/` holds the website: a front page, a "What's new" page made from
+the released part of `CHANGELOG.md`, and the manual. `scripts/build-site.mjs` fills in the
 newest release's version and download links and writes the result to `_site/`;
 `.github/workflows/site.yml` publishes that to GitHub Pages after every
 release and whenever `site/` or `CHANGELOG.md` changes. Run the script locally to look at the
-page (it needs the GitHub CLI signed in).
+page (it needs the GitHub CLI signed in); `python3 -m http.server --directory _site`
+serves it to a browser.
+
+### The manual
+
+The manual is Markdown in `site/manual/`, one page a file, in the order
+`contents.json` gives. `scripts/site/manual.mjs` turns it into HTML (the
+little Markdown it knows is listed at its top) and fills in directives from
+the app's own code, so the manual cannot list what the app does not have:
+
+| Directive | What it puts in | From |
+|---|---|---|
+| `{{shortcuts: Playback}}` | That section of the shortcuts, Mac and Windows side by side | `src/app/shortcuts.ts`, which the help sheet shows too |
+| `{{layers}}`, `{{layer-list}}` | Every kind of layer, with its picture, description and settings | `LAYER_TYPES` in `template.ts` |
+| `{{common-settings}}`, `{{style-settings}}` | The settings every layer has, the layer styles | `COMMON_PARAMS`, `STYLE_PARAMS` |
+| `{{functions}}`, `{{music}}`, `{{text-variables}}` | The formula functions, the music values, the text variables | `FUNCTION_ABOUT`, `MUSIC_ABOUT`, `TEXT_ABOUT` |
+| `{{all-shortcuts}}` | Every section of the shortcuts | `src/app/shortcuts.ts` |
+
+Every layer kind, function, music value and text variable has its
+description in the code beside it, typed so that one without a description
+does not compile. `test/manual.test.ts` builds the manual and fails on a
+page missing from the contents, a broken link, a kind of layer without its
+picture, or a picture no page shows.
+
+The pictures are taken by one command, with the same recording as the
+website's: the window in each view, its dialogs and the editor's panels,
+and every kind of layer drawn on its own (`scripts/manual-pictures.mjs`,
+which also says what each layer is shown with, and
+`scripts/manual-pictures/pictures.js`, the steps in the window). It uses
+`window.api.checkPicture`, which in check mode saves a picture of the window
+or a part of it.
+
+The published manual describes the version people download: the website's
+workflow builds it from the newest release's sources (`MANUAL_ROOT`), as
+"What's new" leaves out what is not released yet. The front page links to it
+once a release has one.
 
 `site/screenshot.png` is also the picture in the README. It is taken with the
 app's check mode at twice the size, by one command, from a recording of about
@@ -387,3 +426,10 @@ it: a script that went wrong still takes one.
   for it under "Not released yet" in [CHANGELOG.md](CHANGELOG.md), written for
   them rather than for developers. The website's "What's new" page is made
   from that file.
+- Such a change also goes in the manual (`site/manual/`), on the page it
+  belongs to, in a sentence or two: what it is and how to use it, not every
+  detail. A new kind of layer needs a description in `LAYER_TYPES` and a
+  picture (add it to `LAYERS` in `scripts/manual-pictures.mjs`); a new
+  function, music value or text variable, its description; a new shortcut
+  goes in `src/app/shortcuts.ts`. A new picture of the window, or a changed
+  one, comes from the pictures command.

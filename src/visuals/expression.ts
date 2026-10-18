@@ -355,6 +355,52 @@ export const FUNCTIONS: Record<string, Builtin> = {
   alphaOf: ofColour('alphaOf(colour)', 0, 'number', (c) => c.a),
 };
 
+/** What each function does, in a sentence, for the manual. */
+export const FUNCTION_ABOUT: Record<keyof typeof FUNCTIONS, string> = {
+  sine: 'A smooth wave from 0 up to 1 and back as the phase goes from 0 to 1; sine(beats) swells once a beat.',
+  triangle: 'Straight up from 0 to 1 and straight back down as the phase goes from 0 to 1.',
+  saw: 'Climbs from 0 to 1 as the phase goes from 0 to 1, then drops back to 0.',
+  square: '1 for the first half of each phase, 0 for the second: an on-off blink.',
+  noise: 'Wanders smoothly between 0 and 1 as x grows; noise(time) drifts, noise(time * 5) jitters.',
+  random: 'A number between 0 and 1 that stays the same for each whole number n and jumps at the next; random(beats) changes once a beat.',
+  smooth: 'Follows a value, taking rise seconds to go up and fall seconds to come down, as a synth envelope does: smooth(bass, 0.02, 0.4) jumps with the kick and settles slowly. Works on colours too.',
+  mix: 'Partway from a to b: 0 gives a, 1 gives b. Works on two numbers or two colours.',
+  min: 'The smaller of two numbers.',
+  max: 'The larger of two numbers.',
+  clamp: 'The value, kept between low and high.',
+  step: '0 below the edge, 1 at it and above.',
+  smoothstep: 'Rises smoothly from 0 to 1 as the value goes from low to high.',
+  abs: 'The number without its sign.',
+  floor: 'Rounded down to a whole number.',
+  ceil: 'Rounded up to a whole number.',
+  round: 'Rounded to the nearest whole number.',
+  fract: 'What is after the decimal point: fract(2.25) is 0.25.',
+  sqrt: 'The square root.',
+  pow: 'x to the power y.',
+  exp: 'e to the power x.',
+  log: 'The natural logarithm.',
+  sin: 'The sine of an angle in radians; pi is there to use.',
+  cos: 'The cosine of an angle in radians.',
+  rgb: 'A colour from red, green and blue, each 0 to 1, with an optional fourth for how opaque it is.',
+  hsl: 'A colour from a hue in degrees, and saturation and lightness, each 0 to 1.',
+  oklch: 'A colour from lightness (0 to 1), chroma (0 for grey, up to about 0.37 for the richest) and a hue in degrees, in a space where equal steps look equal.',
+  hue: 'The colour turned round the colour wheel by so many degrees, as light as before.',
+  complement: 'The colour on the other side of the colour wheel.',
+  lighten: 'The colour made lighter by an amount from 0 to 1.',
+  darken: 'The colour made darker by an amount from 0 to 1.',
+  saturate: 'The colour made richer by an amount from 0 to 1.',
+  desaturate: 'The colour made greyer by an amount from 0 to 1.',
+  gray: 'The colour as a grey of the same lightness.',
+  alpha: 'The colour made see-through: 0 invisible, 1 solid.',
+  lightness: 'How light the colour looks, 0 to 1.',
+  chroma: 'How rich the colour is, from 0 for grey.',
+  hueOf: 'Where the colour is on the colour wheel, in degrees.',
+  red: 'The red of the colour, 0 to 1.',
+  green: 'The green of the colour, 0 to 1.',
+  blue: 'The blue of the colour, 0 to 1.',
+  alphaOf: 'How solid the colour is, 0 to 1.',
+};
+
 const CONSTANTS: Record<string, number> = { pi: Math.PI };
 
 /** How many single-letter changes turn one word into the other. */

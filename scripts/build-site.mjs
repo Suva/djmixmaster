@@ -1,9 +1,11 @@
 // Builds the website into _site/: the pages in site/ with the newest release's
-// version and download links filled in, and the released part of
-// CHANGELOG.md as the "What's new" page. Needs the GitHub CLI, signed in or
+// version and download links filled in, the released part of CHANGELOG.md as
+// the "What's new" page, and the manual (site/manual/, see site/manual.mjs). Needs the GitHub CLI, signed in or
 // with GH_TOKEN set, to look the release up.
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const repository = process.env.GITHUB_REPOSITORY ?? 'Suva/djmixmaster';
 const releasesUrl = `https://github.com/${repository}/releases`;
@@ -105,7 +107,27 @@ function fill(file, raw = {}) {
 
 rmSync('_site', { recursive: true, force: true });
 mkdirSync('_site');
-writeFileSync('_site/index.html', fill('index.html'));
-writeFileSync('_site/changes.html', fill('changes.html', { CHANGES: changes() }));
+
+// The manual: its pages in the page around them, and its pictures. Made from the sources in MANUAL_ROOT when it is
+// set, as the website's workflow sets it to the newest release's, so the manual describes the version that is
+// downloaded, as "What's new" does; else from these.
+const manualRoot = resolve(process.env.MANUAL_ROOT ?? '.');
+const manualModule = join(manualRoot, 'scripts', 'site', 'manual.mjs');
+if (existsSync(manualModule)) {
+  const { MANUAL, manualPages } = await import(pathToFileURL(manualModule).href);
+  mkdirSync('_site/manual', { recursive: true });
+  for (const page of manualPages()) {
+    writeFileSync(`_site/manual/${page.name}.html`, fill('manual.html', { TITLE: page.title.replace(/<[^>]+>/g, ''), CONTENT: page.html, NAV: page.nav, PAGER: page.pager }));
+  }
+  cpSync(join(MANUAL, 'pictures'), '_site/manual/pictures', { recursive: true });
+} else {
+  console.log(`No manual in ${manualRoot}: that version came before it.`);
+}
+// The pages link to the manual once there is one to link to.
+const manualLink = existsSync('_site/manual/index.html') ? '<a href="manual/">Manual</a>' : '';
+
+writeFileSync('_site/index.html', fill('index.html', { MANUAL_LINK: manualLink }));
+writeFileSync('_site/changes.html', fill('changes.html', { CHANGES: changes(), MANUAL_LINK: manualLink }));
 for (const file of ['screenshot.png', 'icon.png', 'style.css']) copyFileSync(`site/${file}`, `_site/${file}`);
+
 console.log(`Built _site/ for ${release ? release.tag_name : 'no release yet'}.`);

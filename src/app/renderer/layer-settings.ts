@@ -357,6 +357,14 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
       input.addEventListener('input', () => {
         check();
         change(input.value);
+        // "Moves with…" open beside it shows the formula typed, while it is still one it could have written.
+        if (!motionPanel.hidden) {
+          if (parseMotion(input.value)) showMotion();
+          else {
+            motionPanel.hidden = true;
+            head.querySelector('.motion-button')?.classList.remove('on');
+          }
+        }
       });
       input.addEventListener('scroll', () => (mirror.scrollLeft = input.scrollLeft));
       wrap.append(mirror, input);

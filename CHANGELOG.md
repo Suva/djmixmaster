@@ -6,32 +6,32 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
-- **LUTs in video templates.** A LUT layer gives everything beneath it a
-  look from a .cube file, as made in Resolve, Premiere and the like. The
-  file is kept inside the template, so it travels when the template is
-  shared. A LUT field lets whoever uses the template choose a look of their
-  own for each mix. Put your collection of LUTs in the LUT folder (File >
-  Show LUT Folder, or choose your own with File > Folder for LUTs) and
-  they are all in the list, ready to pick. Go up and down the list with the
-  arrow keys to see each look on the picture at once. A template exported
-  to share takes the LUTs it uses from the folder along with it.
+- **A manual.** Every part of the app explained, with pictures, on the
+  website: from installing and marking mixes to every kind of layer and
+  every function a template's formulas can use. Open it from Help → User
+  Manual, or from the shortcuts sheet.
+- **Video layers in templates.** A template can show a video clip: a loop
+  behind the music, a clip of the club. It loops, plays once and holds its
+  last frame or disappears, at a speed of your choosing, and can use part of
+  the clip. A video can also be a field, chosen per mix. Small videos (up to
+  25 MB) are copied into the app's own folder when added, so they stay with
+  the template; larger ones are used where they are.
+- **The recording's own picture in a template.** For a set that was filmed,
+  a video layer can show the recording itself, in step with the music, and
+  the new "Original video" template does just that, with the artist and the
+  track playing over it. A video opens with that template chosen. If the picture runs ahead of the sound or behind
+  it, "Picture delay" in the Video view puts them in step, for the view and
+  every video export.
+- **Videos open as recordings.** Open or drop an MP4, MOV, MKV or WebM of
+  a set and master its sound as you would a recording.
+- **Export with the original picture.** For a video, the export dialog
+  offers "Original video": the video's own picture with the mastered sound.
+  The picture is copied rather than encoded again, so it is quick and loses
+  nothing, and it starts on the very frame the mix does.
 - **Vertical and square videos.** Three small buttons beside the template
   in the Video view choose the shape: landscape for YouTube, vertical for
   phones, square for feeds. Every template works in each, its title and its
   shapes keeping their size across the picture.
-- **Settings.** The choices that belong to the app, rather than to a
-  recording, are now in one place, each with a word on what it does: the
-  folder for template videos, the LUT folder, and the check for updates.
-  Open it with the gear at the top of the window, or ⌘, (Ctrl+, on Windows
-  and Linux). They have left the File and Help menus.
-- **The app opens in the view you left.** Mastering, Video, or editing a
-  template: the next time the app starts with a recording, it is where you
-  were.
-- **Trails.** A trails layer leaves what moves beneath it behind, fading
-  over as long as you choose: as an echo, or only the bright parts (light
-  trails on a dark picture) or the dark ones. Zoom and turn the trail to
-  make it stream outwards or spiral. Trails show while the music plays; when
-  paused, the picture is shown as it is.
 - **Layer styles: drop shadow, stroke, outer glow, inner shadow and inner
   glow.** Any layer that draws, or a group, can have them, as in an image
   editor: open one in its settings and switch it on. A dot beside the
@@ -41,14 +41,41 @@ are under "Not released yet" and appear there once they are.
   as one, as Resolve's Transform does. Choose what shows past the edges:
   nothing, the picture repeated, mirrored without seams, or its edges drawn
   out. Drag its outline on the picture to move and size it.
-- **Try blends with the arrow keys.** A layer's blend is chosen from a list
-  like the LUTs': press ↑ or ↓ on it, or go through the open list, and the
-  picture shows each blend as you reach it. The blends are sorted by what
-  they do (lighten, darken, contrast and so on), and you can type to find one.
+- **Trails.** A trails layer leaves what moves beneath it behind, fading
+  over as long as you choose: as an echo, or only the bright parts (light
+  trails on a dark picture) or the dark ones. Zoom and turn the trail to
+  make it stream outwards or spiral. Trails show while the music plays; when
+  paused, the picture is shown as it is.
+- **LUTs in video templates.** A LUT layer gives everything beneath it a
+  look from a .cube file, as made in Resolve, Premiere and the like. The
+  file is kept inside the template, so it travels when the template is
+  shared. A LUT field lets whoever uses the template choose a look of their
+  own for each mix. Put your collection of LUTs in the LUT folder (shown, or
+  chosen, in Settings) and they are all in the list, ready to pick. Go up and down the list with the
+  arrow keys to see each look on the picture at once. A template exported
+  to share takes the LUTs it uses from the folder along with it.
 - **Solid colour and vignette layers.** A solid colour fills the picture in
   one colour, a quick background or a tint with a blend. A vignette darkens
   the edges towards a colour of your choice, as an oval of the picture's
   shape or a circle; move its centre on the picture.
+- **Clips that keep time.** A video layer can start its clip again on every
+  beat, every 2, 4, 8 or 16 beats, or at each track. A clip made on a green
+  screen or on black can have that keyed out, with a tolerance and a softness.
+- **Ping-pong clips**, up to a minute long, play forwards and then
+  backwards. Clips in formats the window cannot play itself, such as
+  ProRes, are shown from a copy the app makes the first time.
+- **Template files carry their videos.** A `.djmtemplate` is now a ZIP
+  holding the template and the videos it shows, so it can be shared whole.
+  Template files from earlier versions still open; earlier versions cannot
+  open the new ones.
+- **A folder for template videos.** Settings chooses where small videos added to templates, and those in template files
+  imported, are kept. A video that has moved is found again, or can be
+  located, and the template's other videos in the same folder are found with
+  it.
+- **Try blends with the arrow keys.** A layer's blend is chosen from a list
+  like the LUTs': press ↑ or ↓ on it, or go through the open list, and the
+  picture shows each blend as you reach it. The blends are sorted by what
+  they do (lighten, darken, contrast and so on), and you can type to find one.
 - **Shift+⌘N adds a layer** while you edit a template (Shift+Ctrl+N on
   Windows and Linux): the list of layers opens with its search ready, so
   type a few letters and press Return.
@@ -56,6 +83,8 @@ are under "Not released yet" and appear there once they are.
   drag a field's card up or down to change the order fields are filled in.
   Click a card and press Delete to remove it. The name and the kind of a
   field now sit side by side at the same size.
+- **"Moves with…" follows a formula you type.** With its panel open, a
+  formula typed into the setting shows in it at once.
 - **A fixed gain instead of levelling.** The switch at the top of the
   settings, "Even out tracks" or "Fixed gain", turns the whole mix up or down
   by one amount and leaves the tracks as they are. Loudness still chooses how
@@ -72,6 +101,14 @@ are under "Not released yet" and appear there once they are.
   to put it right: evened out, filled from the other side, or flipped. You
   hear it at once, the levelling works from the fixed sound, and every export
   carries it.
+- **Settings.** The choices that belong to the app, rather than to a
+  recording, are now in one place, each with a word on what it does: the
+  folder for template videos, the LUT folder, and the check for updates.
+  Open it with the gear at the top of the window, or ⌘, (Ctrl+, on Windows
+  and Linux). They have left the File and Help menus.
+- **The app opens in the view you left.** Mastering, Video, or editing a
+  template: the next time the app starts with a recording, it is where you
+  were.
 - **Templates stay out of your recent files.** A template opened from Finder
   or Explorer no longer shows up among the recordings in the Dock menu or the
   taskbar's jump list.
@@ -81,39 +118,6 @@ are under "Not released yet" and appear there once they are.
 - **Searching for a layer no longer sets off shortcuts.** Typing in the
   editor's layer search, or in its other boxes, no longer switches bypass on
   or starts playback.
-- **Videos open as recordings.** Open or drop an MP4, MOV, MKV or WebM of
-  a set and master its sound as you would a recording.
-- **Export with the original picture.** For a video, the export dialog
-  offers "Original video": the video's own picture with the mastered sound.
-  The picture is copied rather than encoded again, so it is quick and loses
-  nothing, and it starts on the very frame the mix does.
-- **Video layers in templates.** A template can show a video clip: a loop
-  behind the music, a clip of the club. It loops, plays once and holds its
-  last frame or disappears, at a speed of your choosing, and can use part of
-  the clip. A video can also be a field, chosen per mix. Small videos (up to
-  25 MB) are copied into the app's own folder when added, so they stay with
-  the template; larger ones are used where they are.
-- **The recording's own picture in a template.** For a set that was filmed,
-  a video layer can show the recording itself, in step with the music, and
-  the new "Original video" template does just that, with the artist and the
-  track playing over it. A video opens with that template chosen. If the picture runs ahead of the sound or behind
-  it, "Picture delay" in the Video view puts them in step, for the view and
-  every video export.
-- **Clips that keep time.** A video layer can start its clip again on every
-  beat, every 2, 4, 8 or 16 beats, or at each track. A clip made on a green
-  screen or on black can have that keyed out, with a tolerance and a softness.
-- **Ping-pong clips**, up to a minute long, play forwards and then
-  backwards. Clips in formats the window cannot play itself, such as
-  ProRes, are shown from a copy the app makes the first time.
-- **Template files carry their videos.** A `.djmtemplate` is now a ZIP
-  holding the template and the videos it shows, so it can be shared whole.
-  Template files from earlier versions still open; earlier versions cannot
-  open the new ones.
-- **A folder for template videos.** File > Folder for Template Videos
-  chooses where small videos added to templates, and those in template files
-  imported, are kept. A video that has moved is found again, or can be
-  located, and the template's other videos in the same folder are found with
-  it.
 
 ## 0.9.1 — 16 October 2026
 
