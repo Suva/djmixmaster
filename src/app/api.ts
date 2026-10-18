@@ -183,6 +183,16 @@ export interface Api {
   pickImage(): Promise<string | null>;
   /** The bytes of a picture file chosen before. */
   readImage(path: string): Promise<Uint8Array>;
+  /** Asks for a .cube file, for a template's LUT layer or field. */
+  pickLut(): Promise<string | null>;
+  /** The text of a .cube file chosen before. */
+  readLut(path: string): Promise<string>;
+  /** The .cube files in the LUT folder (File > Show LUT Folder), named by where each is in it, without the extension. */
+  folderLuts(): Promise<FolderLut[]>;
+  /** The text of a LUT in the LUT folder, by its name there ("Film/Warm"). */
+  readFolderLut(name: string): Promise<string>;
+  /** Another folder was chosen for LUTs. */
+  onLutsChanged(listener: () => void): void;
   /** Asks for a video file, for a template's video layer or field. */
   pickVideo(): Promise<string | null>;
   /** The files the Video view plays a video from, one after another, each with its length in seconds. */
@@ -242,3 +252,9 @@ export type JobMessage =
   | { type: 'progress'; fraction: number }
   | { type: 'done'; result: unknown }
   | { type: 'error'; message: string };
+
+/** A LUT in the LUT folder: "Film/Warm" for Film/Warm.cube, and where it is. */
+export interface FolderLut {
+  name: string;
+  path: string;
+}

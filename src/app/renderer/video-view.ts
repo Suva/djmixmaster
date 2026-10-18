@@ -4,21 +4,24 @@
 // between the two (the bar at the bottom, or Tab) swaps the curves for the
 // picture and the levelling settings for the template's fields.
 
-import type { Api, VisualsChoice } from '../api.ts';
+import type { Api, FolderLut, VisualsChoice } from '../api.ts';
 import type { Features } from '../../features.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, LAYER_TYPES, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEXT_VARIABLES,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, FOLDER_LUT_PREFIX, folderLutsOf, keepFolderLuts, LAYER_TYPES, LUT_PREFIX, lutsOf, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEXT_VARIABLES,
   type Field, type MediaFile, type PreparedLayer, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
 import { TemplateEditor } from './template-editor.ts';
 import { PictureHandles } from './picture-handles.ts';
 import { PreviewVideos } from './video-sources.ts';
+import { lutPicker } from './lut-picker.ts';
+import { lutChoices } from './layer-settings.ts';
+import { packLut, parseCube, unpackLut, type Lut, type PackedLut } from '../../visuals/lut.ts';
 import {
-  checked, DEFAULT_TEMPLATE, drawVideoFrame, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
+  checked, DEFAULT_TEMPLATE, drawVideoFrame, lutOf, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
 } from './video-frame.ts';
 
 export type { VideoMix } from './video-frame.ts';
@@ -52,6 +55,12 @@ export class VideoView {
   readonly #canvas = $<HTMLCanvasElement>('picture');
   readonly #drawer = new FrameDrawer(this.#canvas);
   readonly #images = new Map<string, ImageBitmap>();
+  /** LUTs of LUT layers, by `lut:name` or path, as the template names them. */
+  readonly #luts = new Map<string, Lut>();
+  /** The LUTs in the LUT folder, as last looked at: when the window was last brought forward, or another folder chosen. */
+  #folderLuts: FolderLut[] = [];
+  /** LUTs kept in templates, unpacked, by what is kept: as with pictures, an edit makes a new copy of the template but not of its LUTs. */
+  readonly #unpacked = new Map<string, Lut>();
   /** The videos of video layers, playing along; a frame that comes in while paused is drawn. */
   readonly #videos: PreviewVideos;
   #visible = false;
@@ -80,6 +89,10 @@ export class VideoView {
   constructor(options: VideoViewOptions) {
     this.#options = options;
     this.#videos = new PreviewVideos(options.api, () => (this.#stale = true));
+    // Files put in the LUT folder are offered once the app is come back to.
+    this.#lookInLutFolder();
+    window.addEventListener('focus', () => this.#lookInLutFolder());
+    options.api.onLutsChanged(() => this.#lookInLutFolder());
     this.#editor = new TemplateEditor({
       change: (template) => this.#edited(template),
       history: () => options.history(),
@@ -101,6 +114,18 @@ export class VideoView {
         for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
         return { name: file.replace(/\.[^.]+$/, ''), data: `data:image/${type};base64,${btoa(binary)}` };
       },
+      pickLut: async () => {
+        const path = await options.api.pickLut();
+        if (!path) return null;
+        try {
+          const packed: PackedLut = packLut(parseCube(await options.api.readLut(path)));
+          return { name: path.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''), lut: packed };
+        } catch (error) {
+          options.say(`Could not use that LUT: ${error instanceof Error ? error.message : error}`);
+          return null;
+        }
+      },
+      folderLuts: () => this.#folderLuts,
       pickVideo: async () => {
         const path = await options.api.pickVideo();
         if (!path) return null;
@@ -268,6 +293,7 @@ export class VideoView {
     this.#stale = true;
     if (fresh) this.#drawer.reset();
     for (const name of imagesOf(template, this.#choice.fields)) this.#loadImage(name, template);
+    for (const name of lutsOf(template, this.#choice.fields)) this.#loadLut(name, template);
     this.#checkMedia();
   }
 
@@ -382,6 +408,39 @@ export class VideoView {
       this.#stale = true;
     } catch (error) {
       this.#options.say(`Could not load the picture: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  /** Lists the LUT folder's LUTs again, and offers them anew where they are offered if they have changed. */
+  async #lookInLutFolder() {
+    const found = await this.#options.api.folderLuts().catch(() => [] as FolderLut[]);
+    if (JSON.stringify(found) === JSON.stringify(this.#folderLuts)) return;
+    this.#folderLuts = found;
+    // A file of the folder may have been changed, or put back: read again what is used of it.
+    for (const name of [...this.#luts.keys()]) if (name.startsWith(FOLDER_LUT_PREFIX)) this.#luts.delete(name);
+    this.#prepare(false);
+    if (!this.#template().fields.some((field) => field.kind === 'lut') && !this.#editing) return;
+    this.#showFields();
+    this.#editor.offersChanged();
+  }
+
+  async #loadLut(name: string, template = this.#template()) {
+    try {
+      if (name.startsWith(LUT_PREFIX)) {
+        // Unpacked at once, so that the picture never shows without it after an edit.
+        const packed = template.luts?.[name.slice(LUT_PREFIX.length)];
+        if (!packed) return;
+        let lut = this.#unpacked.get(packed.data);
+        if (!lut) this.#unpacked.set(packed.data, (lut = unpackLut(packed)));
+        if (this.#luts.get(name) !== lut) this.#stale = true;
+        this.#luts.set(name, lut);
+        return;
+      }
+      if (this.#luts.has(name)) return;
+      this.#luts.set(name, await lutOf(name, template, this.#options.api));
+      this.#stale = true;
+    } catch (error) {
+      this.#options.say(`Could not use the LUT: ${error instanceof Error ? error.message : error}`);
     }
   }
 
@@ -628,7 +687,20 @@ export class VideoView {
 
   /** Saves the template on show as a file to share, from the ⋯ menu or the editor. */
   async #export() {
-    const template = this.#template();
+    let template = this.#template();
+    // The LUTs it names in the LUT folder go inside the file: whoever it is shared with has not got that folder.
+    const names = folderLutsOf(template);
+    if (names.length) {
+      const packed: Record<string, PackedLut> = {};
+      for (const name of names) {
+        try {
+          packed[name] = packLut(parseCube(await this.#options.api.readFolderLut(name)));
+        } catch (error) {
+          return this.#options.say(`Could not export ${template.name}: the LUT ${name} could not be packed. ${error instanceof Error ? error.message : error}`);
+        }
+      }
+      template = keepFolderLuts(template, packed);
+    }
     const saved = await this.#options.api.exportTemplate(template, template.name);
     if (saved) this.#options.say(`Saved ${template.name} as ${saved.split(/[\\/]/).pop()}, with its pictures, to share.`);
   }
@@ -800,6 +872,29 @@ export class VideoView {
       });
       row.append(choose, clear, name);
       control.append(row);
+    } else if (field.kind === 'lut') {
+      // For this mix: one the template keeps, one of the LUT folder's, or any file, read where it is.
+      control.append(lutPicker({
+        id,
+        current: String(value),
+        choices: () => [{ value: '', label: 'None' }, ...lutChoices(this.#template(), this.#folderLuts)],
+        choose: (chosen) => this.#setField(field.key, chosen),
+        add: {
+          label: 'Choose a file…',
+          run: async () => {
+            const path = await this.#options.api.pickLut();
+            if (!path) return;
+            try {
+              // Read before it is taken, so that a file that is no LUT is said at once rather than left blank.
+              this.#luts.set(path, parseCube(await this.#options.api.readLut(path)));
+            } catch (error) {
+              return this.#options.say(`Could not use that LUT: ${error instanceof Error ? error.message : error}`);
+            }
+            this.#setField(field.key, path);
+            this.#showFields();
+          },
+        },
+      }));
     } else if (field.kind === 'font') {
       // The sample is what the font will set: the artist, or failing that the mix's name.
       const sample = () => {
@@ -883,7 +978,7 @@ export class VideoView {
     // Time moves on only while playing: drawn again paused, glitter and fades stay where they were.
     const dt = playing ? elapsed : 0;
     this.#videos.begin(playing, this.#options.rate());
-    drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images, this.#videos, elapsed);
+    drawVideoFrame(this.#drawer, this.#layers, reader, mix, seconds, dt, this.#images, this.#videos, elapsed, this.#luts);
     this.#videos.end();
     // A change of text plays out even while paused, which takes the frames after this one.
     if (this.#drawer.changing) this.#stale = true;

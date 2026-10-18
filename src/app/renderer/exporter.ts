@@ -9,8 +9,9 @@ import type { Api, VideoRequest } from '../api.ts';
 import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
-import { fontsOf, imagesOf, prepare } from '../../visuals/template.ts';
-import { clipRequests, drawVideoFrame, pictureOf } from './video-frame.ts';
+import { fontsOf, imagesOf, lutsOf, prepare } from '../../visuals/template.ts';
+import type { Lut } from '../../visuals/lut.ts';
+import { clipRequests, drawVideoFrame, lutOf, pictureOf } from './video-frame.ts';
 import { ExportVideos } from './video-sources.ts';
 
 declare global {
@@ -54,16 +55,20 @@ async function run(job: VideoRequest) {
   await loadFonts(fontsOf(template, fields));
   const images = new Map<string, ImageBitmap>();
   for (const name of imagesOf(template, fields)) images.set(name, await pictureOf(name, template, api));
+  const luts = new Map<string, Lut>();
+  for (const name of lutsOf(template, fields)) luts.set(name, await lutOf(name, template, api));
 
   const videos = new ExportVideos(api, { width: job.width, height: job.height });
   try {
-    await draw(job, reader, layers, images, videos);
+    await draw(job, reader, layers, images, luts, videos);
   } finally {
     videos.close();
   }
 }
 
-async function draw(job: VideoRequest, reader: MusicReader, layers: ReturnType<typeof prepare>, images: Map<string, ImageBitmap>, videos: ExportVideos) {
+async function draw(
+  job: VideoRequest, reader: MusicReader, layers: ReturnType<typeof prepare>, images: Map<string, ImageBitmap>, luts: Map<string, Lut>, videos: ExportVideos,
+) {
   const { mix } = job;
   const canvas = new OffscreenCanvas(job.width, job.height);
   const drawer = new FrameDrawer(canvas);
@@ -101,7 +106,7 @@ async function draw(job: VideoRequest, reader: MusicReader, layers: ReturnType<t
     if (failure) throw new Error(failure);
     // The videos' frames for this moment, decoded before the frame is drawn.
     await videos.prepare(clipRequests(mix, layers, reader, i / job.fps));
-    drawVideoFrame(drawer, layers, reader, mix, i / job.fps, dt, images, videos);
+    drawVideoFrame(drawer, layers, reader, mix, i / job.fps, dt, images, videos, dt, luts);
     const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / job.fps), duration: Math.round(1e6 / job.fps) });
     encoder.encode(frame, { keyFrame: i % keyframeEvery === 0 });
     frame.close();

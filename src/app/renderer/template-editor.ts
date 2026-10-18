@@ -8,10 +8,12 @@
 // template keeps them in drawing order, back first.
 
 import {
-  ABOUT_LIMITS, aboutProblem, COMMON_PARAMS, LAYER_TYPES, MEDIA_PREFIX, settingsOf,
+  ABOUT_LIMITS, aboutProblem, COMMON_PARAMS, LAYER_TYPES, LUT_PREFIX, MEDIA_PREFIX, settingsOf,
   type Layer, type MediaFile, type TemplateAbout, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
 import { layerSettings, SHOWN_AS } from './layer-settings.ts';
+import type { PackedLut } from '../../visuals/lut.ts';
+import type { FolderLut } from '../api.ts';
 import { flatten, isGroup, locate, treeOf, within, type LayerNode } from '../../visuals/layer-tree.ts';
 import { scrubbable } from './scrub.ts';
 import { FIELD_KINDS, fieldsEditor, freeFieldName, newField } from './fields-editor.ts';
@@ -27,6 +29,10 @@ export interface TemplateEditorOptions {
   pickPicture(): Promise<{ name: string; data: string } | null>;
   /** Asks for a video file and makes it one a template can keep: its name, and where it is; or null. */
   pickVideo(): Promise<{ name: string; file: MediaFile } | null>;
+  /** Asks for a .cube file and gives its name and the LUT packed; null if none, or it cannot be read. */
+  pickLut(): Promise<{ name: string; lut: PackedLut } | null>;
+  /** The LUTs in the LUT folder, as last looked at. */
+  folderLuts(): FolderLut[];
   /** A field was renamed: what the mix filled in goes under the new name. */
   renamedField(from: string, to: string): void;
 }
@@ -253,6 +259,8 @@ export class TemplateEditor {
       renamed: (from, to) => this.#options.renamedField(from, to),
       pickPicture: () => this.#options.pickPicture(),
       pickVideo: () => this.#options.pickVideo(),
+      pickLut: () => this.#options.pickLut(),
+      folderLuts: () => this.#options.folderLuts(),
     }));
   }
 
@@ -321,6 +329,13 @@ export class TemplateEditor {
   /** Makes the settings shown anew, after a change made elsewhere. */
   refresh() {
     this.#showSettings();
+  }
+
+  /** Makes the settings and the fields shown anew, as what they offer has changed: the LUT folder's LUTs. */
+  offersChanged() {
+    if (!this.#template) return;
+    this.#showSettings();
+    this.#showFields();
   }
 
   /** Brings the live values of the selected layer's expressions up to date: once a frame. */
@@ -738,6 +753,12 @@ export class TemplateEditor {
       keepVideo: (key, name, file) => this.#change('', (template) => {
         template.media = { ...template.media, [name]: file };
         layer.params[key] = MEDIA_PREFIX + name;
+      }),
+      pickLut: () => this.#options.pickLut(),
+      folderLuts: () => this.#options.folderLuts(),
+      keepLut: (key, name, lut) => this.#change('', (template) => {
+        template.luts = { ...template.luts, [name]: lut };
+        layer.params[key] = LUT_PREFIX + name;
       }),
     };
     this.#settings = layerSettings(layer, context);

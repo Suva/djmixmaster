@@ -13,8 +13,11 @@
 //   image, font  a name
 //   video    a file's path, `media:name` for a video the template keeps, or
 //            `recording:video` for the picture of the recording itself
+//   lut      `lut:name` for a LUT the template keeps, `lutfolder:Film/Warm`
+//            for Film/Warm.cube in the LUT folder, or a .cube file's path
+//            (a LUT field filled in for a mix)
 // Fields are used by name in expressions (`colour1`, `amount`), and as
-// %field% in text. A choice, image or font can also be just "%field%", so
+// %field% in text. A choice, image, font, video or LUT can also be just "%field%", so
 // one field can serve several layers.
 //
 // Kept free of Node imports: the window checks templates and draws from them.
@@ -23,10 +26,11 @@ import { parseHex, toHex, type Colour } from './colour.ts';
 import { flatten, treeOf, type LayerNode } from './layer-tree.ts';
 import { compile, type Compiled, type Kind, type Problem, type Value } from './expression.ts';
 import { PLAYBACKS, RESTARTS } from './clip.ts';
+import { unpackLut, type PackedLut } from './lut.ts';
 
 export const TEMPLATE_FORMAT = 1;
 
-export type ParamKind = 'number' | 'switch' | 'colour' | 'text' | 'choice' | 'image' | 'font' | 'video';
+export type ParamKind = 'number' | 'switch' | 'colour' | 'text' | 'choice' | 'image' | 'font' | 'video' | 'lut';
 export type ParamValue = number | boolean | string;
 
 export interface ParamSpec {
@@ -288,6 +292,15 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       radius: number('Radius', 0.5, 0, 10, '%'),
     },
   },
+  lut: {
+    label: 'LUT',
+    effect: true,
+    // A look for the whole picture beneath: it has no place or size of its own. Opacity says how much of the look.
+    params: {
+      lut: { kind: 'lut', label: 'LUT', default: '' },
+    },
+    common: ['visible', 'opacity', 'blend', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
 };
 
 /**
@@ -313,7 +326,7 @@ export const FONTS: Record<string, string> = {
   Impact: 'Impact, "Arial Black", sans-serif',
 };
 
-export type FieldKind = 'text' | 'colour' | 'image' | 'number' | 'choice' | 'font' | 'video';
+export type FieldKind = 'text' | 'colour' | 'image' | 'number' | 'choice' | 'font' | 'video' | 'lut';
 
 /** Something the template asks whoever uses it to fill in. */
 export interface Field {
@@ -354,6 +367,12 @@ export interface Template {
    * the files themselves.
    */
   media?: Record<string, MediaFile>;
+  /**
+   * Colour lookup tables the template keeps, by name, packed (see lut.ts); a
+   * LUT setting or a LUT field's default uses one as `lut:name`. They are
+   * small enough to travel inside the template, as pictures do.
+   */
+  luts?: Record<string, PackedLut>;
   /** Who made it and what it is, shown under the list of templates; it travels with a template file. */
   about?: TemplateAbout;
 }
@@ -376,6 +395,14 @@ export interface MediaFile {
 
 /** What a video setting names to use a video the template keeps. */
 export const MEDIA_PREFIX = 'media:';
+/** What a LUT setting names to use a LUT the template keeps. */
+export const LUT_PREFIX = 'lut:';
+/**
+ * What a LUT setting names to use a LUT in the LUT folder, then where it is
+ * in it without the extension. Not kept in the template while it is the
+ * user's own; packed into it when it is exported to share (`keepFolderLuts`).
+ */
+export const FOLDER_LUT_PREFIX = 'lutfolder:';
 /** What a video setting names to show the recording's own picture, when the recording is a video. */
 export const RECORDING_VIDEO = 'recording:video';
 
@@ -508,6 +535,17 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
     };
   }
 
+  const luts: Record<string, PackedLut> = {};
+  const givenLuts = (typeof source.luts === 'object' && source.luts !== null ? source.luts : {}) as Record<string, unknown>;
+  for (const [name, item] of Object.entries(givenLuts)) {
+    try {
+      unpackLut(item);
+      luts[name] = item as PackedLut;
+    } catch (error) {
+      problems.push({ where: `LUT ${name}`, message: (error as Error).message });
+    }
+  }
+
   const about: TemplateAbout = {};
   const givenAbout = (typeof source.about === 'object' && source.about !== null ? source.about : {}) as Record<string, unknown>;
   for (const key of Object.keys(ABOUT_LIMITS) as (keyof TemplateAbout)[]) {
@@ -531,7 +569,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
       problems.push({ where: `${where} (${field.key})`, message: `The name ${field.key} is already taken` });
       continue;
     }
-    const kinds: FieldKind[] = ['text', 'colour', 'image', 'number', 'choice', 'font', 'video'];
+    const kinds: FieldKind[] = ['text', 'colour', 'image', 'number', 'choice', 'font', 'video', 'lut'];
     const kind = kinds.includes(field.kind as FieldKind) ? (field.kind as FieldKind) : 'text';
     fields.push({
       key: field.key,
@@ -571,7 +609,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
     for (const [key, param] of Object.entries(all)) {
       const where = `${title}, ${param.label}`;
       const value = given[key];
-      const problem = value === undefined ? null : checkValue(value, param, names, fieldOf, assets, media);
+      const problem = value === undefined ? null : checkValue(value, param, names, fieldOf, { assets, media, luts });
       if (problem) problems.push({ where, ...problem });
       params[key] = value === undefined || problem ? param.default : (value as ParamValue);
     }
@@ -594,6 +632,7 @@ export function checkTemplate(raw: unknown, musicNames: readonly string[], textN
       layers,
       ...(Object.keys(assets).length ? { assets } : {}),
       ...(Object.keys(media).length ? { media } : {}),
+      ...(Object.keys(luts).length ? { luts } : {}),
       ...(Object.keys(about).length ? { about } : {}),
     },
     problems,
@@ -611,13 +650,14 @@ export function checkSetting(
     expressions: expressionNames(template.fields, musicNames),
     text: [...textNames, ...template.fields.map((field) => field.key)],
   };
-  return checkValue(value, param, names, (key) => template.fields.find((field) => field.key === key), template.assets ?? {}, template.media ?? {});
+  return checkValue(value, param, names, (key) => template.fields.find((field) => field.key === key),
+    { assets: template.assets ?? {}, media: template.media ?? {}, luts: template.luts ?? {} });
 }
 
 /** What is wrong with one parameter's value, if anything. */
 function checkValue(
   value: unknown, param: ParamSpec, names: Names, fieldOf: (key: string) => Field | undefined,
-  assets: Record<string, string>, media: Record<string, MediaFile>,
+  { assets, media, luts }: { assets: Record<string, string>; media: Record<string, MediaFile>; luts: Record<string, PackedLut> },
 ): Omit<TemplateProblem, 'where'> | null {
   const whole = typeof value === 'string' ? WHOLE_VARIABLE.exec(value) : null;
   switch (param.kind) {
@@ -665,6 +705,14 @@ function checkValue(
       if (whole) return fieldOf(whole[1])?.kind === 'video' ? null : { message: `${whole[1]} is not a video field of this template` };
       if (value.startsWith(MEDIA_PREFIX) && !(value.slice(MEDIA_PREFIX.length) in media)) {
         return { message: `This template keeps no video called ${value.slice(MEDIA_PREFIX.length)}` };
+      }
+      return null;
+    }
+    case 'lut': {
+      if (typeof value !== 'string') return { message: 'Should be a LUT' };
+      if (whole) return fieldOf(whole[1])?.kind === 'lut' ? null : { message: `${whole[1]} is not a LUT field of this template` };
+      if (value.startsWith(LUT_PREFIX) && !(value.slice(LUT_PREFIX.length) in luts)) {
+        return { message: `This template keeps no LUT called ${value.slice(LUT_PREFIX.length)}` };
       }
       return null;
     }
@@ -793,6 +841,62 @@ export function imagesOf(template: Template, filled: Record<string, string | num
     if (typeof value === 'string' && value && !WHOLE_VARIABLE.test(value)) images.add(value);
   }
   return [...images];
+}
+
+/**
+ * Every LUT a template uses with what was filled in: each as `lut:name` for
+ * one it keeps, or a .cube file's path.
+ */
+export function lutsOf(template: Template, filled: Record<string, string | number>): string[] {
+  const luts = new Set<string>();
+  for (const field of template.fields) {
+    const value = String(filled[field.key] ?? field.default);
+    if (field.kind === 'lut' && value) luts.add(value);
+  }
+  for (const layer of template.layers) {
+    const value = layer.params.lut;
+    if (layer.type === 'lut' && typeof value === 'string' && value && !WHOLE_VARIABLE.test(value)) luts.add(value);
+  }
+  return [...luts];
+}
+
+/** The LUTs of the LUT folder a template names, in its layers and its fields' defaults, by their names in the folder. */
+export function folderLutsOf(template: Template): string[] {
+  const names = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && value.startsWith(FOLDER_LUT_PREFIX)) names.add(value.slice(FOLDER_LUT_PREFIX.length));
+  };
+  for (const field of template.fields) if (field.kind === 'lut') add(field.default);
+  for (const layer of template.layers) if (layer.type === 'lut') add(layer.params.lut);
+  return [...names];
+}
+
+/**
+ * A copy of the template that keeps the LUT folder's LUTs it names, `packed`
+ * by their names in the folder, and names them as kept: for a template file
+ * to share, which has to work without the folder. A LUT kept already with
+ * the same table is used rather than kept twice.
+ */
+export function keepFolderLuts(template: Template, packed: Record<string, PackedLut>): Template {
+  const copy = structuredClone(template);
+  const luts: Record<string, PackedLut> = { ...copy.luts };
+  const keptAs = new Map<string, string>();
+  for (const [name, lut] of Object.entries(packed)) {
+    let as = Object.keys(luts).find((other) => luts[other].data === lut.data && luts[other].size === lut.size);
+    if (!as) {
+      const wanted = name.split('/').pop()!;
+      as = wanted;
+      for (let n = 2; as in luts; n++) as = `${wanted} ${n}`;
+      luts[as] = lut;
+    }
+    keptAs.set(FOLDER_LUT_PREFIX + name, LUT_PREFIX + as);
+  }
+  for (const field of copy.fields) if (field.kind === 'lut') field.default = keptAs.get(String(field.default)) ?? field.default;
+  for (const layer of copy.layers) {
+    if (layer.type === 'lut' && typeof layer.params.lut === 'string') layer.params.lut = keptAs.get(layer.params.lut) ?? layer.params.lut;
+  }
+  if (Object.keys(luts).length) copy.luts = luts;
+  return copy;
 }
 
 /**

@@ -13,6 +13,7 @@ import type { Values } from './expression.ts';
 import { fontStack } from './fonts.ts';
 import { hexOf, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
 import type { ClipTiming, Playback } from './clip.ts';
+import { applyLut, type Lut } from './lut.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -38,6 +39,8 @@ export interface Frame {
   text: TextValues;
   /** Pictures for image layers, by the name or path a template gives. */
   images: Map<string, CanvasImageSource & { width: number; height: number }>;
+  /** LUTs for LUT layers, by `lut:name` or path as a template gives them. */
+  luts?: Map<string, Lut>;
   /** How much of the picture shows, 0 to 1: the mix's fades in and out take it to black. */
   shown?: number;
   /**
@@ -254,6 +257,7 @@ export class FrameDrawer {
       case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
       case 'kaleidoscope': this.#kaleidoscope(params); break;
       case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#canvas.height); break;
+      case 'lut': this.#lut(params, frame); break;
     }
     into.restore();
     if (burn) {
@@ -880,6 +884,26 @@ export class FrameDrawer {
     ctx.restore();
   }
 
+  /** The graphics card's way of applying LUTs; null where WebGL 2 is not to be had, and the processor does it. */
+  #lutGl: LutGl | null | undefined;
+
+  /** The picture beneath, through a colour lookup table. */
+  #lut(params: ResolvedParams, frame: Frame) {
+    const lut = frame.luts?.get(str(params, 'lut'));
+    if (!lut) return;
+    const { width, height } = this.#canvas;
+    if (this.#lutGl === undefined) this.#lutGl = LutGl.make();
+    const result = this.#lutGl?.apply(this.#surface, lut, width, height);
+    if (result) return this.#putBack(result);
+    // On the processor: slower, the same colours.
+    const copy = this.#copyOfPicture();
+    const pixels = copy.getContext('2d')!.getImageData(0, 0, width, height);
+    applyLut(lut, pixels.data);
+    const out = this.#extraCanvas(0);
+    out.getContext('2d')!.putImageData(pixels, 0, 0);
+    this.#putBack(out);
+  }
+
   /** The picture beneath, through one of the canvas's filters. */
   #filtered(filter: string) {
     const copy = this.#copyOfPicture();
@@ -1140,4 +1164,125 @@ function keyOut(
     data[i + 3] = distance <= low ? 0 : Math.round(data[i + 3] * ((distance - low) / (high - low)));
   }
   ctx.putImageData(image, 0, 0);
+}
+
+/**
+ * Applies LUTs on the graphics card: the picture is a texture, the LUT a 3D
+ * texture read between its points by the card itself, and the result a
+ * canvas to draw back. A LUT is sent to the card once, then kept while it is
+ * in use.
+ */
+class LutGl {
+  readonly #canvas: OffscreenCanvas;
+  readonly #gl: WebGL2RenderingContext;
+  readonly #program: WebGLProgram;
+  readonly #picture: WebGLTexture;
+  readonly #tables = new WeakMap<Lut, WebGLTexture>();
+  #uniforms: Record<'picture' | 'table' | 'size' | 'low' | 'high', WebGLUniformLocation | null>;
+
+  static make(): LutGl | null {
+    try {
+      return typeof OffscreenCanvas === 'undefined' ? null : new LutGl();
+    } catch {
+      return null;
+    }
+  }
+
+  constructor() {
+    this.#canvas = new OffscreenCanvas(1, 1);
+    const gl = this.#canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('No WebGL 2');
+    this.#gl = gl;
+    const shader = (type: number, source: string) => {
+      const made = gl.createShader(type)!;
+      gl.shaderSource(made, source);
+      gl.compileShader(made);
+      if (!gl.getShaderParameter(made, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(made) ?? 'Shader');
+      return made;
+    };
+    const program = gl.createProgram()!;
+    // One triangle over the whole picture, made from the vertex's number alone.
+    gl.attachShader(program, shader(gl.VERTEX_SHADER, `#version 300 es
+      void main() {
+        vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+        gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+      }`));
+    // The picture's pixels are read as they are, not premultiplied, and written back premultiplied, as the canvas keeps them.
+    // A point's value is at the middle of its texel, so 0 and 1 land on the first and the last point exactly.
+    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, `#version 300 es
+      precision highp float;
+      precision highp sampler3D;
+      uniform sampler2D picture;
+      uniform sampler3D table;
+      uniform float size;
+      uniform vec3 low;
+      uniform vec3 high;
+      out vec4 colour;
+      void main() {
+        ivec2 at = ivec2(gl_FragCoord.xy);
+        at.y = textureSize(picture, 0).y - 1 - at.y;
+        vec4 c = texelFetch(picture, at, 0);
+        vec3 t = clamp((c.rgb - low) / (high - low), 0.0, 1.0);
+        vec3 looked = clamp(texture(table, (t * (size - 1.0) + 0.5) / size).rgb, 0.0, 1.0);
+        colour = vec4(looked * c.a, c.a);
+      }`));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? 'Program');
+    this.#program = program;
+    this.#uniforms = {
+      picture: gl.getUniformLocation(program, 'picture'),
+      table: gl.getUniformLocation(program, 'table'),
+      size: gl.getUniformLocation(program, 'size'),
+      low: gl.getUniformLocation(program, 'low'),
+      high: gl.getUniformLocation(program, 'high'),
+    };
+    this.#picture = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, this.#picture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+
+  #table(lut: Lut): WebGLTexture {
+    const known = this.#tables.get(lut);
+    if (known) return known;
+    const gl = this.#gl;
+    const texture = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_3D, texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    // Half floats are read between points by any card; full floats need an extension for that.
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGB16F, lut.size, lut.size, lut.size, 0, gl.RGB, gl.FLOAT, lut.data);
+    for (const wrap of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T, gl.TEXTURE_WRAP_R]) gl.texParameteri(gl.TEXTURE_3D, wrap, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    this.#tables.set(lut, texture);
+    return texture;
+  }
+
+  /** The picture through the LUT, on a canvas of this class's own; null if the card could not do it. */
+  apply(source: Canvas, lut: Lut, width: number, height: number): OffscreenCanvas | null {
+    const gl = this.#gl;
+    if (gl.isContextLost()) return null;
+    if (this.#canvas.width !== width || this.#canvas.height !== height) {
+      this.#canvas.width = width;
+      this.#canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(this.#program);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_3D, this.#table(lut));
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#picture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.uniform1i(this.#uniforms.picture, 0);
+    gl.uniform1i(this.#uniforms.table, 1);
+    gl.uniform1f(this.#uniforms.size, lut.size);
+    gl.uniform3fv(this.#uniforms.low, lut.min);
+    gl.uniform3fv(this.#uniforms.high, lut.max);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
+  }
 }

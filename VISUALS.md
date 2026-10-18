@@ -156,6 +156,7 @@ Effect layers change what is beneath them rather than drawing their own.
 **Trails** — how slowly the past frames fade, zoom and turn per frame
 **Split colour** — how far red and blue are pushed apart, and in which direction
 **Kaleidoscope** — number of segments, rotation, zoom
+**LUT** — a look from a colourist's .cube file, kept in the template or chosen through a field
 **Pixelate** — block size
 **Scan lines** — spacing, strength, roll speed
 
@@ -223,6 +224,7 @@ Values any number parameter can follow, through a knob or an expression:
 | Number | Particle amount, as a slider with the range the designer allows |
 | Choice | Layout: logo left or centred |
 | Font | From the fonts the app carries |
+| LUT | A .cube file for the look |
 
 ## What the first try of the export showed
 
@@ -298,7 +300,7 @@ values into the ones a frame gets. None draws anything yet.
   brightness and contrast (`adjust`), hue and saturation (`hue`), blur, and
   a kaleidoscope (a slice round the layer's position repeated all the way
   round, filled from the picture mirrored past its edges so that no corner is
-  left black).
+  left black), and a LUT (see "LUTs, as built" below).
 - **Groups** are layers of the kind `group` whose `size` says how many of the
   layers after it are theirs, so that the list stays flat and everything that
   knows a layer by its place in it (outlines on the picture, what a layer
@@ -490,3 +492,49 @@ values into the ones a frame gets. None draws anything yet.
   the speed on the Mac); other sizes and frame rates; very long mixes end to
   end.
 
+## LUTs, as built
+
+- **A LUT layer** sends the picture beneath it through a colour lookup table
+  from a `.cube` file, the format colour grading programs write
+  (`src/visuals/lut.ts`). 3D tables of up to 65 points a side are read;
+  a 1D one is made into a 3D one of 33. `DOMAIN_MIN` and `DOMAIN_MAX` are
+  kept; a file with a 1D and a 3D table together is refused. Its only setting
+  is the LUT: how much of the look is the layer's opacity, and it has no
+  place or size of its own.
+- **Kept in the template,** unless it comes from a field. Adding a .cube file
+  in the editor packs it into the template's `luts`, by name, and the setting
+  names it as `lut:name`; so it travels in a template file with no file
+  beside it. Packed, each value is 16 bits from the lowest to the highest the
+  table gives, in base 64: finer than a frame's 8 bits, and a third of the
+  size of the file's text, which matters as the editor's undo keeps the
+  template whole at each step.
+- **A LUT field** lets whoever uses the template choose a look for a mix: one
+  the template keeps, one of the LUT folder's, or any .cube file, which is
+  read where it is, as a picture field's is. Its default can be one the
+  template keeps or one of the folder's.
+- **The LUT folder** (File > Show LUT Folder; `luts/` in the data folder,
+  or another chosen with File > Folder for LUTs) holds a collection of
+  looks. Its .cube files, and those in folders in it two deep, are offered in
+  every list of LUTs, named by where they are in it ("Film/Warm"). Chosen,
+  one is named by that, as `lutfolder:Film/Warm`, and not kept: a collection
+  can be tried look by look without the template filling up. Only a LUT
+  added with "Add a .cube file…" is kept in the template. A template
+  exported to share has the folder's LUTs it names packed in then
+  (`keepFolderLuts`), as whoever opens it has not got the folder; one kept
+  already with the same table is used rather than kept twice. The folder is
+  looked in again whenever the window is brought forward, so files put there
+  show up without a restart, and those changed are read again.
+- **The list of LUTs** (`lut-picker.ts`) is a button that opens a list to
+  search, as the fonts' is, rather than a dropdown of the system's: there,
+  the arrow keys go through the list, and each LUT is put to use as it is
+  reached, so looks are compared on the picture itself; Escape goes back to
+  the one there was. With the list closed, the arrow keys on the button step
+  through it as well.
+- **Applied on the graphics card,** in WebGL 2: the picture is a texture, the
+  table a 3D texture in half floats that the card reads between its points
+  (trilinear), and the result is drawn back as any effect's is. Where WebGL
+  2 cannot be had, the same is done on the processor (`applyLut`), with the
+  same colours, at some tens of milliseconds a 1080p frame.
+- The values are applied to the picture as it is, in sRGB, as a LUT made for
+  Rec. 709 video expects. A LUT made for log footage will look wrong on
+  anything else, as it would in an editor.

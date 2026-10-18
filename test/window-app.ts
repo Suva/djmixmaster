@@ -114,6 +114,8 @@ export interface Run<Given> {
   template?: string;
   /** What the dialog for a template's video answers. */
   video?: string;
+  /** What the dialog for a .cube LUT answers. */
+  lut?: string;
   /** Handed to the function as its second argument; must survive JSON. */
   given?: Given;
   timeoutMs?: number;
@@ -149,6 +151,7 @@ export function runApp<Result, Given = undefined>(
         ...(run.tracklist ? { DJMASTER_SHOT_TRACKLIST: run.tracklist } : {}),
         ...(run.template ? { DJMASTER_SHOT_TEMPLATE: run.template } : {}),
         ...(run.video ? { DJMASTER_SHOT_VIDEO: run.video } : {}),
+        ...(run.lut ? { DJMASTER_SHOT_LUT: run.lut } : {}),
       },
     });
     let output = '';

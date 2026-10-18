@@ -1505,7 +1505,7 @@ test('the + menu fits the window, scrolls, and finds a kind of layer by typing',
     return { listHeight, opened, found, added, closed, short };
   });
   assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
-  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 15 });
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 16 });
   assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
   assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
   assert.ok(seen.closed);

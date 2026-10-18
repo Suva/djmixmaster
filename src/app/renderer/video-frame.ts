@@ -7,10 +7,11 @@ import { clipTimingOf, type FrameDrawer, type VideoPicture } from '../../visuals
 import { beatsOf, type ClipTiming } from '../../visuals/clip.ts';
 import type { MusicReader } from '../../visuals/music.ts';
 import {
-  ASSET_PREFIX, checkTemplate, RECORDING_VIDEO, TEXT_VARIABLES, videoFile, type PreparedLayer, type ResolvedParams, type Template, type TextValues,
+  ASSET_PREFIX, checkTemplate, FOLDER_LUT_PREFIX, LUT_PREFIX, RECORDING_VIDEO, TEXT_VARIABLES, videoFile, type PreparedLayer, type ResolvedParams, type Template, type TextValues,
 } from '../../visuals/template.ts';
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
+import { parseCube, unpackLut, type Lut } from '../../visuals/lut.ts';
 import { BAND_COUNT } from '../../features.ts';
 import { fadeGain } from '../../fade.ts';
 import { splitName, trackAt } from '../../tracks.ts';
@@ -54,6 +55,17 @@ export async function pictureOf(name: string, template: Template, api: Api): Pro
     return createImageBitmap(new Blob([bytes], { type: head.slice(5, head.indexOf(';')) }));
   }
   return createImageBitmap(new Blob([(await api.readImage(name)) as BlobPart]));
+}
+
+/** Reads a LUT a template uses: one it keeps from what is kept, one of the LUT folder from there, any other from its .cube file. */
+export async function lutOf(name: string, template: Template, api: Api): Promise<Lut> {
+  if (name.startsWith(LUT_PREFIX)) {
+    const packed = template.luts?.[name.slice(LUT_PREFIX.length)];
+    if (!packed) throw new Error(`No LUT called ${name.slice(LUT_PREFIX.length)} in the template`);
+    return unpackLut(packed);
+  }
+  if (name.startsWith(FOLDER_LUT_PREFIX)) return parseCube(await api.readFolderLut(name.slice(FOLDER_LUT_PREFIX.length)));
+  return parseCube(await api.readLut(name));
 }
 
 export function clock(seconds: number): string {
@@ -170,6 +182,7 @@ export function drawVideoFrame(
   images: Map<string, ImageBitmap>,
   videos?: VideoFrames,
   clockDt = dt,
+  luts?: Map<string, Lut>,
 ) {
   const length = mix.end - mix.start;
   const music = reader ? reader.at(seconds, dt) : { time: seconds, dt, length, progress: seconds / Math.max(1, length) };
@@ -185,6 +198,7 @@ export function drawVideoFrame(
     levelHistory: (span, points) => (reader ? reader.levelHistory(seconds, span, points) : new Float32Array(points)),
     text: textValues(mix, seconds, typeof music.tempo === 'number' ? music.tempo : 0),
     images,
+    luts,
     shown: fadeGain(seconds, length, mix.fadeIn, mix.fadeOut),
     video: (source, layer, timing) => {
       const path = videos && videoPathOf(source, mix);

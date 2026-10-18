@@ -45,6 +45,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/clip.ts` | Where a video layer's clip is at each moment: loop, ping-pong, once, speed, restarts |
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
+| `src/visuals/lut.ts` | Colour lookup tables: reading .cube files, packing them into templates, applying them without a graphics card |
 | `src/visuals/template.ts` | Templates: layer types and their settings, fields, text variables, checking |
 | `src/visuals/music.ts` | The music values a video frame gets, read from `features.ts`'s output |
 | `src/visuals/draw.ts` | Draws a frame of a template on a 2D canvas, for the preview and the export alike |
@@ -53,6 +54,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/motion.ts` | "Moves with…": a choice of what a setting follows, written as an expression and read back |
 | `src/visuals/fonts.ts` | Fonts for a video's text: loading them before drawing, and the ones on this computer |
 | `src/app/renderer/font-picker.ts` | The font list of the Video view, each name in its own face |
+| `src/app/renderer/lut-picker.ts` | The list of LUTs, stepped through with the arrow keys, each put to use as it is reached |
 | `src/app/renderer/video-view.ts` | The Video view: a mix's template, its fields and a live picture |
 | `src/app/renderer/template-editor.ts` | The template editor in the Video view's panel, with its own undo |
 | `src/app/renderer/layer-settings.ts` | The selected layer's settings in the editor, made from its kind's list of settings |
@@ -140,6 +142,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
 | `DJMASTER_SHOT_VIDEO=<file>` | Answer the dialog for a template's video with this file |
+| `DJMASTER_SHOT_LUT=<file>` | Answer the dialog for a template's .cube LUT with this file |
 | `DJMASTER_SHOT_TRACKLIST=<file>` | Answer the dialog for a track list to import with this file |
 | `DJMASTER_SHOT_TEMPLATE=<file>` | Answer the dialog for a template to import with this file. A template exported is saved into `DJMASTER_SHOT_FOLDER`, and one deleted is removed rather than moved to the Trash |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
@@ -185,7 +188,8 @@ Linux), the same for `npm start` and the packaged app.
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
 | `media/` | Videos up to 25 MB added to templates, and those in template files imported, named by their fingerprint; File > Folder for Template Videos can put them elsewhere |
-| `preferences.json` | Choices that belong to the app rather than a recording: so far, the folder for template videos |
+| `preferences.json` | Choices that belong to the app rather than a recording: so far, the folder for template videos and the LUT folder |
+| `luts/` | The LUT folder, unless File > Folder for LUTs chose another: .cube files the user puts there, offered wherever a LUT is chosen |
 | `video-clips/` | Copies of videos made for the app's own use: ping-pong clips there and back, and playable copies of videos the window cannot play; the 20 most recently used are kept |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
@@ -248,6 +252,9 @@ Do not write test data there.
   `video-frame.ts`). So a video export is handed the checked template itself,
   not its name. A template can carry pictures as data URLs in `assets`, named
   in an image setting as `asset:name`; `pictureOf` loads either kind.
+  LUTs are kept in it the same way, packed in `luts` and named `lut:name`;
+  those of the LUT folder are named `lutfolder:Film/Warm` and packed in only
+  when the template is exported (`lutOf` loads every kind; see VISUALS.md).
   A `.djmtemplate` is a ZIP (`zip.ts`, entries stored, ZIP64 past 4 GB):
   `template.json`, and the videos of its `media` under `media/`, which the
   JSON names by those entries. On import they are taken out into the media

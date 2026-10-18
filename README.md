@@ -238,7 +238,8 @@ shows every change as it is made:
 
 - **Layers** that draw (gradients, glitter, pictures, video clips, text, the
   spectrum, the waveform) and effects that change what is beneath them (glow, colour split,
-  glitch, kaleidoscope, blur, brightness and contrast, hue and saturation),
+  glitch, kaleidoscope, blur, brightness and contrast, hue and saturation,
+  and a LUT, a look from a .cube file kept in the template),
   with blends as in an image editor, and **groups** to keep them together.
   Layers can be moved and resized on the picture itself.
 - **Anything can follow the music**: pick what a setting moves with, such as
@@ -254,6 +255,11 @@ shows every change as it is made:
   drive say. A video that has moved is found again in that folder, or with
   "Locate…" in the Video view, which also finds the template's other videos
   in the same folder.
+- **LUTs**: put your .cube files in the LUT folder (File > Show LUT Folder,
+  or File > Folder for LUTs to use one you have already) and they are listed
+  wherever a LUT is chosen; the arrow keys step through them, each shown on
+  the picture at once. A template exported to share carries the LUTs it
+  uses inside it.
 - **About**: who made the template and what it is.
 
 Templates are shared as `.djmtemplate` files, with their pictures and

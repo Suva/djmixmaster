@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
 import { copyFile, mkdir, open, readdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
@@ -928,6 +928,80 @@ ipcMain.handle('read-image', async (_event, path: string) => {
   return new Uint8Array(await readFile(path));
 });
 
+// LUTs for a video's template: .cube files, read as text and turned into a table by the window.
+/** A 65-point cube, the largest the window takes, is about 8 MB of text. */
+const LUT_MOST_BYTES = 32 * 1024 * 1024;
+ipcMain.handle('pick-lut', async () => {
+  if (SCREENSHOT && process.env.DJMASTER_SHOT_LUT) return process.env.DJMASTER_SHOT_LUT;
+  const result = await dialog.showOpenDialog(window!, {
+    properties: ['openFile'],
+    filters: [{ name: 'LUTs', extensions: ['cube'] }],
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+// As with pictures: only .cube files of a sensible size.
+ipcMain.handle('read-lut', async (_event, path: string) => {
+  if (extname(path).toLowerCase() !== '.cube') throw new Error('Not a .cube LUT');
+  if ((await stat(path)).size > LUT_MOST_BYTES) throw new Error('The LUT is too large');
+  return readFile(path, 'utf8');
+});
+
+// The LUT folder: .cube files put there are offered wherever a LUT is chosen,
+// so that a collection of looks is at hand without a file dialog each time.
+// In the app's data folder unless chosen otherwise, as a collection may
+// already live somewhere else.
+const defaultLutFolder = () => join(app.getPath('userData'), 'luts');
+const lutFolder = () => preferences.lutFolder ?? defaultLutFolder();
+/** LUT packs come as folders of looks; this deep in the LUT folder they are still found. */
+const LUT_FOLDER_DEPTH = 2;
+
+/** The .cube files in a folder and the folders in it, each named by where it is in it, without the extension: "Film/Warm". */
+async function lutsIn(folder: string, within = '', depth = 0): Promise<{ name: string; path: string }[]> {
+  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
+  const found: { name: string; path: string }[] = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const path = join(folder, entry.name);
+    if (entry.isDirectory() && depth < LUT_FOLDER_DEPTH) found.push(...(await lutsIn(path, `${within}${entry.name}/`, depth + 1)));
+    else if (entry.isFile() && extname(entry.name).toLowerCase() === '.cube') found.push({ name: within + entry.name.slice(0, -5), path });
+  }
+  return found;
+}
+// A LUT of the folder, by its name there: so a template names it the same wherever the folder is, and on another computer with the same LUTs.
+ipcMain.handle('read-folder-lut', async (_event, name: string) => {
+  const folder = resolve(lutFolder());
+  const path = resolve(folder, `${name}.cube`);
+  // Only what is in the folder: a template's name for a LUT must not lead out of it.
+  if (!path.startsWith(folder + sep)) throw new Error('Not a LUT in the LUT folder');
+  if ((await stat(path).catch(() => null)) === null) throw new Error(`There is no ${name}.cube in the LUT folder`);
+  if ((await stat(path)).size > LUT_MOST_BYTES) throw new Error('The LUT is too large');
+  return readFile(path, 'utf8');
+});
+ipcMain.handle('folder-luts', async () =>
+  (await lutsIn(lutFolder())).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
+
+/** File > Show LUT Folder: made if it is not there yet, so there is somewhere to put them. */
+async function showLutFolder() {
+  await mkdir(lutFolder(), { recursive: true });
+  await shell.openPath(lutFolder());
+}
+
+/** File > Folder for LUTs: where the LUTs offered come from. */
+async function chooseLutFolder() {
+  if (!window) return;
+  const result = await dialog.showOpenDialog(window, {
+    title: 'Folder for LUTs',
+    message: 'The .cube files in this folder, and in the folders in it, are offered wherever a LUT is chosen.',
+    defaultPath: lutFolder(),
+    buttonLabel: 'Use This Folder',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths[0]) return;
+  preferences = { ...preferences, lutFolder: result.filePaths[0] };
+  await writeStored(preferencesFile(), JSON.stringify(preferences));
+  window?.webContents.send('luts-changed');
+}
+
 // ---------------------------------------------------------------------------
 // Videos for a video's template: a loop behind the music, a clip of the club.
 // A small one is copied into the app's media folder, so that it stays with
@@ -946,13 +1020,16 @@ const mediaFolder = () => preferences.mediaFolder ?? defaultMediaFolder();
 // Choices that belong to the app rather than to a recording.
 interface Preferences {
   mediaFolder?: string;
+  lutFolder?: string;
 }
 let preferences: Preferences = {};
 const preferencesFile = () => join(app.getPath('userData'), 'preferences.json');
 
 async function loadPreferences() {
   const saved = (await readJson(preferencesFile())) as Record<string, unknown> | null;
-  preferences = typeof saved?.mediaFolder === 'string' && saved.mediaFolder ? { mediaFolder: saved.mediaFolder } : {};
+  preferences = {};
+  if (typeof saved?.mediaFolder === 'string' && saved.mediaFolder) preferences.mediaFolder = saved.mediaFolder;
+  if (typeof saved?.lutFolder === 'string' && saved.lutFolder) preferences.lutFolder = saved.lutFolder;
 }
 
 /** File > Folder for Template Videos: where videos added from now on are kept. Those kept already stay where they are. */
@@ -1320,6 +1397,8 @@ function buildMenu() {
         { label: 'Open Recent', submenu: recentMenu() },
         { type: 'separator' },
         { label: 'Folder for Template Videos…', click: chooseMediaFolder },
+        { label: 'Show LUT Folder', click: showLutFolder },
+        { label: 'Folder for LUTs…', click: chooseLutFolder },
         { type: 'separator' },
         { ...command('Close Recording', 'Shift+CmdOrCtrl+W', 'close'), enabled: recordingOpen },
         { role: 'close' },

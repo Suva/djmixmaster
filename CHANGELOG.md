@@ -6,6 +6,15 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **LUTs in video templates.** A LUT layer gives everything beneath it a
+  look from a .cube file, as made in Resolve, Premiere and the like. The
+  file is kept inside the template, so it travels when the template is
+  shared. A LUT field lets whoever uses the template choose a look of their
+  own for each mix. Put your collection of LUTs in the LUT folder (File >
+  Show LUT Folder, or choose your own with File > Folder for LUTs) and
+  they are all in the list, ready to pick. Go up and down the list with the
+  arrow keys to see each look on the picture at once. A template exported
+  to share takes the LUTs it uses from the folder along with it.
 - **A fixed gain instead of levelling.** The switch at the top of the
   settings, "Even out tracks" or "Fixed gain", turns the whole mix up or down
   by one amount and leaves the tracks as they are. Loudness still chooses how

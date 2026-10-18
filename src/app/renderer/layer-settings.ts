@@ -11,9 +11,12 @@
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { toHex, type Colour } from '../../visuals/colour.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, MEDIA_PREFIX, RECORDING_VIDEO, settingsOf, LAYER_TYPES, TEXT_VARIABLES,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, FOLDER_LUT_PREFIX, folderLutsOf, LUT_PREFIX, MEDIA_PREFIX, RECORDING_VIDEO, settingsOf, LAYER_TYPES, TEXT_VARIABLES,
   type Layer, type MediaFile, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
+import type { PackedLut } from '../../visuals/lut.ts';
+import type { FolderLut } from '../api.ts';
+import { lutPicker, type LutChoice } from './lut-picker.ts';
 import { fontPicker } from './font-picker.ts';
 import { scrubbableInput } from './scrub.ts';
 import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
@@ -33,6 +36,39 @@ export interface LayerSettingsContext {
   pickVideo(): Promise<{ name: string; file: MediaFile } | null>;
   /** Keeps a video with the template and gives the setting it. */
   keepVideo(key: string, name: string, file: MediaFile): void;
+  /** Asks for a .cube file and gives its name and the LUT packed; null if none, or it cannot be read. */
+  pickLut(): Promise<{ name: string; lut: PackedLut } | null>;
+  /** The LUTs in the LUT folder, as last looked at. */
+  folderLuts(): FolderLut[];
+  /** Keeps a LUT in the template and gives the setting it. */
+  keepLut(key: string, name: string, lut: PackedLut): void;
+}
+
+/**
+ * The LUTs a template can name: those it keeps, and those in the LUT folder,
+ * which it names by where they are there and does not keep (until it is
+ * exported to share). A folder LUT it names that is not there now is still
+ * listed, so that it can be seen to be chosen.
+ */
+export function lutChoices(template: Template, folder: FolderLut[]): LutChoice[] {
+  const named = new Set(folderLutsOf(template));
+  for (const lut of folder) named.delete(lut.name);
+  return [
+    ...Object.keys(template.luts ?? {}).map((name) => ({ value: LUT_PREFIX + name, label: name, group: 'Kept in the template' })),
+    ...folder.map((lut) => ({ value: FOLDER_LUT_PREFIX + lut.name, label: lut.name, group: 'LUT folder' })),
+    ...[...named].map((name) => ({ value: FOLDER_LUT_PREFIX + name, label: `${name} (not in the folder)`, group: 'LUT folder' })),
+  ];
+}
+
+/**
+ * The name to keep a LUT under in a template: that of one it keeps already
+ * with the same table, so that choosing a look again does not keep it twice;
+ * or else its own, made free.
+ */
+export function keptLutName(template: Template, picked: { name: string; lut: PackedLut }): { name: string; known: boolean } {
+  const kept = template.luts ?? {};
+  const same = Object.keys(kept).find((name) => kept[name].data === picked.lut.data && kept[name].size === picked.lut.size);
+  return same ? { name: same, known: true } : { name: freeName(picked.name.split('/').pop()!, Object.keys(kept)), known: false };
 }
 
 /** A name not yet taken among these, for something added: the one wanted, or it with a number. */
@@ -482,6 +518,31 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
             build();
           });
           return select;
+        }
+        case 'lut': {
+          const template = context.template();
+          return lutPicker({
+            id: `setting-${key}`,
+            current: String(current),
+            choices: () => [
+              { value: '', label: 'None' },
+              ...template.fields.filter((f) => f.kind === 'lut').map((field) => ({ value: `%${field.key}%`, label: `Field: ${field.label}` })),
+              ...lutChoices(context.template(), context.folderLuts()),
+            ],
+            choose: (value) => change(value),
+            add: {
+              label: 'Add a .cube file…',
+              run: async () => {
+                const picked = await context.pickLut();
+                if (!picked) return;
+                // Kept in the template, so that it travels with it.
+                const { name, known } = keptLutName(context.template(), picked);
+                if (known) change(LUT_PREFIX + name);
+                else context.keepLut(key, name, picked.lut);
+                build();
+              },
+            },
+          });
         }
         case 'font': {
           const box = document.createElement('div');
