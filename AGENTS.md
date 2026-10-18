@@ -55,7 +55,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/motion.ts` | "Moves with…": a choice of what a setting follows, written as an expression and read back |
 | `src/visuals/fonts.ts` | Fonts for a video's text: loading them before drawing, and the ones on this computer |
 | `src/app/renderer/font-picker.ts` | The font list of the Video view, each name in its own face |
-| `src/app/renderer/lut-picker.ts` | The list of LUTs, stepped through with the arrow keys, each put to use as it is reached |
+| `src/app/renderer/lut-picker.ts` | The list of LUTs, and of a layer's blends, stepped through with the arrow keys, each put to use as it is reached |
 | `src/app/renderer/video-view.ts` | The Video view: a mix's template, its fields and a live picture |
 | `src/app/renderer/template-editor.ts` | The template editor in the Video view's panel, with its own undo |
 | `src/app/renderer/layer-settings.ts` | The selected layer's settings in the editor, made from its kind's list of settings |

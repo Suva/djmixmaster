@@ -19,6 +19,10 @@ are under "Not released yet" and appear there once they are.
   in the Video view choose the shape: landscape for YouTube, vertical for
   phones, square for feeds. Every template works in each, its title and its
   shapes keeping their size across the picture.
+- **Try blends with the arrow keys.** A layer's blend is chosen from a list
+  like the LUTs': press ↑ or ↓ on it, or go through the open list, and the
+  picture shows each blend as you reach it. The blends are sorted by what
+  they do (lighten, darken, contrast and so on), and you can type to find one.
 - **Solid colour and vignette layers.** A solid colour fills the picture in
   one colour, a quick background or a tint with a blend. A vignette darkens
   the edges towards a colour of your choice, as an oval of the picture's

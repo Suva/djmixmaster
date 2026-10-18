@@ -17,6 +17,16 @@ import type { FolderLut } from '../api.ts';
 import { flatten, isGroup, locate, treeOf, within, type LayerNode } from '../../visuals/layer-tree.ts';
 import { scrubbable } from './scrub.ts';
 import { FIELD_KINDS, fieldsEditor, freeFieldName, newField } from './fields-editor.ts';
+import { lutPicker } from './lut-picker.ts';
+
+/** The blends under headings, as an image editor sorts them: by what they do. Normal comes first, under none. */
+const BLEND_GROUPS: Record<string, string> = {
+  add: 'Lighten', screen: 'Lighten', lighten: 'Lighten', 'colour dodge': 'Lighten',
+  multiply: 'Darken', darken: 'Darken', 'colour burn': 'Darken', 'linear burn': 'Darken',
+  overlay: 'Contrast', 'soft light': 'Contrast', 'hard light': 'Contrast',
+  difference: 'Difference', exclusion: 'Difference',
+  hue: 'Colour', saturation: 'Colour', colour: 'Colour', luminosity: 'Colour',
+};
 
 export interface TemplateEditorOptions {
   /** A change made here: the template as it now is. */
@@ -402,14 +412,21 @@ export class TemplateEditor {
     const bar = document.createElement('div');
     bar.className = 'layer-top-settings';
 
-    const blend = document.createElement('select');
-    blend.className = 'layer-blend';
-    blend.title = 'How this layer mixes with what is beneath it';
-    blend.setAttribute('aria-label', 'Blend');
-    for (const option of COMMON_PARAMS.blend.choices ?? []) blend.add(new Option(SHOWN_AS[option] ?? option, option));
-    for (const field of this.#template!.fields.filter((f) => f.kind === 'choice')) blend.add(new Option(`Field: ${field.label}`, `%${field.key}%`));
-    blend.value = String(layer.params.blend ?? 'normal');
-    blend.addEventListener('change', () => context.set('blend', blend.value));
+    // A list rather than a menu of the system's, so that each blend is shown on the picture as the arrow keys reach it.
+    const fields = this.#template!.fields.filter((f) => f.kind === 'choice');
+    const blend = lutPicker({
+      title: 'How this layer mixes with what is beneath it. ↑ and ↓ step through the blends, each shown on the picture at once.',
+      placeholder: 'Search blends',
+      none: 'No blend of that name',
+      current: String(layer.params.blend ?? 'normal'),
+      choices: () => [
+        ...(COMMON_PARAMS.blend.choices ?? []).map((option) => ({ value: option, label: SHOWN_AS[option] ?? option, group: BLEND_GROUPS[option] })),
+        ...fields.map((field) => ({ value: `%${field.key}%`, label: field.label, group: 'Fields' })),
+      ],
+      choose: (value) => context.set('blend', value),
+    });
+    blend.classList.add('layer-blend');
+    blend.querySelector('button')!.setAttribute('aria-label', 'Blend');
 
     const holder = document.createElement('div');
     holder.className = 'opacity-holder';
@@ -497,10 +514,13 @@ export class TemplateEditor {
   #emptyTop(): HTMLElement {
     const box = document.createElement('div');
     box.className = 'layer-top-settings empty';
-    const blend = document.createElement('select');
-    blend.className = 'layer-blend';
-    blend.add(new Option('normal'));
-    blend.disabled = true;
+    const blend = document.createElement('div');
+    blend.className = 'lut-picker layer-blend';
+    const shown = document.createElement('button');
+    shown.className = 'lut-current';
+    shown.textContent = 'normal';
+    shown.disabled = true;
+    blend.append(shown);
     const holder = document.createElement('div');
     holder.className = 'opacity-holder';
     const label = document.createElement('span');

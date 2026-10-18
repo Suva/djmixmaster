@@ -1,8 +1,8 @@
-// Choosing a LUT: a button showing the one in use, which opens a list to
+// Choosing among looks: a button showing the one in use, which opens a list to
 // search. Looks are compared by eye, so the arrow keys go up and down the
-// list, or step through it with the list closed, and each LUT is put to use
+// list, or step through it with the list closed, and each entry is put to use
 // as it is reached; the picture changes with it. Escape goes back to the one
-// in use when the list was opened.
+// in use when the list was opened. Made for LUTs, and used for blends too.
 
 /** One entry of the list: what a setting would hold, and what it is called. */
 export interface LutChoice {
@@ -13,14 +13,18 @@ export interface LutChoice {
 }
 
 export interface LutPickerOptions {
-  id: string;
+  id?: string;
+  /** The button's tooltip, and the words for searching and for finding nothing; a LUT's when not given. */
+  title?: string;
+  placeholder?: string;
+  none?: string;
   /** The entries, as they are now. */
   choices(): LutChoice[];
   current: string;
   /** Called for every entry reached, as it is reached. */
   choose(value: string): void;
   /** The button at the foot of the list that adds a file: its words, and what it does. */
-  add: { label: string; run(): void };
+  add?: { label: string; run(): void };
 }
 
 /** What a value not among the entries is shown as: a file's name, without its folder or extension. */
@@ -32,9 +36,9 @@ export function lutPicker(options: LutPickerOptions): HTMLElement {
   picker.className = 'lut-picker';
   const button = document.createElement('button');
   button.type = 'button';
-  button.id = options.id;
+  if (options.id) button.id = options.id;
   button.className = 'lut-current';
-  button.title = 'Choose a LUT. ↑ and ↓ step through them, each shown on the picture at once.';
+  button.title = options.title ?? 'Choose a LUT. ↑ and ↓ step through them, each shown on the picture at once.';
   const show = () => {
     const known = options.choices().find((choice) => choice.value === current);
     button.textContent = known ? known.label : nameOf(current);
@@ -47,20 +51,24 @@ export function lutPicker(options: LutPickerOptions): HTMLElement {
   menu.hidden = true;
   const search = document.createElement('input');
   search.type = 'search';
-  search.placeholder = 'Search LUTs';
+  search.placeholder = options.placeholder ?? 'Search LUTs';
   search.spellcheck = false;
   const list = document.createElement('div');
   list.className = 'lut-list';
   list.setAttribute('role', 'listbox');
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'lut-add';
-  add.textContent = options.add.label;
-  add.addEventListener('click', () => {
-    close();
-    options.add.run();
-  });
-  menu.append(search, list, add);
+  menu.append(search, list);
+  const adding = options.add;
+  if (adding) {
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'lut-add';
+    add.textContent = adding.label;
+    add.addEventListener('click', () => {
+      close();
+      adding.run();
+    });
+    menu.append(add);
+  }
   picker.append(button, menu);
 
   /** The entry in use when the list was opened, for Escape. */
@@ -111,7 +119,7 @@ export function lutPicker(options: LutPickerOptions): HTMLElement {
     if (!shown.length) {
       const none = document.createElement('p');
       none.className = 'lut-group';
-      none.textContent = 'No LUT of that name';
+      none.textContent = options.none ?? 'No LUT of that name';
       items.push(none);
     }
     list.replaceChildren(...items);

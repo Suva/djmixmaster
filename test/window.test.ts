@@ -1245,9 +1245,8 @@ test('blends work out as their formulas say, linear burn included', { skip }, as
     const middle = () => picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data[0];
     const levels: Record<string, number> = {};
     for (const blend of ['normal', 'add', 'colour dodge', 'multiply', 'colour burn', 'linear burn']) {
-      const select = document.querySelector<HTMLSelectElement>('#editor-layer-top .layer-blend')!;
-      select.value = blend;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelector<HTMLButtonElement>('#editor-layer-top .layer-blend .lut-current')!.click();
+      document.querySelector<HTMLButtonElement>(`#editor-layer-top .layer-blend .lut-item[data-value="${blend}"]`)!.click();
       await page.wait(150);
       levels[blend] = middle();
     }
@@ -1277,7 +1276,7 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     const opacity = () => document.querySelector<HTMLInputElement>('#editor-layer-top .setting[data-key="opacity"] input[type="number"]')!;
     const box = () => document.querySelector<HTMLButtonElement>('#editor-layer-top .opacity-value')!;
     const popover = () => document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
-    const blendOf = () => document.querySelector<HTMLSelectElement>('#editor-layer-top .layer-blend')!;
+    const blendOf = () => ({ get value() { return document.querySelector<HTMLButtonElement>('#editor-layer-top .layer-blend .lut-current')!.dataset.value; } });
     select('Logo');
     // A click opens the full control under the box; Escape closes it.
     box().click();
@@ -1295,8 +1294,17 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     box().parentElement!.dispatchEvent(new MouseEvent('mouseleave'));
     await page.wait(500);
     const left = popover().hidden;
-    blendOf().value = 'screen';
-    blendOf().dispatchEvent(new Event('change', { bubbles: true }));
+    // ↓ on the closed list steps to the next blend, and the picture shows it at once: normal, then add, then screen.
+    const button = document.querySelector<HTMLButtonElement>('#editor-layer-top .layer-blend .lut-current')!;
+    button.focus();
+    const frames = () => Number(page.element('picture').dataset.frames ?? 0);
+    await page.wait(150);
+    const before = frames();
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    const stepped = [blendOf().value, document.activeElement === button];
+    button.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    await page.wait(150);
+    const redrawn = frames() > before;
     select('Background');
     const other = [opacity().value, blendOf().value];
     select('Logo');
@@ -1320,12 +1328,14 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     // With every layer gone, nothing is selected: the bar is there, greyed.
     while (document.querySelector('.layer-row')) page.click('editor-delete');
     const empty = page.element('editor-layer-top').querySelector('.empty') !== null;
-    return { opened, shown, closed, hovered, left, other, back, expression, widths: widths.size, atMost, below, empty };
+    return { opened, shown, closed, hovered, left, stepped, redrawn, other, back, expression, widths: widths.size, atMost, below, empty };
   });
   assert.deepEqual([seen.opened, seen.shown, seen.closed, seen.hovered, seen.left], [true, '40%', true, true, true]);
   assert.equal(seen.expression, 'ƒ 40%');
   assert.equal(seen.widths, 1, 'the box keeps its width from ƒ 5% to ƒ 100%');
   assert.equal(seen.atMost, 'ƒ 100%', 'an expression past 100 shows what is drawn');
+  assert.deepEqual(seen.stepped, ['add', true], '↓ chose the next blend and the list kept the keys');
+  assert.ok(seen.redrawn, 'the picture was drawn again with each blend reached');
   assert.deepEqual(seen.other, ['100', 'normal']);
   assert.deepEqual(seen.back, ['40', 'screen']);
   assert.equal(seen.below, 0, 'not repeated below the list');
