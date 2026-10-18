@@ -268,17 +268,30 @@ export class VideoView {
     }
   }
 
+  /** What the status line was last given about the listening, so that it is cleared only while it still says that. */
+  #saidListening = '';
+
   /**
-   * Says how far the listening has got, in the status line and over the
-   * picture, which stands still until it is done; `null` before the first
-   * count. Done, the two are cleared.
+   * Says how far the listening has got: over the picture, which stands still
+   * until it is done, and while the Video view is not shown, in the status
+   * line instead; `null` before the first count. In the Video view the
+   * status line is left to what else is said there, such as a template
+   * added. Done, the notice goes, and the status line is cleared if it
+   * still shows the count.
    */
   #listening(fraction: number | null, done = false) {
     const notice = $('picture-notice');
     notice.hidden = done;
-    if (done) return this.#options.say('');
     const count = fraction === null ? '' : ` ${Math.floor(fraction * 100)}%`;
-    this.#options.say(`Listening to the recording for the video…${count}`);
+    const text = `Listening to the recording for the video…${count}`;
+    if (done || this.#visible) {
+      if (this.#saidListening && $('readout').textContent === this.#saidListening) this.#options.say('');
+      this.#saidListening = '';
+    } else {
+      this.#options.say(text);
+      this.#saidListening = text;
+    }
+    if (done) return;
     const line = document.createElement('small');
     line.textContent = 'The picture moves to the music once this is done.';
     notice.replaceChildren(`Listening to the recording for the video…${count}`, line);

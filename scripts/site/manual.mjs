@@ -9,12 +9,15 @@
 // its own, **bold**, _italic_, `code` and [links](page.md#part).
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const root = join(import.meta.dirname, '..', '..');
-const { LAYER_TYPES, COMMON_PARAMS, STYLE_PARAMS, TEXT_VARIABLES, TEXT_ABOUT, FONTS } = await import(join(root, 'src/visuals/template.ts'));
-const { FUNCTIONS, FUNCTION_ABOUT } = await import(join(root, 'src/visuals/expression.ts'));
-const { MUSIC_NAMES, MUSIC_ABOUT } = await import(join(root, 'src/visuals/music.ts'));
-const { shortcuts } = await import(join(root, 'src/app/shortcuts.ts'));
+// As addresses: import() takes no Windows path.
+const load = (path) => import(pathToFileURL(join(root, path)).href);
+const { LAYER_TYPES, COMMON_PARAMS, STYLE_PARAMS, TEXT_VARIABLES, TEXT_ABOUT, FONTS } = await load('src/visuals/template.ts');
+const { FUNCTIONS, FUNCTION_ABOUT } = await load('src/visuals/expression.ts');
+const { MUSIC_NAMES, MUSIC_ABOUT } = await load('src/visuals/music.ts');
+const { shortcuts } = await load('src/app/shortcuts.ts');
 
 export const MANUAL = join(root, 'site', 'manual');
 

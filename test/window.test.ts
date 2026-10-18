@@ -402,17 +402,25 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
 });
 
 test('while the music is listened to, the picture says so, and the count goes on in the Mastering view', { skip }, async () => {
-  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
+  const file = join(work, 'Said.djmtemplate');
+  await writeFile(file, JSON.stringify({ format: 1, name: 'Said', fields: [], layers: [{ type: 'solid', params: {} }] }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 90_000 }, async (page) => {
     const notice = page.element('picture-notice');
     page.click('view-video');
     const shown = !notice.hidden && notice.offsetWidth > 0 ? notice.textContent : null;
+    // In the Video view the count is over the picture: what else the status line says stays there meanwhile.
+    page.click('template-import');
+    await page.until(() => page.text('readout') === 'Added Said.', 'the template to be added');
+    await page.wait(700);
+    const kept = notice.hidden ? 'done too soon to tell' : page.text('readout');
     page.click('view-mastering');
     const counts: string[] = [];
     new MutationObserver(() => counts.push(page.text('readout'))).observe(page.element('readout'), { childList: true, characterData: true, subtree: true });
     await page.until(() => notice.hidden, 'the listening to be done');
-    return { shown, counted: counts.filter((text) => /Listening .*\d+%/.test(text)).length, last: page.text('readout').trim() };
+    return { shown, kept, counted: counts.filter((text) => /Listening .*\d+%/.test(text)).length, last: page.text('readout').trim() };
   });
   assert.match(seen.shown ?? '', /Listening to the recording for the video/);
+  assert.equal(seen.kept, 'Added Said.', 'the count over the picture leaves the status line alone');
   assert.ok(seen.counted > 0, 'the count went on after switching views');
   assert.equal(seen.last, '');
 });
@@ -1375,19 +1383,20 @@ test('number boxes change when dragged sideways, and a click is still a click', 
       window.dispatchEvent(new MouseEvent('mouseup', { clientX: x + dx, clientY: y, bubbles: true }));
       target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     };
-    const box = document.querySelector<HTMLButtonElement>('#editor-layer-top .opacity-value')!;
-    const popover = document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
-    drag(box, -40);
+    // Looked up each time: once a change settles, the bar above the layers is made anew.
+    const box = () => document.querySelector<HTMLButtonElement>('#editor-layer-top .opacity-value')!;
+    const popover = () => document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
+    drag(box(), -40);
     await page.wait(50);
     // The full control under the box follows, slider and all.
-    const slider = popover.querySelector<HTMLInputElement>('input[type="range"]')!.value;
-    const lowered = { shown: box.textContent, opened: !popover.hidden, slider };
-    drag(box, 400);
+    const slider = popover().querySelector<HTMLInputElement>('input[type="range"]')!.value;
+    const lowered = { shown: box().textContent, opened: !popover().hidden, slider };
+    drag(box(), 400);
     await page.wait(50);
-    const raised = box.textContent;
-    drag(box, 0);
-    const clicked = !popover.hidden;
-    box.click();
+    const raised = box().textContent;
+    drag(box(), 0);
+    const clicked = !popover().hidden;
+    box().click();
 
     const rotation = () => document.querySelector<HTMLInputElement>('#editor-layer .setting[data-key="rotation"] input[type="number"]')!;
     drag(rotation(), 50);
@@ -2120,7 +2129,9 @@ test('a recording\'s channels put right from the check-up: heard, levelled, expo
 
   // The export: both channels alike, and in step again.
   const [file] = await readdir(out);
-  const report = spawnSync(ffmpeg(), ['-hide_banner', '-nostats', '-i', join(out, file), '-af', 'astats=measure_overall=none:measure_perchannel=RMS_level,aphasemeter=video=0,ametadata=print:key=lavfi.aphasemeter.phase', '-f', 'null', '-'], { encoding: 'utf8' }).stderr;
+  // The phase a second at a time: per block of the decoder, an older ffmpeg (the bundled 6.0) prints megabytes,
+  // past what spawnSync keeps, and the channels' levels at the end were lost.
+  const report = spawnSync(ffmpeg(), ['-hide_banner', '-nostats', '-i', join(out, file), '-af', 'astats=measure_overall=none:measure_perchannel=RMS_level,asetnsamples=n=44100,aphasemeter=video=0,ametadata=print:key=lavfi.aphasemeter.phase', '-f', 'null', '-'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).stderr;
   const rms = [...report.matchAll(/RMS level dB: (-?[\d.]+)/g)].map((m) => Number(m[1]));
   const phases = [...report.matchAll(/lavfi\.aphasemeter\.phase=(-?[\d.]+)/g)].map((m) => Number(m[1]));
   const phase = phases.reduce((sum, p) => sum + p, 0) / phases.length;

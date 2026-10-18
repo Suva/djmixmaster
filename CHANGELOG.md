@@ -118,6 +118,9 @@ are under "Not released yet" and appear there once they are.
 - **Searching for a layer no longer sets off shortcuts.** Typing in the
   editor's layer search, or in its other boxes, no longer switches bypass on
   or starts playback.
+- **Messages stay while the music is listened to.** In the Video view, a
+  message in the status line, such as a template added, no longer gives way
+  to the count of the first listening; the count is over the picture.
 
 ## 0.9.1 — 16 October 2026
 
