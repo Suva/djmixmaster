@@ -562,8 +562,8 @@ values into the ones a frame gets. None draws anything yet.
   the template keeps, one of the LUT folder's, or any .cube file, which is
   read where it is, as a picture field's is. Its default can be one the
   template keeps or one of the folder's.
-- **The LUT folder** (File > Show LUT Folder; `luts/` in the data folder,
-  or another chosen with File > Folder for LUTs) holds a collection of
+- **The LUT folder** (shown and chosen in Settings; `luts/` in the data
+  folder, or another) holds a collection of
   looks. Its .cube files, and those in folders in it two deep, are offered in
   every list of LUTs, named by where they are in it ("Film/Warm"). Chosen,
   one is named by that, as `lutfolder:Film/Warm`, and not kept: a collection

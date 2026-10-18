@@ -42,6 +42,16 @@ header {
 #checkup.faults { color: #f2a83b; border-color: #6b4d1c; }
 #help-content { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 32px; margin-bottom: 18px; }
 #help-dialog { width: 760px; }
+#settings-dialog { width: 620px; }
+#settings-dialog .setting-block { padding: 14px 0; border-top: 1px solid var(--border); }
+#settings-dialog .setting-block:first-of-type { border-top: none; padding-top: 0; }
+#settings-dialog .explain { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+#settings-dialog .folder-row { display: flex; align-items: center; gap: 6px; }
+#settings-dialog .folder-row button { flex: none; padding: 4px 10px; }
+.folder-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; user-select: text; }
+#settings-dialog .check-row { display: flex; align-items: center; gap: 8px; }
+#settings-check-now { margin-top: 10px; padding: 4px 10px; }
+#settings-dialog .dialog-buttons { margin-top: 6px; }
 #help-content h4 { margin: 0 0 6px; }
 #help-content .how { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; font-size: 12.5px; border-bottom: 1px solid var(--border); }
 #help-content .how span:first-child { color: var(--text); white-space: nowrap; }

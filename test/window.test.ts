@@ -1958,6 +1958,89 @@ test('the ⋯ menu beside the templates opens, closes, and leaves Delete for tem
   });
 });
 
+test('the window opens in the view it was left in: mastering, video, or the template editor', { skip }, async () => {
+  const data = await fresh();
+  // Left editing a template.
+  await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    await page.settle();
+  });
+  const editing = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open again');
+    const seen = { video: document.body.classList.contains('video'), editing: document.body.classList.contains('editing') };
+    // Left in the Video view, the editor closed.
+    page.click('editor-done');
+    await page.wait(200);
+    return seen;
+  });
+  const video = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    await page.until(() => document.body.classList.contains('video'), 'the Video view');
+    await page.wait(500);
+    const seen = { video: document.body.classList.contains('video'), editing: document.body.classList.contains('editing') };
+    page.click('view-mastering');
+    await page.wait(200);
+    return seen;
+  });
+  const mastering = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    await page.wait(1000);
+    return { video: document.body.classList.contains('video'), editing: document.body.classList.contains('editing') };
+  });
+  assert.deepEqual(editing, { video: true, editing: true });
+  assert.deepEqual(video, { video: true, editing: false });
+  assert.deepEqual(mastering, { video: false, editing: false });
+});
+
+test('the Settings dialog shows the folders and the update check, and changes them', { skip }, async () => {
+  const data = await fresh();
+  const chosen = join(work, 'chosen folder');
+  await mkdir(chosen, { recursive: true });
+  const seen = await runApp({ recording: mix, data, exportFolder: chosen, timeoutMs: 60_000 }, async (page) => {
+    page.click('open-settings');
+    await page.until(() => page.element<HTMLDialogElement>('settings-dialog').open, 'the dialog to open');
+    await page.wait(100);
+    const state = () => ({
+      media: page.element('settings-media-folder').dataset.path,
+      mediaOwn: page.element<HTMLButtonElement>('settings-media-default').disabled,
+      luts: page.element('settings-lut-folder').dataset.path,
+      updates: page.element<HTMLInputElement>('settings-updates').checked,
+    });
+    const before = state();
+    // The folder dialog is answered with the chosen folder in check mode.
+    page.click('settings-lut-change');
+    await page.wait(300);
+    const changed = state();
+    const updates = page.element<HTMLInputElement>('settings-updates');
+    updates.checked = false;
+    updates.dispatchEvent(new Event('change', { bubbles: true }));
+    await page.wait(300);
+    const off = state();
+    page.click('settings-lut-default');
+    await page.wait(300);
+    const back = state();
+    // Keys belong to the dialog while it is open: Space does not start the music.
+    page.key('Space');
+    await page.wait(200);
+    const playing = page.element('play').classList.contains('playing');
+    page.click('settings-close');
+    return { before, changed, off, back, playing, closed: !page.element<HTMLDialogElement>('settings-dialog').open };
+  });
+  assert.ok(seen.before.media!.startsWith(data) && seen.before.media!.endsWith('media'), `the app's own media folder: ${seen.before.media}`);
+  assert.ok(seen.before.mediaOwn, 'nothing to go back to');
+  assert.ok(seen.before.luts!.endsWith('luts'));
+  assert.equal(seen.before.updates, true);
+  assert.equal(seen.changed.luts, chosen);
+  assert.equal(seen.off.updates, false);
+  assert.ok(seen.back.luts!.startsWith(data) && seen.back.luts!.endsWith('luts'), `back to the app's own: ${seen.back.luts}`);
+  assert.equal(seen.playing, false);
+  assert.ok(seen.closed);
+  const preferences = JSON.parse(readFileSync(join(data, 'preferences.json'), 'utf8'));
+  assert.equal(preferences.lutFolder, undefined);
+  const updates = JSON.parse(readFileSync(join(data, 'updates.json'), 'utf8'));
+  assert.equal(updates.automatic, false);
+});
+
 test('a template file opened with the app is added, shown, and exported again from the editor', { skip }, async () => {
   const file = join(work, 'Opened.djmtemplate');
   await writeFile(file, JSON.stringify({ format: 1, name: 'Opened', fields: [], layers: [{ type: 'gradient', params: { colour1: '#ff0000', colour2: '#ff0000' } }] }));

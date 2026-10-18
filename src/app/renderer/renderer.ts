@@ -1,3 +1,4 @@
+import { settingsDialog } from './settings.ts';
 import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
 import { isLossy, LOSSY_HEADROOM_DB, type EncodeOptions } from '../../encode-options.ts';
 import { fadeGain } from '../../fade.ts';
@@ -191,6 +192,7 @@ const videoView = new VideoView({
     $('readout').textContent = text || ' ';
   },
   history: () => showHistory(),
+  editingChanged: () => rememberView(),
 });
 
 /** Switches between the Mastering and the Video view. */
@@ -200,6 +202,26 @@ function showVideo(on: boolean) {
   $('view-mastering').classList.toggle('on', !on);
   videoView.show(on);
   if (!on) scheduleDraw();
+  rememberView();
+}
+
+/** Whether the view the window starts in has been put back yet: until then, the one shown is not a choice to keep. */
+let viewRestored = false;
+
+/** Keeps the view the window is in, editor and all, to start in next time. */
+function rememberView() {
+  if (!viewRestored || !recording) return;
+  api.setView(!document.body.classList.contains('video') ? 'mastering' : videoView.editing ? 'editing' : 'video');
+}
+
+/** Puts back the view the window was left in, once the recording it starts with is open. */
+async function restoreView() {
+  const view = await api.view();
+  if (recording && view !== 'mastering') {
+    showVideo(true);
+    if (view === 'editing') await videoView.reopenEditor();
+  }
+  viewRestored = true;
 }
 /** How much the limiter last said it was taking off, in dB. */
 let limiterReductionDb = 0;
@@ -1903,7 +1925,7 @@ const typingIn = (target: EventTarget | null) =>
 window.addEventListener('keydown', (event) => {
   if (typingIn(event.target)) return;
   // While a dialog is up, the keys belong to it.
-  if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open) return;
+  if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open || settings.element.open) return;
   // While a template is edited, as in an image editor: Shift+⌘N adds a layer, ⌘J duplicates one, ⌘G groups it, Shift+⌘G ungroups.
   if (videoView.editing && (event.metaKey || event.ctrlKey) && (event.code === 'KeyJ' || event.code === 'KeyG' || (event.code === 'KeyN' && event.shiftKey))) {
     event.preventDefault();
@@ -2656,6 +2678,7 @@ const HELP: [string, [string, string][]][] = [
     [`Shift+${COMMAND}W`, 'Close the recording'],
     ['Esc', 'Cancel an analysis or an export'],
     ['? or F1', 'Show this sheet'],
+    [`${COMMAND},`, 'Settings: the folders for template videos and LUTs, and the check for updates'],
     ['Double-click a mix\'s tab', 'Rename it'],
     ['Rest the pointer on a control', 'See what it does'],
   ]],
@@ -2690,9 +2713,17 @@ function showHelp() {
 $('help').addEventListener('click', showHelp);
 $('help-close').addEventListener('click', () => helpDialog.close());
 
+const settings = settingsDialog(api);
+$('open-settings').title = `Settings (${COMMAND},)`;
+$('open-settings').addEventListener('click', () => settings.open());
+
 api.onMenu(async (command) => {
   if (command === 'help') {
     showHelp();
+    return;
+  }
+  if (command === 'settings') {
+    settings.open();
     return;
   }
   if (command === 'close') {
@@ -3174,6 +3205,7 @@ syncControls();
 initTooltips();
 api.onOpenFiles(openFiles);
 showRecent();
-api.initialFile().then((files) => {
-  if (files) openFiles(files);
+api.initialFile().then(async (files) => {
+  if (files) await openFiles(files);
+  await restoreView();
 });

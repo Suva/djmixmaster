@@ -83,6 +83,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
 | `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
 | `src/app/renderer/meter.ts` | The level meter beside the curves |
+| `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
 
@@ -140,7 +141,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_SCRIPT=<js>` | Run this JavaScript in the window first; its result is printed as `[script] ...` |
 | `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `help`) to the window before the script runs |
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
-| `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder, and the save dialog of a single export with the name it suggests in this folder |
+| `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder, the save dialog of a single export with the name it suggests in this folder, and Settings' folder choices with it |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
 | `DJMASTER_SHOT_VIDEO=<file>` | Answer the dialog for a template's video with this file |
 | `DJMASTER_SHOT_LUT=<file>` | Answer the dialog for a template's .cube LUT with this file |
@@ -188,9 +189,9 @@ Linux), the same for `npm start` and the packaged app.
 | `sessions/` | The mixes, settings, hand adjustments and track markers per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
-| `media/` | Videos up to 25 MB added to templates, and those in template files imported, named by their fingerprint; File > Folder for Template Videos can put them elsewhere |
-| `preferences.json` | Choices that belong to the app rather than a recording: so far, the folder for template videos and the LUT folder |
-| `luts/` | The LUT folder, unless File > Folder for LUTs chose another: .cube files the user puts there, offered wherever a LUT is chosen |
+| `media/` | Videos up to 25 MB added to templates, and those in template files imported, named by their fingerprint; Settings can put them elsewhere |
+| `preferences.json` | Choices that belong to the app rather than a recording: the folder for template videos and the LUT folder, chosen in Settings, and the view the window was left in (`mastering`, `video` or `editing`), to start in next time |
+| `luts/` | The LUT folder, unless Settings chose another: .cube files the user puts there, offered wherever a LUT is chosen |
 | `video-clips/` | Copies of videos made for the app's own use: ping-pong clips there and back, and playable copies of videos the window cannot play; the 20 most recently used are kept |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |

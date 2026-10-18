@@ -15,7 +15,7 @@ import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
-import type { FineWave, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import type { AppSettings, AppView, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
 import { VIDEO_EXTENSIONS } from './video-files.ts';
@@ -982,16 +982,16 @@ ipcMain.handle('read-folder-lut', async (_event, name: string) => {
 ipcMain.handle('folder-luts', async () =>
   (await lutsIn(lutFolder())).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
 
-/** File > Show LUT Folder: made if it is not there yet, so there is somewhere to put them. */
+/** Settings > Show the LUT folder: made if it is not there yet, so there is somewhere to put them. */
 async function showLutFolder() {
   await mkdir(lutFolder(), { recursive: true });
   await shell.openPath(lutFolder());
 }
 
-/** File > Folder for LUTs: where the LUTs offered come from. */
+/** Settings > the LUT folder's Change…: where the LUTs offered come from. */
 async function chooseLutFolder() {
   if (!window) return;
-  const result = await dialog.showOpenDialog(window, {
+  const result = SCREENSHOT && process.env.DJMASTER_SHOT_FOLDER ? { canceled: false, filePaths: [process.env.DJMASTER_SHOT_FOLDER] } : await dialog.showOpenDialog(window, {
     title: 'Folder for LUTs',
     message: 'The .cube files in this folder, and in the folders in it, are offered wherever a LUT is chosen.',
     defaultPath: lutFolder(),
@@ -1019,11 +1019,13 @@ const defaultMediaFolder = () => join(app.getPath('userData'), 'media');
  */
 const mediaFolder = () => preferences.mediaFolder ?? defaultMediaFolder();
 
-// Choices that belong to the app rather than to a recording.
+// Choices that belong to the app rather than to a recording: the folders, and the view the window was left in.
 interface Preferences {
   mediaFolder?: string;
   lutFolder?: string;
+  view?: AppView;
 }
+const VIEWS: AppView[] = ['mastering', 'video', 'editing'];
 let preferences: Preferences = {};
 const preferencesFile = () => join(app.getPath('userData'), 'preferences.json');
 
@@ -1032,12 +1034,55 @@ async function loadPreferences() {
   preferences = {};
   if (typeof saved?.mediaFolder === 'string' && saved.mediaFolder) preferences.mediaFolder = saved.mediaFolder;
   if (typeof saved?.lutFolder === 'string' && saved.lutFolder) preferences.lutFolder = saved.lutFolder;
+  if (VIEWS.includes(saved?.view as AppView)) preferences.view = saved!.view as AppView;
 }
 
-/** File > Folder for Template Videos: where videos added from now on are kept. Those kept already stay where they are. */
+const savePreferences = () => writeStored(preferencesFile(), JSON.stringify(preferences));
+
+/** What the Settings dialog shows. */
+const settingsNow = (): AppSettings => ({
+  mediaFolder: mediaFolder(),
+  mediaFolderChosen: preferences.mediaFolder !== undefined,
+  lutFolder: lutFolder(),
+  lutFolderChosen: preferences.lutFolder !== undefined,
+  checkUpdates: checksAutomatically,
+  version: app.getVersion(),
+});
+ipcMain.handle('settings', () => settingsNow());
+ipcMain.handle('choose-folder', async (_event, which: FolderKind) => {
+  await (which === 'luts' ? chooseLutFolder() : chooseMediaFolder());
+  return settingsNow();
+});
+ipcMain.handle('default-folder', async (_event, which: FolderKind) => {
+  const { [which === 'luts' ? 'lutFolder' : 'mediaFolder']: _gone, ...kept } = preferences;
+  preferences = kept;
+  await savePreferences();
+  if (which === 'luts') window?.webContents.send('luts-changed');
+  return settingsNow();
+});
+ipcMain.on('show-folder', (_event, which: FolderKind) => {
+  // In check mode nothing opens on the screen.
+  if (SCREENSHOT) return;
+  if (which === 'luts') showLutFolder();
+  else mkdir(mediaFolder(), { recursive: true }).then(() => shell.openPath(mediaFolder()));
+});
+ipcMain.handle('set-check-updates', async (_event, on: boolean) => {
+  checksAutomatically = on === true;
+  await setAutomatic(checksAutomatically);
+  return settingsNow();
+});
+ipcMain.on('check-updates-now', () => checkForUpdatesNow());
+ipcMain.handle('view', () => preferences.view ?? 'mastering');
+ipcMain.on('set-view', (_event, view: AppView) => {
+  if (!VIEWS.includes(view) || preferences.view === view) return;
+  preferences = { ...preferences, view };
+  savePreferences();
+});
+
+/** Settings > the template videos folder's Change…: where videos added from now on are kept. Those kept already stay where they are. */
 async function chooseMediaFolder() {
   if (!window) return;
-  const result = await dialog.showOpenDialog(window, {
+  const result = SCREENSHOT && process.env.DJMASTER_SHOT_FOLDER ? { canceled: false, filePaths: [process.env.DJMASTER_SHOT_FOLDER] } : await dialog.showOpenDialog(window, {
     title: 'Folder for Template Videos',
     message: 'Videos up to 25 MB added to templates, and those in template files imported, are kept here. Videos already kept stay where they are.',
     defaultPath: mediaFolder(),
@@ -1290,12 +1335,12 @@ function createWindow() {
  * roles, which only know about text fields; the window decides whether a text
  * field or the mixes should take them.
  */
-/** Whether the automatic check is on, for the tick in the Help menu. */
+/** Whether the automatic check is on, as the Settings dialog shows it. */
 let checksAutomatically = true;
 /** How long after the window appears the quiet check starts, so it never competes with start-up. */
 const QUIET_CHECK_DELAY_MS = 4000;
 
-/** "Check for Updates…" in the Help menu: asks now and always answers. */
+/** "Check for Updates…" in the Help menu, and Check now in Settings: asks now and always answers. */
 async function checkForUpdatesNow() {
   if (!window) return;
   const result = await checkNow();
@@ -1390,17 +1435,24 @@ function buildMenu() {
     accelerator,
     click: () => window?.webContents.send('menu', name),
   });
+  // Settings… where each system has it: in the app's menu on the Mac, in File elsewhere.
+  const settings = command('Settings…', 'CmdOrCtrl+,', 'settings');
   const template: MenuItemConstructorOptions[] = [
-    ...(process.platform === 'darwin' ? [{ role: 'appMenu' } as MenuItemConstructorOptions] : []),
+    ...(process.platform === 'darwin'
+      ? [{
+          label: app.name,
+          submenu: [
+            { role: 'about' }, { type: 'separator' }, settings, { type: 'separator' },
+            { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' },
+          ],
+        } as MenuItemConstructorOptions]
+      : []),
     {
       label: 'File',
       submenu: [
         command('Open Recording…', 'CmdOrCtrl+O', 'open'),
         { label: 'Open Recent', submenu: recentMenu() },
-        { type: 'separator' },
-        { label: 'Folder for Template Videos…', click: chooseMediaFolder },
-        { label: 'Show LUT Folder', click: showLutFolder },
-        { label: 'Folder for LUTs…', click: chooseLutFolder },
+        ...(process.platform === 'darwin' ? [] : [{ type: 'separator' } as MenuItemConstructorOptions, settings]),
         { type: 'separator' },
         { ...command('Close Recording', 'Shift+CmdOrCtrl+W', 'close'), enabled: recordingOpen },
         { role: 'close' },
@@ -1433,12 +1485,6 @@ function buildMenu() {
         { label: 'Gestures and Shortcuts', accelerator: 'F1', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
         { type: 'separator' },
         { label: 'Check for Updates…', click: checkForUpdatesNow },
-        {
-          label: 'Check for Updates Automatically',
-          type: 'checkbox',
-          checked: checksAutomatically,
-          click: (item) => setAutomatic(item.checked),
-        },
         { type: 'separator' },
         { label: 'DJ Mix Master Website', click: () => shell.openExternal(DOWNLOAD_PAGE) },
       ],

@@ -47,6 +47,8 @@ export interface VideoViewOptions {
   say(text: string): void;
   /** What can be undone has changed: while a template is edited, undo works on the template. */
   history(): void;
+  /** The template editor was opened or closed: the view to come back to has changed. */
+  editingChanged(): void;
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -154,7 +156,7 @@ export class VideoView {
     const select = $<HTMLSelectElement>('template');
     this.#fillTemplates();
     // The user's own templates come in from disk a moment after the window is up.
-    options.api.templates().then((stored) => {
+    this.#templatesLoaded = options.api.templates().then((stored) => {
       for (const { id, template } of stored) {
         USER_TEMPLATES.set(USER_TEMPLATE + id, checked(template).template);
         this.#typed.set(USER_TEMPLATE + id, template);
@@ -598,6 +600,19 @@ export class VideoView {
     this.#editor.step(direction);
   }
 
+  /** The user's own templates, read from disk; until then a mix's own template is not known. */
+  #templatesLoaded: Promise<void>;
+
+  /**
+   * Opens the editor again at the start, as it was left: only on a template
+   * of the user's own, as opening it on a built-in one would make a copy.
+   */
+  async reopenEditor() {
+    await this.#templatesLoaded;
+    this.refresh();
+    if (this.#visible && !this.#editing && USER_TEMPLATES.has(this.#choice.template)) await this.#startEditing();
+  }
+
   async #startEditing() {
     if (!USER_TEMPLATES.has(this.#choice.template)) {
       const copy: Template = structuredClone(this.#template());
@@ -613,6 +628,7 @@ export class VideoView {
     $('template-name-row').hidden = false;
     this.#handles.show(true);
     this.#editor.start(this.#asTyped(this.#template(), this.#typed.get(this.#editing)));
+    this.#options.editingChanged();
   }
 
   /**
@@ -646,6 +662,7 @@ export class VideoView {
     this.#editor.stop();
     this.#fillTemplates();
     this.#showFields();
+    this.#options.editingChanged();
   }
 
   /** A change made in the editor: shown in the picture at once, and saved once changes pause. */

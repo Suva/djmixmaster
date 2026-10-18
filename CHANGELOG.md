@@ -19,6 +19,14 @@ are under "Not released yet" and appear there once they are.
   in the Video view choose the shape: landscape for YouTube, vertical for
   phones, square for feeds. Every template works in each, its title and its
   shapes keeping their size across the picture.
+- **Settings.** The choices that belong to the app, rather than to a
+  recording, are now in one place, each with a word on what it does: the
+  folder for template videos, the LUT folder, and the check for updates.
+  Open it with the gear at the top of the window, or ⌘, (Ctrl+, on Windows
+  and Linux). They have left the File and Help menus.
+- **The app opens in the view you left.** Mastering, Video, or editing a
+  template: the next time the app starts with a recording, it is where you
+  were.
 - **Trails.** A trails layer leaves what moves beneath it behind, fading
   over as long as you choose: as an echo, or only the bright parts (light
   trails on a dark picture) or the dark ones. Zoom and turn the trail to

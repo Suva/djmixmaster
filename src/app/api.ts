@@ -129,7 +129,26 @@ export interface VisualsChoice {
   shape?: Shape;
 }
 
-export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help';
+export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help' | 'settings';
+
+/** The view the window is in, kept for the next start: editing a template is in the Video view, with its editor open. */
+export type AppView = 'mastering' | 'video' | 'editing';
+
+/** The folders the Settings dialog chooses. */
+export type FolderKind = 'media' | 'luts';
+
+/** What the Settings dialog shows: the choices that belong to the app rather than to a recording. */
+export interface AppSettings {
+  /** Where videos added to templates are kept, and whether that is one chosen rather than the app's own. */
+  mediaFolder: string;
+  mediaFolderChosen: boolean;
+  /** Where the LUTs offered come from. */
+  lutFolder: string;
+  lutFolderChosen: boolean;
+  /** Whether a newer version is looked for a few seconds after start. */
+  checkUpdates: boolean;
+  version: string;
+}
 
 /** What the window may ask the main process to do. */
 export interface Api {
@@ -168,6 +187,20 @@ export interface Api {
   openLink(url: string): void;
   /** Stops the notice about this version from coming back. */
   skipVersion(version: string): void;
+  /** The choices of the Settings dialog, as they are now. */
+  settings(): Promise<AppSettings>;
+  /** Asks for a folder and uses it from now on; gives the settings after. */
+  chooseFolder(which: FolderKind): Promise<AppSettings>;
+  /** Goes back to the app's own folder. */
+  defaultFolder(which: FolderKind): Promise<AppSettings>;
+  /** Opens the folder in Finder or Explorer. */
+  showFolder(which: FolderKind): void;
+  setCheckUpdates(on: boolean): Promise<AppSettings>;
+  /** Looks for a newer version now, and says what was found. */
+  checkUpdatesNow(): void;
+  /** The view the window was in when last used. */
+  view(): Promise<AppView>;
+  setView(view: AppView): void;
   /** A command chosen from the menu bar or by its keyboard shortcut. */
   onMenu(listener: (command: MenuCommand) => void): void;
   /** A recording handed to the app from outside while it is running. */
@@ -192,7 +225,7 @@ export interface Api {
   pickLut(): Promise<string | null>;
   /** The text of a .cube file chosen before. */
   readLut(path: string): Promise<string>;
-  /** The .cube files in the LUT folder (File > Show LUT Folder), named by where each is in it, without the extension. */
+  /** The .cube files in the LUT folder (chosen in Settings), named by where each is in it, without the extension. */
   folderLuts(): Promise<FolderLut[]>;
   /** The text of a LUT in the LUT folder, by its name there ("Film/Warm"). */
   readFolderLut(name: string): Promise<string>;

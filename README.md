@@ -70,8 +70,8 @@ There is no build for Intel Macs yet. On those, the tool can be run
 Your recording is never changed and never leaves your computer. The only
 thing the app contacts is GitHub, at most once a day, to see whether a newer
 version exists. If there is one, a line in the header says so; nothing is
-installed for you. Turn the check off under Help → Check for Updates
-Automatically.
+installed for you. Turn the check off in Settings (the gear at the top of
+the window, or ⌘, / Ctrl+,).
 
 ## What it does
 
@@ -157,7 +157,8 @@ can be undone.
 - **Your work is remembered**: mixes, settings and adjustments are saved per
   recording and restored when you open it again, also after the file has
   been moved or renamed. The app starts with the
-  recording you had open last, if it is still where it was; earlier ones are
+  recording you had open last, if it is still where it was, in the view you
+  left it in: Mastering, Video, or editing a template; earlier ones are
   listed on the start screen and under File > Open Recent. File > Close Recording puts the recording away,
   and the app then starts empty next time.
 
@@ -255,12 +256,11 @@ shows every change as it is made:
   speed you choose, and can start again on every beat, bar or track. A clip
   made on green or on black can have that keyed out. A video up to 25 MB is
   copied into the app's own folder when added; a larger one is used where it
-  is. File > Folder for Template Videos chooses where the copies go, a larger
-  drive say. A video that has moved is found again in that folder, or with
+  is. Settings chooses where the copies go, a larger drive say. A video that has moved is found again in that folder, or with
   "Locate…" in the Video view, which also finds the template's other videos
   in the same folder.
-- **LUTs**: put your .cube files in the LUT folder (File > Show LUT Folder,
-  or File > Folder for LUTs to use one you have already) and they are listed
+- **LUTs**: put your .cube files in the LUT folder (Settings shows it, or
+  chooses one you have already) and they are listed
   wherever a LUT is chosen; the arrow keys step through them, each shown on
   the picture at once. A template exported to share carries the LUTs it
   uses inside it.
