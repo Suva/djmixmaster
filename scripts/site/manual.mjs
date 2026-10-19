@@ -14,7 +14,7 @@ import { pathToFileURL } from 'node:url';
 const root = join(import.meta.dirname, '..', '..');
 // As addresses: import() takes no Windows path.
 const load = (path) => import(pathToFileURL(join(root, path)).href);
-const { LAYER_TYPES, COMMON_PARAMS, STYLE_PARAMS, TEXT_VARIABLES, TEXT_ABOUT, FONTS } = await load('src/visuals/template.ts');
+const { LAYER_TYPES, COMMON_PARAMS, STYLE_PARAMS, MASK_PARAMS, TEXT_VARIABLES, TEXT_ABOUT, FONTS } = await load('src/visuals/template.ts');
 const { FUNCTIONS, FUNCTION_ABOUT } = await load('src/visuals/expression.ts');
 const { MUSIC_NAMES, MUSIC_ABOUT } = await load('src/visuals/music.ts');
 const { shortcuts } = await load('src/app/shortcuts.ts');
@@ -109,6 +109,8 @@ const DIRECTIVES = {
   'layer-list': () => table(['Layer', 'What it does'], Object.entries(LAYER_TYPES).map(([type, spec]) => [`<a href="layer-types.html#${type}">${escape(spec.label)}</a>`, escape(spec.description)])),
   'common-settings': () => settingsTable(COMMON_PARAMS),
   'style-settings': () => settingsTable(STYLE_PARAMS),
+  // Older releases' templates have no masks; the manual of one is built from its own sources (MANUAL_ROOT).
+  'mask-settings': () => settingsTable(MASK_PARAMS ?? {}),
   functions: () => table(['Function', 'What it gives'], Object.entries(FUNCTIONS).map(([name, f]) => [`<code>${escape(f.usage)}</code>`, escape(FUNCTION_ABOUT[name])]), 'reference'),
   music: () => table(['Name', 'What it is'], MUSIC_NAMES.map((name) => [`<code>${name}</code>`, escape(MUSIC_ABOUT[name])]), 'reference'),
   'text-variables': () => table(['Variable', 'Gives'], TEXT_VARIABLES.map((name) => [`<code>%${name}%</code>`, escape(TEXT_ABOUT[name])]), 'reference'),

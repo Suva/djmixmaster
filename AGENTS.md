@@ -408,7 +408,7 @@ the app's own code, so the manual cannot list what the app does not have:
 |---|---|---|
 | `{{shortcuts: Playback}}` | That section of the shortcuts, Mac and Windows side by side | `src/app/shortcuts.ts`, which the help sheet shows too |
 | `{{layers}}`, `{{layer-list}}` | Every kind of layer, with its picture, description and settings | `LAYER_TYPES` in `template.ts` |
-| `{{common-settings}}`, `{{style-settings}}` | The settings every layer has, the layer styles | `COMMON_PARAMS`, `STYLE_PARAMS` |
+| `{{common-settings}}`, `{{style-settings}}`, `{{mask-settings}}` | The settings every layer has, the layer styles, a mask's | `COMMON_PARAMS`, `STYLE_PARAMS`, `MASK_PARAMS` |
 | `{{functions}}`, `{{music}}`, `{{text-variables}}` | The formula functions, the music values, the text variables | `FUNCTION_ABOUT`, `MUSIC_ABOUT`, `TEXT_ABOUT` |
 | `{{all-shortcuts}}` | Every section of the shortcuts | `src/app/shortcuts.ts` |
 

@@ -62,6 +62,9 @@ function newLayer(type: string): Layer {
   return { type, params };
 }
 
+/** Whether a layer is used as a mask, as its own setting says (one given by a field counts). */
+const isMask = (layer: Layer) => typeof layer.params.mask === 'string' && layer.params.mask !== 'off';
+
 export class TemplateEditor {
   readonly #options: TemplateEditorOptions;
   #template: Template | null = null;
@@ -710,8 +713,16 @@ export class TemplateEditor {
     const place = new Map(template.layers.map((layer, index) => [layer, index]));
     const rows: HTMLElement[] = [];
     const emit = (nodes: LayerNode[], depth: number) => {
+      // A mask masks the layers above it in its group: those after it in the list, before it in the rows.
+      const masked = new Set<Layer>();
+      let masking = false;
+      for (const node of nodes) {
+        if (masking) masked.add(node.layer);
+        // A mask switched off masks nothing.
+        if (isMask(node.layer) && node.layer.params.visible !== false) masking = true;
+      }
       for (const node of [...nodes].reverse()) {
-        rows.push(this.#row(node.layer, place.get(node.layer)!, depth, node.children !== undefined));
+        rows.push(this.#row(node.layer, place.get(node.layer)!, depth, node.children !== undefined, masked.has(node.layer)));
         if (node.children && !this.#folded.has(node.layer)) emit(node.children, depth + 1);
       }
     };
@@ -802,11 +813,16 @@ export class TemplateEditor {
     panel.replaceChildren(title, this.#settings.element);
   }
 
-  #row(layer: Layer, index: number, depth: number, group: boolean): HTMLElement {
+  #row(layer: Layer, index: number, depth: number, group: boolean, masked: boolean): HTMLElement {
     const spec = LAYER_TYPES[layer.type];
     const row = document.createElement('div');
     row.className = this.#picked.has(layer) ? 'layer-row on' : 'layer-row';
     if (group) row.classList.add('group');
+    // A bracket beside the layers a mask shows through.
+    if (masked) {
+      row.classList.add('masked');
+      row.title = 'Shown through a mask beneath it in this group';
+    }
     row.tabIndex = 0;
     row.dataset.index = String(index);
     row.style.paddingLeft = `${3 + depth * 16}px`;
@@ -851,6 +867,14 @@ export class TemplateEditor {
     kind.className = 'layer-kind';
     kind.textContent = layer.name ? spec.label : '';
     row.append(name, kind);
+    if (isMask(layer)) {
+      // Not drawn itself: a mark says so, and what it does.
+      const mark = document.createElement('span');
+      mark.className = 'layer-mask';
+      mark.title = `A mask, ${layer.params.mask}: not drawn, it decides where the layers above it in this group show`;
+      mark.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>';
+      row.append(mark);
+    }
 
     row.addEventListener('dblclick', () => this.#renameLayer(row, name, index));
     row.addEventListener('keydown', (event) => {

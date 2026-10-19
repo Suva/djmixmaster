@@ -370,6 +370,10 @@ button.icon.layer-eye { flex: none; width: 24px; height: 22px; padding: 0; backg
 .layer-row.hidden .layer-eye { opacity: 0.5; }
 .layer-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .layer-kind { flex: none; font-size: 11px; color: var(--muted); }
+/* A mask's mark, and a bracket down the left of the layers it shows through. */
+.layer-mask { flex: none; display: inline-flex; color: var(--muted); }
+.layer-mask svg { width: 14px; height: 14px; }
+.layer-row.masked { box-shadow: inset 2px 0 0 var(--accent); }
 .layer-rename { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px; user-select: text; }
 .editor-empty { margin: 8px; color: var(--muted); }
 .editor-actions { display: flex; gap: 6px; margin: 8px 0 16px; }

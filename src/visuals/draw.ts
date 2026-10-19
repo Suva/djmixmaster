@@ -261,13 +261,121 @@ export class FrameDrawer {
     }
   }
 
-  /** Draws layers `start` to `end` of the list, a group's with its layers in it. */
+  /**
+   * Draws layers `start` to `end` of the list, a group's with its layers in
+   * it. A layer used as a mask takes the rest of the range: those layers are
+   * drawn through it.
+   */
   #drawRange(layers: PreparedLayer[], start: number, end: number, frame: Frame) {
     for (let index = start; index < end;) {
       const inside = layers[index].type === 'group' ? Math.max(0, Math.min(layers[index].size, end - index - 1)) : 0;
+      const params = layers[index].resolve(frame.music, frame.text);
+      // A mask switched off (hidden) masks nothing: the layers above it show as they are.
+      if (params.visible !== false && (params.mask === 'by its shape' || params.mask === 'by its brightness')) {
+        return this.#drawMasked(layers, index, inside, end, params, frame);
+      }
       this.#drawLayer(layers, index, inside, frame);
       index += 1 + inside;
     }
+  }
+
+  /** Masks and what they mask, a pair of canvases for each mask within another. */
+  #maskCanvases: [OffscreenCanvas, OffscreenCanvas][] = [];
+  #maskDepth = 0;
+
+  /**
+   * The layers from after the mask at `index` to `end`, drawn through it.
+   * The mask is drawn alone, as it would be drawn, and becomes how much of
+   * each pixel shows: its coverage, or its brightness too; grown or shrunk,
+   * feathered, then inverted. Its opacity and fades say how much it shows.
+   * The layers are drawn onto a copy of the picture so far, so that effects
+   * among them see what is beneath; then laid back over it through the mask.
+   */
+  #drawMasked(layers: PreparedLayer[], index: number, inside: number, end: number, params: ResolvedParams, frame: Frame) {
+    const { width, height } = this.#canvas;
+    const depth = this.#maskDepth++;
+    let pair = this.#maskCanvases[depth];
+    if (!pair || pair[0].width !== width || pair[0].height !== height) pair = this.#maskCanvases[depth] = [new OffscreenCanvas(width, height), new OffscreenCanvas(width, height)];
+    const [maskCanvas, content] = pair;
+    const fresh = (canvas: OffscreenCanvas) => {
+      const c = canvas.getContext('2d')!;
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      c.globalAlpha = 1;
+      c.globalCompositeOperation = 'source-over';
+      c.filter = 'none';
+      return c;
+    };
+    const [surface, before] = [this.#surface, this.#ctx];
+
+    // The mask layer alone, as it would be drawn; where it is is noted for the editor as for any layer.
+    const m = fresh(maskCanvas);
+    m.clearRect(0, 0, width, height);
+    [this.#surface, this.#ctx] = [maskCanvas, m];
+    this.#drawLayer(layers, index, inside, frame);
+    [this.#surface, this.#ctx] = [surface, before];
+
+    let mask: OffscreenCanvas = maskCanvas;
+    // By its brightness: white shows, black hides, as much as it covers.
+    if (params.mask === 'by its brightness') {
+      const table = new Uint8ClampedArray(256 * 4).fill(255);
+      for (let i = 0; i < 256; i++) table[i * 4 + 3] = i;
+      mask = this.#recoloured(maskCanvas, table);
+    }
+    const grow = (num(params, 'maskExpand') / 100) * this.#unit;
+    if (grow >= 0.5) mask = this.#dilate(mask, grow);
+    else if (grow <= -0.5) mask = this.#inverted(this.#dilate(this.#inverted(mask, 16), -grow), 17);
+    const feather = (num(params, 'maskFeather') / 100) * this.#unit;
+    if (feather > 0) {
+      const soft = this.#extraCanvas(15);
+      this.#blurInto(mask, soft, feather / 2);
+      mask = soft;
+    }
+    if (params.maskInvert === true) mask = this.#inverted(mask, 16);
+    // Kept in the mask's own canvas: the scratch canvases above are used again by the layers drawn through it.
+    if (mask !== maskCanvas) {
+      const keep = fresh(maskCanvas);
+      keep.globalCompositeOperation = 'copy';
+      keep.drawImage(mask, 0, 0);
+    }
+
+    // The layers through the mask, onto a copy of the picture so far.
+    const c = fresh(content);
+    c.globalCompositeOperation = 'copy';
+    c.drawImage(surface, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+    [this.#surface, this.#ctx] = [content, c];
+    this.#drawRange(layers, index + 1 + inside, end, frame);
+    [this.#surface, this.#ctx] = [surface, before];
+    this.#maskDepth--;
+
+    // Where the mask shows, the picture becomes what was drawn; elsewhere it stays as it was. Partly, where it partly shows.
+    const kept = fresh(content);
+    kept.globalCompositeOperation = 'destination-in';
+    kept.drawImage(maskCanvas, 0, 0);
+    before.save();
+    before.setTransform(1, 0, 0, 1, 0, 0);
+    before.globalAlpha = 1;
+    before.filter = 'none';
+    before.globalCompositeOperation = 'destination-out';
+    before.drawImage(maskCanvas, 0, 0);
+    before.globalCompositeOperation = 'lighter';
+    before.drawImage(content, 0, 0);
+    before.restore();
+  }
+
+  /** A mask the other way round, on scratch canvas `n`: shown where it hid, hidden where it showed. */
+  #inverted(mask: OffscreenCanvas, n: number): OffscreenCanvas {
+    const out = this.#extraCanvas(n);
+    const o = out.getContext('2d')!;
+    o.setTransform(1, 0, 0, 1, 0, 0);
+    o.globalAlpha = 1;
+    o.filter = 'none';
+    o.globalCompositeOperation = 'copy';
+    o.fillStyle = '#ffffff';
+    o.fillRect(0, 0, out.width, out.height);
+    o.globalCompositeOperation = 'destination-out';
+    o.drawImage(mask, 0, 0);
+    return out;
   }
 
   #drawLayer(layers: PreparedLayer[], index: number, inside: number, frame: Frame) {
@@ -1679,13 +1787,29 @@ export class FrameDrawer {
     const stops = stopsOf((n) => col(params, `colour${n}`), (n) => num(params, `position${n}`));
     const table = gradientMapTable(stops, { shift: num(params, 'shift'), hueShift: num(params, 'hueShift'), low: num(params, 'low'), high: num(params, 'high'), wheel: wheelIn(params) });
     if (!table) return;
+    this.#putBack(this.#recoloured(this.#surface, table));
+  }
+
+  /**
+   * A picture with each pixel recoloured by its brightness, from a table of
+   * 256 colours (gradient-map.ts), on the graphics card or else on the
+   * processor. The canvas it comes back on is shared: use it before another
+   * recolouring.
+   */
+  #recoloured(source: Canvas, table: Uint8ClampedArray): OffscreenCanvas {
     const { width, height } = this.#canvas;
     if (this.#gradientMapGl === undefined) this.#gradientMapGl = GradientMapGl.make();
-    const result = this.#gradientMapGl?.apply(this.#surface, table, width, height);
-    if (result) return this.#putBack(result);
+    const result = this.#gradientMapGl?.apply(source, table, width, height);
+    if (result) return result;
     // On the processor: slower, the same colours.
-    const copy = this.#copyOfPicture();
-    const pixels = copy.getContext('2d')!.getImageData(0, 0, width, height);
+    const out = this.#extraCanvas(0);
+    const o = out.getContext('2d')!;
+    o.setTransform(1, 0, 0, 1, 0, 0);
+    o.globalCompositeOperation = 'copy';
+    o.globalAlpha = 1;
+    o.filter = 'none';
+    o.drawImage(source, 0, 0);
+    const pixels = o.getImageData(0, 0, width, height);
     const data = pixels.data;
     for (let i = 0; i < data.length; i += 4) {
       // Between the table's two nearest entries, as the card reads it.
@@ -1697,9 +1821,8 @@ export class FrameDrawer {
         data[i + c] = c === 3 ? (v * data[i + 3]) / 255 : v;
       }
     }
-    const out = this.#extraCanvas(0);
-    out.getContext('2d')!.putImageData(pixels, 0, 0);
-    this.#putBack(out);
+    o.putImageData(pixels, 0, 0);
+    return out;
   }
 
   #displaceGl: DisplaceGl | null | undefined;

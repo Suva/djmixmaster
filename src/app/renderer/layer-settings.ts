@@ -91,6 +91,7 @@ const GROUPS: [string, string[], boolean][] = [
   ['Outer glow', ['outerGlow', 'glowColour', 'glowOpacity', 'glowSize', 'glowSpread'], false],
   ['Inner shadow', ['innerShadow', 'innerShadowColour', 'innerShadowOpacity', 'innerShadowAngle', 'innerShadowDistance', 'innerShadowSize'], false],
   ['Inner glow', ['innerGlow', 'innerGlowColour', 'innerGlowOpacity', 'innerGlowSize', 'innerGlowChoke'], false],
+  ['Mask', ['mask', 'maskInvert', 'maskExpand', 'maskFeather'], false],
   ['Timing', ['from', 'until', 'fadeIn', 'fadeOut'], false],
 ];
 /** The settings above the list of layers, as an image editor has them, and not among the others. */
@@ -143,13 +144,14 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
     const summary = document.createElement('summary');
     summary.textContent = title;
     details.append(summary);
-    // A style's heading has a dot while it is on, so that it shows folded away.
-    if (keys[0] in STYLE_PARAMS) {
+    // A style's heading has a dot while it is on, so that it shows folded away; so has the mask's, while the layer is one.
+    if (keys[0] in STYLE_PARAMS || keys[0] === 'mask') {
       const dot = document.createElement('span');
       dot.className = 'style-on';
-      dot.title = `${title} is on`;
+      dot.title = keys[0] === 'mask' ? 'This layer is a mask' : `${title} is on`;
       summary.append(dot);
-      const show = () => (dot.hidden = context.live()?.[keys[0]] !== true);
+      const on = (value: unknown) => value === true || (typeof value === 'string' && value !== 'off');
+      const show = () => (dot.hidden = !on(context.live()?.[keys[0]]));
       show();
       ticks.set(`style:${keys[0]}`, show);
     }

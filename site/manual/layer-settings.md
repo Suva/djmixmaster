@@ -29,3 +29,16 @@ The styles are made from the shape of what the layer draws. A drop shadow, an ou
 - **Spread** and **Choke** make part of a glow solid before it fades.
 
 Like any setting, a style can move with the music: a glow that pulses with the bass, say.
+
+## Masks
+
+Any layer that draws, and any group, can be used as a mask. Set **Use as a mask** in its **Mask** section: the layer is then not drawn, but decides where the layers above it in its group show. To limit what it masks, put it and those layers in a group. In the list of layers, a mask has a mark, and the layers it shows through have a bracket beside them.
+
+![The title used as a mask, with clouds of noise showing through its letters](pictures/mask.jpg)
+
+- **By its shape**: what the layer covers shows, the rest is hidden. A shape makes a mask of any outline, which can move and follow the music like the shape itself; text shows a video or a gradient through its letters.
+- **By its brightness**: white shows, black hides, grey shows partly. A gradient makes a soft wipe; noise, a dissolve through clouds.
+- An effect above a mask changes only what the mask shows: a blur or a glitch in one part of the picture.
+- The mask's opacity and fades say how much it shows. Hidden (its eye closed), it masks nothing.
+
+{{mask-settings}}

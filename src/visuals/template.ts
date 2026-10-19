@@ -154,6 +154,19 @@ export const REVEALS = [
   'left, keeping its shape', 'bottom, keeping its shape', 'along the outline',
 ] as const;
 
+/**
+ * A layer used as a mask: not drawn itself, but deciding where the layers
+ * above it in its group show, by its shape or by its brightness. Every layer
+ * that draws can be one, and groups; effects cannot. Sizes are in percent of
+ * the picture's short side.
+ */
+export const MASK_PARAMS: Record<string, ParamSpec> = {
+  mask: choice('Use as a mask', 'off', ['off', 'by its shape', 'by its brightness']),
+  maskInvert: toggle('Invert', false),
+  maskExpand: number('Expand, or shrink below 0', 0, -10, 10, '%'),
+  maskFeather: number('Feather', 0, 0, 10, '%'),
+};
+
 export interface LayerSpec {
   label: string;
   /** What it is for, in a sentence or two, for the + menu and the manual. */
@@ -586,11 +599,11 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
 
 /**
  * Every setting a layer of this kind has: those every layer has that apply to
- * it, its styles if it draws, then its own.
+ * it, its styles and its mask if it draws, then its own.
  */
 export function settingsOf(spec: LayerSpec): Record<string, ParamSpec> {
   const common = spec.common ? Object.fromEntries(spec.common.map((key) => [key, COMMON_PARAMS[key]])) : COMMON_PARAMS;
-  return { ...common, ...(spec.effect ? {} : STYLE_PARAMS), ...spec.params };
+  return { ...common, ...(spec.effect ? {} : STYLE_PARAMS), ...(spec.effect ? {} : MASK_PARAMS), ...spec.params };
 }
 
 /**

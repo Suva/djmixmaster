@@ -6,6 +6,12 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Masks.** Any layer, or a group, can be used as a mask, by its shape or
+  by its brightness: it is not drawn, but decides where the layers above it
+  in its group show. A shape makes a mask of any outline, text shows a video
+  through its letters, a gradient a soft wipe, noise a dissolve through
+  clouds. A mask can be inverted, grown or shrunk and feathered, and an
+  effect above one changes only what it shows.
 - **A Grid layer.** Lines, a checkerboard, a honeycomb of lines or of
   coloured cells, dots or stripes, over the whole picture, turned and
   scrolling as you like; or a floor of lines running to the horizon and

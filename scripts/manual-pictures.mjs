@@ -57,6 +57,8 @@ const scene = [
   { type: 'spectrum', params: { ...stops('#ffffff'), y: 82, height: 16, opacity: 0.85 } },
   { type: 'text', params: { text: 'NIGHTSHIFT', size: 13, weight: 800, colour: '#ffffff', y: 40 } },
 ];
+/** Entries of LAYERS that show something other than a kind of layer: their pictures go beside the others, not in layers/. */
+const NOT_KINDS = new Set(['mask']);
 const LAYERS = {
   solid: [...scene, { type: 'solid', params: { colour: '#1e6cff', blend: 'colour' } }],
   gradient: [{ type: 'gradient', params: { kind: 'linear', angle: 120, ...stops('#3a1c71', '#d76d77', '#ffaf7b') } }],
@@ -88,6 +90,13 @@ const LAYERS = {
     // Top to bottom; the gradient reaches past the picture, so the horizon at 43% of its height is at 0.466 along it.
     { type: 'gradient', params: { kind: 'linear', angle: 90, ...stops('#120a2e', '#5b1a6e', '#ff6a8f', '#120a2e'), position1: 0.25, position2: 0.38, position3: 0.466, position4: 0.466 } },
     { type: 'grid', params: { kind: 'floor', y: 43, cell: 9, lineWidth: 0.35, lineColour: '#ff4fa0', fade: 0.85 } },
+  ],
+  // Not a kind of layer: the title used as a mask, for the page on masks, with smoky noise through its letters.
+  mask: [
+    dark,
+    { type: 'group', size: 2, params: {} },
+    { type: 'text', params: { text: 'NIGHTSHIFT', size: 19, weight: 900, colour: '#ffffff', mask: 'by its shape' } },
+    { type: 'noise', params: { kind: 'clouds', warp: 0.7, size: 30, seed: 2, ...stops('#3a1c71', '#ff4fa0', '#ffd27a') } },
   ],
   mosaic: [...scene, { type: 'mosaic', params: { cells: 'hexagons', size: 3.5 } }],
   gradientMap: [...scene, { type: 'gradientMap', params: { ...stops('#0b1a3a', '#2fbfa8', '#fff3c4') } }],
@@ -141,8 +150,10 @@ app.on('close', () => {
   let copied = 0;
   for (const file of readdirSync(work)) {
     if (file === 'last.png' || !/\.(png|jpg)$/.test(file)) continue;
-    const layer = file.match(/^layer-(.+\.jpg)$/);
-    copyFileSync(join(work, file), layer ? join(out, 'layers', layer[1]) : join(out, file));
+    // A kind of layer's picture goes with the others in layers/; one of LAYERS that is not a kind of layer (a mask), beside the rest.
+    const layer = file.match(/^layer-(.+)\.jpg$/);
+    const kind = layer && !NOT_KINDS.has(layer[1]);
+    copyFileSync(join(work, file), kind ? join(out, 'layers', `${layer[1]}.jpg`) : join(out, layer ? `${layer[1]}.jpg` : file));
     copied++;
   }
   const missing = Object.keys(LAYERS).filter((type) => !existsSync(join(work, `layer-${type}.jpg`)));
