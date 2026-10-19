@@ -75,6 +75,7 @@ const LAYERS = {
   glitch: [...scene, { type: 'glitch', params: { amount: 1, shift: 10 } }],
   adjust: [...scene, { type: 'adjust', params: { brightness: 1.25, contrast: 1.7 } }],
   hue: [...scene, { type: 'hue', params: { hue: 140, saturation: 1.6 } }],
+  whiteBalance: [...scene, { type: 'whiteBalance', params: { temperature: -0.8, tint: -0.3 } }],
   kaleidoscope: [...scene, { type: 'kaleidoscope', params: { segments: 8 } }],
   transform: [...scene, { type: 'transform', params: { scale: 45, rotation: 15, edges: 'mirror' } }],
   trails: [...scene, { type: 'trails', params: { length: 1.5, mode: 'bright parts', zoom: 25 } }],

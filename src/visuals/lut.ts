@@ -199,6 +199,23 @@ export function sampleLut(lut: Lut, r: number, g: number, b: number, into: Float
 }
 
 /**
+ * A LUT that scales red, green and blue by these amounts. Two points a side
+ * are enough: a LUT is read in straight lines between its points, and a
+ * scaling is a straight line, so it comes out exact, over 1 included until
+ * the picture's own 8 bits cut it off.
+ */
+export function scalingLut([r, g, b]: [number, number, number]): Lut {
+  const data = new Float32Array(2 * 2 * 2 * 3);
+  let i = 0;
+  for (let z = 0; z < 2; z++) for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) {
+    data[i++] = x * r;
+    data[i++] = y * g;
+    data[i++] = z * b;
+  }
+  return { size: 2, data, min: [0, 0, 0], max: [1, 1, 1] };
+}
+
+/**
  * Sends pixels (RGBA, 8 bits each, not premultiplied, as `getImageData`
  * gives them) through the LUT in place. For where the graphics card cannot
  * be used: a 1080p frame takes some tens of milliseconds this way.

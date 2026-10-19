@@ -6,6 +6,9 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A White balance layer.** Warms or cools the colours beneath it and moves
+  them towards green or magenta, to correct a photo or video taken under the
+  wrong light. Put it in a group with a picture to change only that picture.
 - **Amounts go from 0 to 1.** Opacities, a tint's amount, brightness,
   saturation, a glow's strength and the other settings that say how much,
   rather than where or how big, are now fractions instead of percentages: an

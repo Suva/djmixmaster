@@ -7,13 +7,13 @@
 //
 // Kept free of Node imports; it runs in a window.
 
-import { fromHsl, mixColours, parseHex, turnHue, type Colour } from './colour.ts';
+import { fromHsl, mixColours, parseHex, turnHue, whiteBalance, type Colour } from './colour.ts';
 import { BAND_COUNT, HIGHEST_HZ, LOWEST_HZ } from '../features.ts';
 import type { Values } from './expression.ts';
 import { fontStack } from './fonts.ts';
 import { hexOf, LAYER_TYPES, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
 import type { ClipTiming, Playback } from './clip.ts';
-import { applyLut, type Lut } from './lut.ts';
+import { applyLut, scalingLut, type Lut } from './lut.ts';
 import { lengthOf, shapeOutline } from './outline.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
@@ -314,6 +314,7 @@ export class FrameDrawer {
       case 'trails': this.#trails(params, frame, memory); break;
       case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#unit); break;
       case 'lut': this.#lut(params, frame); break;
+      case 'whiteBalance': this.#whiteBalance(params); break;
     }
     into.restore();
     if (!alone) return;
@@ -1320,7 +1321,31 @@ export class FrameDrawer {
   /** The picture beneath, through a colour lookup table. */
   #lut(params: ResolvedParams, frame: Frame) {
     const lut = frame.luts?.get(str(params, 'lut'));
-    if (!lut) return;
+    if (lut) this.#throughLut(lut);
+  }
+
+  /** White balances' LUTs, by their scalings, so that one that holds still is made, and sent to the graphics card, once. */
+  #balances = new Map<string, Lut>();
+
+  /** White balance: each of red, green and blue of the picture beneath scaled, through a LUT that does just that. */
+  #whiteBalance(params: ResolvedParams) {
+    const temperature = num(params, 'temperature');
+    const tint = num(params, 'tint');
+    if (temperature === 0 && tint === 0) return;
+    const gains = whiteBalance(temperature, tint);
+    const key = gains.map((gain) => gain.toFixed(4)).join();
+    let lut = this.#balances.get(key);
+    if (!lut) {
+      // One following the music is new each frame: only the last few are kept.
+      if (this.#balances.size >= 16) this.#balances.clear();
+      lut = scalingLut(gains);
+      this.#balances.set(key, lut);
+    }
+    this.#throughLut(lut);
+  }
+
+  /** The picture beneath through a LUT: on the graphics card, or else on the processor. */
+  #throughLut(lut: Lut) {
     const { width, height } = this.#canvas;
     if (this.#lutGl === undefined) this.#lutGl = LutGl.make();
     const result = this.#lutGl?.apply(this.#surface, lut, width, height);

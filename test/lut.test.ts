@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applyLut, packLut, parseCube, sampleLut, unpackLut } from '../src/visuals/lut.ts';
+import { applyLut, packLut, parseCube, sampleLut, scalingLut, unpackLut } from '../src/visuals/lut.ts';
+import { whiteBalance } from '../src/visuals/colour.ts';
 import { checkTemplate, folderLutsOf, keepFolderLuts, lutsOf, prepare } from '../src/visuals/template.ts';
 import { MUSIC_NAMES } from '../src/visuals/music.ts';
 
@@ -115,4 +116,28 @@ test('a template exported keeps the LUT folder\'s LUTs it names, once each, and 
   assert.equal(shared.fields[0].default, 'lut:Warm 2');
   assert.deepEqual(folderLutsOf(shared), []);
   assert.equal(template.layers[0].params.lut, 'lutfolder:Film/Warm', 'the template itself is left as it was');
+});
+
+test('a white balance warms, cools and tints, and leaves a grey as light as it was', () => {
+  const lightness = ([r, g, b]: number[]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  assert.deepEqual(whiteBalance(0, 0), [1, 1, 1]);
+  const warm = whiteBalance(1, 0);
+  assert.ok(warm[0] > 1 && warm[2] < 1 && warm[0] > warm[1] && warm[1] > warm[2], `warmer is more red and less blue: ${warm}`);
+  const cool = whiteBalance(-1, 0);
+  assert.ok(cool[2] > cool[1] && cool[1] > cool[0], `cooler is more blue: ${cool}`);
+  const magenta = whiteBalance(0, 1);
+  assert.ok(magenta[1] < magenta[0] && Math.abs(magenta[0] - magenta[2]) < 1e-12, `magenta is less green: ${magenta}`);
+  for (const gains of [warm, cool, magenta, whiteBalance(0, -1), whiteBalance(0.4, -0.7)]) assert.ok(Math.abs(lightness(gains) - 1) < 1e-12);
+  assert.deepEqual(whiteBalance(5, -5), whiteBalance(1, -1), 'past the ends of the sliders it goes no further');
+});
+
+test('a LUT of two points a side scales each channel exactly, cut off only at full', () => {
+  const lut = scalingLut([1.2, 1, 0.5]);
+  for (const [r, g, b] of [[0, 0, 0], [0.5, 0.25, 1], [0.8, 0.9, 0.3], [1, 1, 1]]) {
+    const [or, og, ob] = sampleLut(lut, r, g, b);
+    assert.ok(Math.abs(or - r * 1.2) < 1e-6 && Math.abs(og - g) < 1e-6 && Math.abs(ob - b * 0.5) < 1e-6, `${r} ${g} ${b} gave ${or} ${og} ${ob}`);
+  }
+  const pixels = new Uint8ClampedArray([100, 100, 100, 255, 250, 10, 200, 128]);
+  applyLut(lut, pixels);
+  assert.deepEqual([...pixels], [120, 100, 50, 255, 255, 10, 100, 128], 'red past full stops at 255, and alpha is left alone');
 });

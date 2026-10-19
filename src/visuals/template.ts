@@ -379,6 +379,17 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       lightness: number('Lightness', 0, -1, 1),
     },
   },
+  whiteBalance: {
+    label: 'White balance',
+    description: 'Warms or cools the colours of the picture beneath, and moves them towards green or magenta: to correct a photo or video taken under the wrong light, or to give it a mood. In a group with a picture, it changes only that picture.',
+    effect: true,
+    // The whole picture beneath, as a photo editor's white balance: it has no place or size of its own.
+    params: {
+      temperature: number('Temperature: cooler to warmer', 0, -1, 1),
+      tint: number('Tint: green to magenta', 0, -1, 1),
+    },
+    common: ['visible', 'opacity', 'blend', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
   kaleidoscope: {
     label: 'Kaleidoscope',
     description: 'Repeats a slice of the picture beneath all the way round a point, mirrored or not, as a kaleidoscope does.',

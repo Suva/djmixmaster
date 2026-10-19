@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ffmpeg } from '../src/audio-io.ts';
 import { packLut, parseCube } from '../src/visuals/lut.ts';
+import { whiteBalance } from '../src/visuals/colour.ts';
 import { writeSyntheticMix } from './synthetic-mix.ts';
 import { readZip, readZipEntry } from '../src/app/zip.ts';
 import { dataFolder, electronPath, runApp, workFolder } from './window-app.ts';
@@ -219,4 +220,28 @@ test('the LUT folder\'s LUTs are offered, stepped through with the arrow keys, n
   const json = JSON.parse((await readZipEntry(exported, items[0])).toString('utf8'));
   assert.deepEqual(Object.keys(json.luts), ['Swap']);
   assert.ok(json.layers.some((layer: { params: { lut?: string } }) => layer.params.lut === 'lut:Swap'));
+});
+
+test('a white balance warms a grey picture without making it lighter', { skip }, async () => {
+  const file = join(work, 'Warm.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 2, name: 'Warm', fields: [],
+    layers: [
+      { type: 'solid', params: { colour: '#808080' } },
+      { type: 'whiteBalance', params: { temperature: 1, tint: 0.5 } },
+    ],
+  }));
+  const data = await dataFolder(work, analysed);
+  const seen = await runApp({ recording: mix, data, template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Warm', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const middle = () => [...picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data].slice(0, 3);
+    await page.until(() => middle()[0] > 140, 'the picture to be warmed');
+    return middle();
+  });
+  const want = whiteBalance(1, 0.5).map((gain) => 128 * gain);
+  seen.forEach((value, i) => assert.ok(Math.abs(value - want[i]) <= 2, `drawn ${seen}, should be about ${want.map(Math.round)}`));
 });

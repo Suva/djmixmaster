@@ -119,3 +119,22 @@ const withLch = (colour: Colour, change: (lch: Lch) => Lch) => fromLch(change(to
 export const turnHue = (colour: Colour, degrees: number) => withLch(colour, (c) => ({ ...c, h: (((c.h + degrees) % 360) + 360) % 360 }));
 export const lighten = (colour: Colour, amount: number) => withLch(colour, (c) => ({ ...c, l: c.l + amount }));
 export const saturate = (colour: Colour, amount: number) => withLch(colour, (c) => ({ ...c, c: c.c * (1 + amount) }));
+
+/**
+ * How much to scale red, green and blue by to warm or cool a picture and
+ * move it towards green or magenta, as a photo editor's white balance does.
+ * `temperature` goes from -1 (cooler, towards blue) to 1 (warmer, towards
+ * amber); `tint` from -1 (towards green) to 1 (towards magenta). The three
+ * are scaled together so that a grey keeps its lightness: the colour moves,
+ * the picture does not get brighter or darker.
+ */
+export function whiteBalance(temperature: number, tint: number): [number, number, number] {
+  // At the ends of the sliders, a fair correction for a photo taken under the wrong light, no further.
+  const reach = 0.3;
+  const t = Math.max(-1, Math.min(1, temperature)) * reach;
+  const m = Math.max(-1, Math.min(1, tint)) * reach;
+  const [r, g, b] = [1 + t, 1 - m, 1 - t];
+  // The lightness of grey, as sRGB weighs the three.
+  const light = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return [r / light, g / light, b / light];
+}
