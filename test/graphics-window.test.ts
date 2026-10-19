@@ -130,9 +130,17 @@ test('every mode of displace, and the edges held, move the picture as the proces
       return places.map(([x, y]) => ctx.getImageData(Math.floor(picture.width * x), Math.floor(picture.height * y), 1, 1).data[0]);
     };
     // The grey of each column, undisplaced.
-    await page.until(() => read()[0] > 0, 'the gradient to be drawn');
-    const ctx = picture.getContext('2d')!;
-    const row = [...ctx.getImageData(0, Math.floor(picture.height / 2), picture.width, 1).data].filter((_, i) => i % 4 === 0);
+    // The picture is cleared for a moment when the view settles, more so on a busy computer: every reading waits for the grey.
+    const drawn = (values: number[]) => values.every((v) => v > 0);
+    const rowNow = () => [...picture.getContext('2d')!.getImageData(0, Math.floor(picture.height / 2), picture.width, 1).data].filter((_, i) => i % 4 === 0);
+    let lastRow = '';
+    await page.until(() => {
+      const now = rowNow();
+      const settled = drawn(now.slice(1)) && now.join() === lastRow;
+      lastRow = now.join();
+      return settled;
+    }, 'the gradient to be drawn and hold still');
+    const row = rowNow();
     const modes: number[][] = [];
     let before = read().join();
     for (let i = 1; i <= count; i++) {
@@ -141,7 +149,7 @@ test('every mode of displace, and the edges held, move the picture as the proces
       let last = '';
       await page.until(() => {
         const now = read().join();
-        const settled = now === last && now !== before;
+        const settled = now === last && now !== before && drawn(read());
         last = now;
         return settled;
       }, `mode ${i} to be drawn`, 20_000);
@@ -224,6 +232,8 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
       { type: 'gradient', params: { kind: 'linear', angle: 0, colour1: '#000000', colour2: '#ffffff' } },
       { type: 'gradientMap', params: { colour1: '#ff0000', position1: 0, colour2: '', colour3: '', colour4: '', colour5: '#0000ff', position5: 1 } },
       { type: 'gradient', name: 'Moving', params: { colour1: '#ff0000', position1: 0, colour5: '#0000ff', position5: '0.5 + 0.5 * bass' } },
+      // As a template saved before the last stop was kept could have it: no stops at all.
+      { type: 'gradientMap', name: 'Empty', params: { colour1: '', colour2: '', colour3: '', colour4: '', colour5: '' } },
     ],
   }));
   const data = await dataFolder(work, analysed);
@@ -275,6 +285,28 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     page.click('undo');
     await page.wait(300);
     const back = shown();
+    // Taken out one by one, the last stays.
+    await page.wait(1100);
+    drag(marker(5), at(1)[0], at(1)[1] + 80);
+    await page.wait(1100);
+    drag(marker(2), at(0.6)[0], at(0.6)[1] + 80);
+    await page.wait(1100);
+    drag(marker(1), at(0.25)[0], at(0.25)[1] + 80);
+    await page.wait(50);
+    const last = { shown: shown(), colour: colour('colour1') };
+    // A gradient with no stops is mended by a click on its bar: the stop added has the layer's own first colour, not nothing.
+    const pick = (name: string) => {
+      const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === name)!;
+      row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    };
+    pick('Empty');
+    await page.until(() => document.querySelector('#editor-layer-title')?.textContent === 'Empty', 'the empty gradient map to be selected');
+    const emptyTrack = document.querySelector<HTMLElement>('.stop-track')!;
+    const box = emptyTrack.getBoundingClientRect();
+    emptyTrack.dispatchEvent(new MouseEvent('click', { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2, bubbles: true }));
+    await page.wait(50);
+    const mended = { shown: shown(), colour: colour('colour1') };
     // A gradient with a stop that follows the music shows them unfolded.
     const moving = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Moving')!;
     moving.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: moving.getBoundingClientRect().top + 5, bubbles: true }));
@@ -282,7 +314,7 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     await page.until(() => document.querySelector('#editor-layer-title')?.textContent === 'Moving', 'the moving gradient to be selected');
     const unfolded = document.querySelector<HTMLDetailsElement>('#editor-layer details.stop-settings')!.open;
     page.click('editor-done');
-    return { first, folded, dragged, added, removed, back, unfolded };
+    return { first, folded, dragged, added, removed, back, last, mended, unfolded };
   });
   assert.deepEqual(seen.first, [1, 5]);
   assert.ok(seen.folded, 'each stop folded away for a gradient that holds still');
@@ -293,4 +325,6 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
   assert.match(seen.added.colour ?? '', /^#[0-9a-f]{6}$/, `added in ${seen.added.colour}`);
   assert.deepEqual(seen.removed, { shown: [1, 5], colour: 'None' });
   assert.deepEqual(seen.back, [1, 2, 5]);
+  assert.deepEqual(seen.last, { shown: [1], colour: '#ff0000' }, 'the last stop stays');
+  assert.deepEqual(seen.mended, { shown: [1], colour: '#140a33' }, 'an empty gradient mended with its first colour');
 });

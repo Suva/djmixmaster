@@ -94,7 +94,8 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
       if (!dragging && Math.hypot(moved.clientX - startX, moved.clientY - startY) < DRAG_START_PX) return;
       dragging = true;
       const box = track.getBoundingClientRect();
-      removing = moved.clientY < box.top - REMOVE_PX || moved.clientY > box.bottom + REMOVE_PX;
+      // The last stop stays: without one, the gradient would be nothing at all.
+      removing = inUse() > 1 && (moved.clientY < box.top - REMOVE_PX || moved.clientY > box.bottom + REMOVE_PX);
       marker.classList.toggle('removing', removing);
       if (!movable || removing) return;
       const at = Math.min(1, Math.max(0, (moved.clientX - box.left) / box.width));
@@ -136,7 +137,9 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
     const n = free + 1;
     const box = track.getBoundingClientRect();
     const at = Math.round(Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)) * 1000) / 1000;
-    const colour = gradientAt(stops(), at, wheel());
+    // Into an empty gradient (an old template could have one), the layer's own first colour rather than the nothing it has there.
+    const shown = stops();
+    const colour = shown.length ? gradientAt(shown, at, wheel()) : firstDefault();
     context.set({ [`colour${n}`]: toHex(colour), [`position${n}`]: at });
     context.refresh(`colour${n}`);
     context.refresh(`position${n}`);
@@ -144,6 +147,16 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
   });
 
   const stops = () => stopsOf((n) => now(n).colour, (n) => now(n).position);
+  /** How many stops have a colour, given or by an expression. */
+  const inUse = () => items.filter((_, i) => given(`colour${i + 1}`) !== '').length;
+  /** The colour the layer's first stop has to begin with, or white. */
+  const firstDefault = () => {
+    for (let n = 1; n <= STOP_COUNT; n++) {
+      const colour = parseHex(String(context.defaults[`colour${n}`] ?? ''));
+      if (colour && colour.a > 0) return colour;
+    }
+    return { r: 1, g: 1, b: 1, a: 1 };
+  };
   const wheel = () => (context.live()?.stopBlend ?? given('stopBlend')) === 'round the colour wheel';
 
   let last = '';
@@ -171,7 +184,8 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
       const fixedColour = plainColour(n) === null;
       marker.classList.toggle('fixed', fixedPlace);
       marker.title = `Stop ${n} at ${position.toFixed(2)}: `
-        + (fixedPlace ? 'its place follows an expression, so it is set below, not by dragging. ' : 'drag to move it, or away from the bar to take it out. ')
+        + (fixedPlace ? 'its place follows an expression, so it is set below, not by dragging. '
+          : inUse() > 1 ? 'drag to move it, or away from the bar to take it out. ' : 'drag to move it. The last stop stays: a gradient needs one. ')
         + (fixedColour ? 'Its colour follows an expression.' : 'Click to choose its colour.');
     });
   }
