@@ -83,6 +83,13 @@ const LAYERS = {
   glitch: [...scene, { type: 'glitch', params: { amount: 1, shift: 10 } }],
   adjust: [...scene, { type: 'adjust', params: { brightness: 1.25, contrast: 1.7 } }],
   hue: [...scene, { type: 'hue', params: { hue: 140, saturation: 1.6 } }],
+  // A synthwave floor under a dusk sky, its horizon a little above the middle.
+  grid: [
+    // Top to bottom; the gradient reaches past the picture, so the horizon at 43% of its height is at 0.466 along it.
+    { type: 'gradient', params: { kind: 'linear', angle: 90, ...stops('#120a2e', '#5b1a6e', '#ff6a8f', '#120a2e'), position1: 0.25, position2: 0.38, position3: 0.466, position4: 0.466 } },
+    { type: 'grid', params: { kind: 'floor', y: 43, cell: 9, lineWidth: 0.35, lineColour: '#ff4fa0', fade: 0.85 } },
+  ],
+  mosaic: [...scene, { type: 'mosaic', params: { cells: 'hexagons', size: 3.5 } }],
   gradientMap: [...scene, { type: 'gradientMap', params: { ...stops('#0b1a3a', '#2fbfa8', '#fff3c4') } }],
   displace: [...scene, { type: 'displace', params: { mode: 'swirl', twist: 160, radius: 55, y: 45 } }],
   whiteBalance: [...scene, { type: 'whiteBalance', params: { temperature: -0.8, tint: -0.3 } }],

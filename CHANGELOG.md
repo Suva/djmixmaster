@@ -6,6 +6,14 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A Grid layer.** Lines, a checkerboard, a honeycomb of lines or of
+  coloured cells, dots or stripes, over the whole picture, turned and
+  scrolling as you like; or a floor of lines running to the horizon and
+  rolling towards you, as in a synthwave video.
+- **A Mosaic layer.** Breaks the picture beneath into cells, each the
+  colour under it: squares (pixels), hexagons, circles, halftone dots that
+  grow with the brightness, or triangles, with an optional gap between
+  them. With fewer colours, it looks like an old computer's.
 - **Gradients of up to five colours, set on a bar.** The Gradient, Noise,
   Spectrum and Shape layers take a gradient of up to five stops, set on a
   bar in the editor as in a photo editor: drag a stop to move it, click the

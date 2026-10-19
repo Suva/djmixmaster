@@ -67,8 +67,8 @@ export class PictureHandles {
     const index = this.#context.selected();
     const box = this.#context.boxes()[index] ?? null;
     const layer = this.#context.layer(index);
-    // An effect has no place, except a kaleidoscope, a vignette, trails or a displace, whose position is its centre; nor has a group, nor a solid colour.
-    const centred = ['kaleidoscope', 'vignette', 'trails', 'displace'];
+    // An effect has no place, except a kaleidoscope, a vignette, trails, a displace or a mosaic, whose position is its centre; nor has a group, nor a solid colour.
+    const centred = ['kaleidoscope', 'vignette', 'trails', 'displace', 'mosaic'];
     const effect = layer ? (LAYER_TYPES[layer.type]?.effect === true && !centred.includes(layer.type)) || layer.type === 'group' || layer.type === 'solid' : true;
     const { k, offsetX, offsetY } = this.#frame();
     this.#outline.hidden = !box;

@@ -17,6 +17,7 @@ import { applyLut, scalingLut, type Lut } from './lut.ts';
 import { lengthOf, shapeOutline } from './outline.ts';
 import { covered, kindNumber, NOISE_SHADER, noiseValue, seedBits, type NoiseOptions } from './noise.ts';
 import { DISPLACE_SHADER, displacementAt, modeNumber, type Displacement } from './displace.ts';
+import { fewer, hexagonAt, hexCells, hexColour, hexRadius, squareCells, triangleAt, triangleCells, type Cell, type Region } from './cells.ts';
 import { brightnessOf, canvasStops, gradientAt, gradientMapTable, stopsOf, turnStops, type Stop } from './gradient-map.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
@@ -318,6 +319,8 @@ export class FrameDrawer {
       case 'waveform': this.#waveform(params, frame); break;
       case 'shape': this.#shape(params); break;
       case 'noise': this.#noise(params, frame); break;
+      case 'grid': this.#grid(params, frame); break;
+      case 'mosaic': this.#mosaic(params); break;
       case 'glow': this.#glow(params, opacity); break;
       case 'split': this.#split(params); break;
       case 'glitch': this.#glitch(params, frame); break;
@@ -1224,6 +1227,278 @@ export class FrameDrawer {
     ctx.setLineDash([]);
   }
 
+  /**
+   * A grid over the whole picture (cells.ts): its middle at the layer's
+   * position, turned and sized with the layer, scrolling as its speed says.
+   * A floor is drawn in perspective instead, its vanishing point there.
+   */
+  #grid(params: ResolvedParams, frame: Frame) {
+    const ctx = this.#ctx;
+    const { width, height } = this.#canvas;
+    const unit = this.#unit;
+    const s = Math.max(1, (num(params, 'cell') / 100) * unit);
+    const line = Math.max(0, (num(params, 'lineWidth') / 100) * unit);
+    const kind = str(params, 'kind');
+    const lineColour = col(params, 'lineColour');
+    const fills = [col(params, 'fill1'), col(params, 'fill2'), col(params, 'fill3')];
+    const scale = Math.max(1e-3, num(params, 'scale') / 100);
+    const travelled = (num(params, 'scroll') / 100) * unit * frame.seconds;
+    this.#place(params);
+    if (kind === 'floor') return this.#floor(params, s, line, lineColour, travelled, scale);
+    const way = (num(params, 'direction') * Math.PI) / 180;
+    const [ox, oy] = [Math.cos(way) * travelled, Math.sin(way) * travelled];
+    // Enough to cover the picture however the grid is turned.
+    const reach = Math.hypot(width, height) / scale + 2 * s;
+    const region: Region = [-reach, -reach, reach, reach];
+    /** One path a colour, filled at once: far quicker than a fill for each cell. */
+    const fillBy = (cells: Cell[], colourOf: (cell: Cell) => number, shape: (path: Path2D, cell: Cell) => void) => {
+      const paths = fills.map(() => new Path2D());
+      for (const cell of cells) {
+        const which = colourOf(cell);
+        if (fills[which]) shape(paths[which], cell);
+      }
+      paths.forEach((path, which) => {
+        if (!fills[which]) return;
+        ctx.fillStyle = hexOf(fills[which]);
+        ctx.fill(path);
+      });
+    };
+    switch (kind) {
+      case 'checkerboard': {
+        const inset = Math.min(s / 2 - 0.5, line / 2);
+        const radius = (num(params, 'rounding') / 100) * (s - 2 * inset);
+        fillBy(squareCells(s, ox, oy, region), (cell) => (((cell.i + cell.j) % 2) + 2) % 2, (path, cell) => {
+          path.roundRect(cell.x - s / 2 + inset, cell.y - s / 2 + inset, s - 2 * inset, s - 2 * inset, radius);
+        });
+        return;
+      }
+      case 'hex cells': {
+        const used = fills[2] ? 3 : 2;
+        const radius = hexRadius(s) * Math.max(0, 1 - line / s);
+        fillBy(hexCells(s, ox, oy, region), (cell) => hexColour(cell) % used, (path, cell) => addPolygon(path, hexagonAt(cell.x, cell.y, radius)));
+        return;
+      }
+      case 'dots': {
+        const radius = (Math.max(0, num(params, 'dotSize')) * s) / 2;
+        fillBy(squareCells(s, ox, oy, region), () => 0, (path, cell) => {
+          path.moveTo(cell.x + radius, cell.y);
+          path.arc(cell.x, cell.y, radius, 0, Math.PI * 2);
+        });
+        return;
+      }
+      case 'stripes': {
+        // Bands half a cell wide, the first colour and the second by turns, across the grid's width.
+        const band = s / 2;
+        const bands: Cell[] = [];
+        for (let i = Math.floor((-reach - ox) / band); i * band + ox < reach; i++) bands.push({ x: ox + i * band, y: 0, i, j: 0 });
+        fillBy(bands, (cell) => ((cell.i % 2) + 2) % 2, (path, cell) => path.rect(cell.x, -reach, band, reach * 2));
+        return;
+      }
+    }
+    if (!lineColour || line <= 0) return;
+    const path = new Path2D();
+    if (kind === 'hex grid') {
+      // Three edges of each hexagon: the other three are its neighbours'.
+      const radius = hexRadius(s);
+      for (const cell of hexCells(s, ox, oy, region)) {
+        const corners = hexagonAt(cell.x, cell.y, radius);
+        path.moveTo(corners[10], corners[11]);
+        for (let k = 0; k < 3; k++) path.lineTo(corners[k * 2], corners[k * 2 + 1]);
+      }
+    } else {
+      for (let i = Math.floor((-reach - ox) / s); i * s + ox < reach; i++) {
+        path.moveTo(i * s + ox, -reach);
+        path.lineTo(i * s + ox, reach);
+      }
+      for (let j = Math.floor((-reach - oy) / s); j * s + oy < reach; j++) {
+        path.moveTo(-reach, j * s + oy);
+        path.lineTo(reach, j * s + oy);
+      }
+    }
+    ctx.strokeStyle = hexOf(lineColour);
+    ctx.lineWidth = line;
+    ctx.stroke(path);
+  }
+
+  /**
+   * A floor of lines in perspective, below a horizon through the layer's
+   * position: a camera above a flat grid, looking along it. Across the
+   * picture's foot the cells are `s` wide and the lines `line`; further off
+   * both shrink towards the vanishing point, so the distance does not pile
+   * up into a band, and they fade as they go. Scrolling brings it towards the
+   * viewer. Perspective is how far off the foot of the picture is, against
+   * the camera's height: more is flatter.
+   */
+  #floor(params: ResolvedParams, s: number, line: number, colour: Colour | null, travelled: number, scale: number) {
+    if (!colour || line <= 0) return;
+    const ctx = this.#ctx;
+    const { width, height } = this.#canvas;
+    // The camera's height is the distance down to the picture's foot, so that the nearest line is there.
+    const h = Math.max(s, (height - (num(params, 'y') / 100) * height) / scale);
+    const f = h * Math.max(0.05, num(params, 'perspective'));
+    const fade = Math.min(1, Math.max(0, num(params, 'fade')));
+    const reach = Math.hypot(width, height) / scale;
+    /** The colour as seen at this height below the horizon: fading towards it. */
+    const seen = (y: number) => hexOf({ ...colour, a: colour.a * (1 - fade * (1 - Math.min(1, y / h))) });
+    // Across: one line every cell of depth, from the foot of the picture to where they are under a pixel apart.
+    // Its width shrinks with the distance; under a pixel wide, it fades instead.
+    const phase = ((travelled % s) + s) % s;
+    const alpha = ctx.globalAlpha;
+    for (let k = -1; k < 4000; k++) {
+      const z = f + k * s - phase;
+      if (z <= 0) continue;
+      const y = (f * h) / z;
+      if (y > h + line) continue;
+      if (y < 0.5) break;
+      const width = (line * y) / h;
+      ctx.lineWidth = Math.max(1, width);
+      ctx.globalAlpha = alpha * Math.min(1, width);
+      ctx.strokeStyle = seen(y);
+      ctx.beginPath();
+      ctx.moveTo(-reach, y);
+      ctx.lineTo(reach, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = alpha;
+    // Along: wedges from past the foot of the picture to a point at the vanishing point, narrowing and fading on the way.
+    const along = ctx.createLinearGradient(0, 0, 0, h);
+    along.addColorStop(0, seen(0));
+    along.addColorStop(1, seen(h));
+    ctx.fillStyle = along;
+    const path = new Path2D();
+    const count = Math.min(2000, Math.ceil((reach * 4) / s));
+    const far = Math.max(h + line, reach);
+    const wide = (line * far) / h / 2;
+    for (let k = -count; k <= count; k++) {
+      // At the foot a line is where it lies on the floor; further down, past the picture, wider in proportion.
+      const x = k * s * (far / h);
+      path.moveTo(x - wide, far);
+      path.lineTo(x + wide, far);
+      path.lineTo(0, 0);
+      path.closePath();
+    }
+    ctx.fill(path);
+  }
+
+  /**
+   * Mosaic: the picture beneath in cells (cells.ts), each the colour under
+   * it. The colours come from the picture made small, a pixel to a cell, so
+   * that each is the average of its cell; squares that are not turned are
+   * that small picture made large again, a block to a pixel.
+   */
+  #mosaic(params: ResolvedParams) {
+    const { width, height } = this.#canvas;
+    const s = Math.max(2, (num(params, 'size') / 100) * this.#unit);
+    const [ox, oy] = [(num(params, 'x') / 100) * width, (num(params, 'y') / 100) * height];
+    const turn = (num(params, 'rotation') * Math.PI) / 180;
+    const shape = str(params, 'cells');
+    const gap = Math.min(0.9, Math.max(0, num(params, 'gap')));
+    const rounding = Math.max(0, num(params, 'rounding') / 100);
+    const levels = str(params, 'colours') === 'fewer colours' ? Math.max(2, num(params, 'levels')) : 0;
+    // The small picture: a pixel for each cell of the grid through the layer's position.
+    const [x0, y0] = [ox - Math.ceil(ox / s) * s, oy - Math.ceil(oy / s) * s];
+    const [gw, gh] = [Math.ceil((width - x0) / s) + 1, Math.ceil((height - y0) / s) + 1];
+    const small = this.#extraCanvas(14, gw, gh);
+    const sc = small.getContext('2d', { willReadFrequently: true })!;
+    sc.setTransform(1, 0, 0, 1, 0, 0);
+    sc.globalCompositeOperation = 'copy';
+    sc.imageSmoothingEnabled = true;
+    sc.imageSmoothingQuality = 'high';
+    sc.drawImage(this.#surface, 0, 0, width, height, -x0 / s, -y0 / s, width / s, height / s);
+    const averages = sc.getImageData(0, 0, gw, gh);
+    const data = averages.data;
+    // A cell over the picture's edge was averaged with what is past it, which is nothing, and came out partly see-through.
+    // Mostly on the picture, as much of it as lies there counts for all of it; mostly off it (where shrinking the picture
+    // may have left nothing at all), it takes the average of its neighbour further in.
+    const inside = (start: number, size: number) => Math.max(0, Math.min(1, (Math.min(size, start + s) - Math.max(0, start)) / s));
+    const copy = (to: number, from: number) => { for (let c = 0; c < 4; c++) data[to * 4 + c] = data[from * 4 + c]; };
+    for (let i = 0; i < gw; i++) {
+      const covered = inside(x0 + i * s, width);
+      for (let j = 0; j < gh; j++) {
+        if (covered >= 0.5) data[(j * gw + i) * 4 + 3] = Math.min(255, data[(j * gw + i) * 4 + 3] / covered);
+      }
+    }
+    for (let j = 0; j < gh; j++) {
+      const covered = inside(y0 + j * s, height);
+      for (let i = 0; i < gw; i++) {
+        if (covered >= 0.5 && covered < 1) data[(j * gw + i) * 4 + 3] = Math.min(255, data[(j * gw + i) * 4 + 3] / covered);
+      }
+    }
+    // Mostly off the picture: from the edge inwards on the left and the top, outwards on the right and the bottom, so the copies carry on.
+    for (let i = gw - 1; i >= 0; i--) if (x0 + i * s + s / 2 < 0) for (let j = 0; j < gh; j++) copy(j * gw + i, j * gw + i + 1);
+    for (let i = 0; i < gw; i++) if (x0 + i * s + s / 2 > width) for (let j = 0; j < gh; j++) copy(j * gw + i, j * gw + i - 1);
+    for (let j = gh - 1; j >= 0; j--) if (y0 + j * s + s / 2 < 0) for (let i = 0; i < gw; i++) copy(j * gw + i, (j + 1) * gw + i);
+    for (let j = 0; j < gh; j++) if (y0 + j * s + s / 2 > height) for (let i = 0; i < gw; i++) copy(j * gw + i, (j - 1) * gw + i);
+    if (levels) for (let i = 0; i < data.length; i += 4) for (let c = 0; c < 3; c++) data[i + c] = fewer(data[i + c] / 255, levels) * 255;
+    const out = this.#extraCanvas(0);
+    const o = out.getContext('2d')!;
+    o.setTransform(1, 0, 0, 1, 0, 0);
+    o.globalCompositeOperation = 'source-over';
+    o.globalAlpha = 1;
+    o.filter = 'none';
+    o.clearRect(0, 0, width, height);
+    if (shape === 'squares' && turn === 0 && gap === 0 && rounding === 0) {
+      // Each average a block of the cell's size: the small picture made large, without smoothing.
+      sc.putImageData(averages, 0, 0);
+      o.imageSmoothingEnabled = false;
+      o.drawImage(small, x0, y0, gw * s, gh * s);
+      o.imageSmoothingEnabled = true;
+      return this.#putBack(out);
+    }
+    const gapColour = col(params, 'gapColour');
+    if (gapColour) {
+      o.fillStyle = hexOf(gapColour);
+      o.fillRect(0, 0, width, height);
+    }
+    // The cells are laid out turned about the layer's position; the region they cover, in their own turned frame.
+    const [cos, sin] = [Math.cos(turn), Math.sin(turn)];
+    const corners = [[0, 0], [width, 0], [0, height], [width, height]].map(([x, y]) => [cos * (x - ox) + sin * (y - oy), -sin * (x - ox) + cos * (y - oy)]);
+    const region: Region = [
+      Math.min(...corners.map((c) => c[0])) - s, Math.min(...corners.map((c) => c[1])) - s,
+      Math.max(...corners.map((c) => c[0])) + s, Math.max(...corners.map((c) => c[1])) + s,
+    ];
+    o.setTransform(cos, sin, -sin, cos, ox, oy);
+    const cells = shape === 'hexagons' ? hexCells(s, 0, 0, region) : shape === 'triangles' ? triangleCells(s, 0, 0, region) : squareCells(s, 0, 0, region);
+    // Cells that touch, drawn each on its own, would show hairlines of what is between at their edges: with no gap, each is outlined in its own colour too.
+    o.lineWidth = 1;
+    o.lineJoin = 'round';
+    for (const cell of cells) {
+      // The average under the cell's middle, as it lies on the picture; for a cell whose middle is past the edge, the nearest on it.
+      const px = Math.min(width - 0.5, Math.max(0.5, ox + cos * cell.x - sin * cell.y));
+      const py = Math.min(height - 0.5, Math.max(0.5, oy + sin * cell.x + cos * cell.y));
+      const i = Math.round((px - x0) / s - 0.5);
+      const j = Math.round((py - y0) / s - 0.5);
+      if (i < 0 || j < 0 || i >= gw || j >= gh) continue;
+      const k = (j * gw + i) * 4;
+      if (data[k + 3] === 0) continue;
+      const style = `rgba(${data[k]}, ${data[k + 1]}, ${data[k + 2]}, ${(data[k + 3] / 255).toFixed(3)})`;
+      o.fillStyle = style;
+      o.beginPath();
+      if (shape === 'circles' || shape === 'halftone') {
+        // A halftone dot's area follows the brightness under it.
+        const bright = shape === 'halftone' ? Math.sqrt(brightnessOf(data[k], data[k + 1], data[k + 2]) / 255) : 1;
+        const radius = (s / 2) * (1 - gap) * bright;
+        if (radius < 0.3) continue;
+        o.arc(cell.x, cell.y, radius, 0, Math.PI * 2);
+      } else if (shape === 'hexagons') {
+        addPolygon(o, hexagonAt(cell.x, cell.y, hexRadius(s) * (1 - gap)));
+      } else if (shape === 'triangles') {
+        const corners = triangleAt(cell, s);
+        addPolygon(o, corners.map((v, n) => (n % 2 === 0 ? cell.x : cell.y) + (v - (n % 2 === 0 ? cell.x : cell.y)) * (1 - gap)));
+      } else {
+        const side = s * (1 - gap);
+        o.roundRect(cell.x - side / 2, cell.y - side / 2, side, side, rounding * side);
+      }
+      o.fill();
+      if (gap === 0 && shape !== 'circles' && shape !== 'halftone') {
+        o.strokeStyle = style;
+        o.stroke();
+      }
+    }
+    o.setTransform(1, 0, 0, 1, 0, 0);
+    this.#putBack(out);
+  }
+
   #noiseGl: NoiseGl | null | undefined;
 
   /**
@@ -1982,6 +2257,13 @@ function keyOut(
     data[i + 3] = distance <= low ? 0 : Math.round(data[i + 3] * ((distance - low) / (high - low)));
   }
   ctx.putImageData(image, 0, 0);
+}
+
+/** Adds a closed polygon, as x, y pairs, to a path or a context's path. */
+function addPolygon(path: Path2D | Context, points: number[]) {
+  path.moveTo(points[0], points[1]);
+  for (let i = 2; i < points.length; i += 2) path.lineTo(points[i], points[i + 1]);
+  path.closePath();
 }
 
 /** A canvas of its own for drawing on the graphics card, as the picture's canvas keeps colours: premultiplied. */

@@ -368,6 +368,27 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       ...stopParams(['#ffffff00', '', '', '', '#ffffff']),
     },
   },
+  grid: {
+    label: 'Grid',
+    description: 'A pattern over the whole picture: lines, a checkerboard, a honeycomb, dots or stripes, or a floor of lines running to the horizon, as in a retro synthwave video. It can scroll.',
+    // Its position is the middle of the pattern, and for a floor its vanishing point on the horizon.
+    params: {
+      kind: choice('Kind', 'lines', ['lines', 'checkerboard', 'hex grid', 'hex cells', 'dots', 'stripes', 'floor']),
+      cell: number('Cell size', 8, 0.5, 50, '%'),
+      lineWidth: number('Line width, or gap between cells', 0.2, 0, 5, '%'),
+      lineColour: colour('Line colour', '#ffffff'),
+      fill1: colour('First colour', '#ffffff'),
+      fill2: colour('Second colour', ''),
+      fill3: colour('Third colour, of hex cells', ''),
+      rounding: number('Corner rounding, of a checkerboard', 0, 0, 50, '%'),
+      dotSize: number('Dot size', 0.4, 0, 1),
+      // Added up over the mix, so it cannot follow the music: the pattern would jump.
+      scroll: fixed(number('Scroll', 0, -50, 50, '%/s')),
+      direction: fixed(number('Scroll direction', 0, 0, 360, '°')),
+      perspective: number('Perspective, of a floor', 1.5, 0.3, 6),
+      fade: number('Fades into the distance, a floor', 0.7, 0, 1),
+    },
+  },
   glow: {
     label: 'Glow',
     description: 'Makes the bright parts of the picture beneath shine, spreading their light around them.',
@@ -451,6 +472,22 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       holdMargin: number('Held over, from the edges', 10, 0, 50, '%'),
     },
     common: ['visible', 'opacity', 'blend', 'x', 'y', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
+  mosaic: {
+    label: 'Mosaic',
+    description: 'Breaks the picture beneath into cells, each of the colour under it: squares (pixels), hexagons, circles, halftone dots that grow with the brightness, or triangles. With fewer colours, it looks like an old computer\'s.',
+    effect: true,
+    // Its position is where the cells are laid out from; turned, the cells turn with it.
+    params: {
+      cells: choice('Cells', 'squares', ['squares', 'hexagons', 'circles', 'halftone', 'triangles']),
+      size: number('Cell size', 3, 0.5, 30, '%'),
+      gap: number('Gap between cells', 0, 0, 0.9),
+      rounding: number('Corner rounding, of squares', 0, 0, 50, '%'),
+      gapColour: colour('Between the cells', '#000000'),
+      colours: choice('Colours', 'as they are', ['as they are', 'fewer colours']),
+      levels: number('Levels, of fewer colours', 4, 2, 16),
+    },
+    common: ['visible', 'opacity', 'blend', 'x', 'y', 'rotation', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
   gradientMap: {
     label: 'Gradient map',

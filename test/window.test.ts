@@ -1559,7 +1559,7 @@ test('the + menu opens with Shift+⌘N, fits the window, scrolls, and finds a ki
     return { listHeight, opened, found, added, closed, short };
   });
   assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
-  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 25 });
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 27 });
   assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
   assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
   assert.ok(seen.closed);
