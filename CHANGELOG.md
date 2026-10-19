@@ -9,7 +9,6 @@ are under "Not released yet" and appear there once they are.
 - **ffmpeg's licence comes with the Windows app.** The Windows installer
   left out the licence of the ffmpeg it carries; it is now beside it, as on
   the Mac and Linux.
-
 - **A change made just before quitting is kept.** The app now finishes
   saving before it quits, and saves each file whole, so a change made a
   moment before closing the window is there next time, and no saved file is
