@@ -217,7 +217,9 @@ Do not write test data there.
   `DJMASTER_UPDATE_FEED` at a file or address that returns
   `{"tag_name": "v9.9.9"}`; a `file://` address works. The app's promise that
   recordings never leave the computer is stated in the README and on the
-  website; anything new that touches the network has to be reflected there.
+  website, and in full on its privacy page (`site/privacy.html`, which the
+  Microsoft Store listing links to); anything new that touches the network
+  has to be reflected there.
 
 - **ffmpeg is found** through `DJMASTER_FFMPEG`, then `PATH`, then the usual
   Homebrew folders. The packaged app sets the variable to its bundled copy.
@@ -370,7 +372,7 @@ git push --follow-tags
 ## The website
 
 `site/` holds the website: a front page, a "What's new" page made from
-the released part of `CHANGELOG.md`, and the manual. `scripts/build-site.mjs` fills in the
+the released part of `CHANGELOG.md`, a privacy page, and the manual. `scripts/build-site.mjs` fills in the
 newest release's version and download links and writes the result to `_site/`;
 `.github/workflows/site.yml` publishes that to GitHub Pages after every
 release and whenever `site/` or `CHANGELOG.md` changes. Run the script locally to look at the

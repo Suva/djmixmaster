@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy · DJ Mix Master</title>
+  <meta name="description" content="What DJ Mix Master does with your data: it keeps your recordings on your computer and collects nothing.">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="icon.png" alt="">
+      <a class="name" href="./">DJ Mix Master</a>
+      <span class="spacer"></span>
+      {{MANUAL_LINK}}
+      <a href="changes.html">What's new</a>
+      <a href="./">Download</a>
+      <a href="{{REPOSITORY_URL}}">Source on GitHub</a>
+    </header>
+
+    <main class="changes">
+      <h1>Privacy</h1>
+      <p class="intro">DJ Mix Master collects nothing about you, and your recordings never leave your computer.</p>
+
+      <h2>Your recordings and your work</h2>
+      <p>Everything the app does with a recording, it does on your computer: the analysis, the levelling, the check-up, the videos and the exports. Your recordings are never changed, and never sent anywhere. What the app keeps (your mixes and their settings, your templates, the analyses of your recordings) is stored in its own folder on your computer, and nowhere else.</p>
+
+      <h2>What the app sends over the internet</h2>
+      <ul>
+        <li><strong>A check for a newer version.</strong> A few seconds after it starts, at most once a day, the app asks GitHub for the number of the newest version of DJ Mix Master. The request carries nothing about you or your recordings; like any request on the internet, it shows GitHub your computer's internet address, under <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>. You can turn the check off in the app's Settings.</li>
+        <li><strong>From the Microsoft Store, not even that.</strong> A copy installed from the Microsoft Store makes no check of its own: the Store keeps it up to date, under <a href="https://privacy.microsoft.com/privacystatement">Microsoft's privacy statement</a>.</li>
+      </ul>
+      <p>That is all. The app has no accounts, no advertising, no analytics and no crash reports, and it does not track how you use it.</p>
+
+      <h2>Links</h2>
+      <p>The manual, this website, and a template's website or email address open in your own browser or mail program, and only when you click them.</p>
+
+      <h2>Questions</h2>
+      <p>DJ Mix Master is free software made by Jaan Pullerits; its whole source code is <a href="{{REPOSITORY_URL}}">on GitHub</a>, where anyone can see what it does. Questions about this page can be asked on the <a href="{{REPOSITORY_URL}}/issues">issues page</a>.</p>
+      <p class="intro">Last changed 19 October 2026.</p>
+    </main>
+
+    <footer>
+      <p>DJ Mix Master is free software under the <a href="{{REPOSITORY_URL}}/blob/main/LICENSE">GNU General Public License</a>, version 3 or later. It comes without any warranty.</p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -128,6 +128,7 @@ const manualLink = existsSync('_site/manual/index.html') ? '<a href="manual/">Ma
 
 writeFileSync('_site/index.html', fill('index.html', { MANUAL_LINK: manualLink }));
 writeFileSync('_site/changes.html', fill('changes.html', { CHANGES: changes(), MANUAL_LINK: manualLink }));
+writeFileSync('_site/privacy.html', fill('privacy.html', { MANUAL_LINK: manualLink }));
 for (const file of ['screenshot.png', 'icon.png', 'style.css']) copyFileSync(`site/${file}`, `_site/${file}`);
 
 console.log(`Built _site/ for ${release ? release.tag_name : 'no release yet'}.`);
