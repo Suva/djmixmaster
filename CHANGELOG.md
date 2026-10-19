@@ -6,6 +6,10 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Groups move.** A group can be moved, turned and sized as one, in its
+  settings or by dragging its outline on the picture, and its place can
+  follow the music. Layers in a turned group are still dragged the way the
+  pointer goes.
 - **Masks.** Any layer, or a group, can be used as a mask, by its shape or
   by its brightness: it is not drawn, but decides where the layers above it
   in its group show. A shape makes a mask of any outline, text shows a video

@@ -415,10 +415,11 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   group: {
     label: 'Group',
-    description: 'Holds layers together, to show, fade, blend and move them as one. An effect inside a group changes only the group\'s own layers.',
-    // Its layers are drawn together, then laid on the picture as one: shown or not, faded, mixed in.
+    description: 'Holds layers together, to show, fade, blend, move, turn and size them as one. An effect inside a group changes only the group\'s own layers.',
+    // Its layers are drawn together, then laid on the picture as one: shown or not, faded, mixed in, and moved:
+    // Across and Down are where the middle of what it holds goes, 50% and 50% leaving it where its layers put it.
     params: {},
-    common: ['visible', 'opacity', 'blend', 'from', 'until', 'fadeIn', 'fadeOut'],
+    common: ['visible', 'opacity', 'blend', 'x', 'y', 'scale', 'rotation', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
   split: {
     label: 'Colour split',

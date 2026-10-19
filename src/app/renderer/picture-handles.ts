@@ -14,6 +14,8 @@ export interface PictureHandlesContext {
   canvas: HTMLCanvasElement;
   /** Where each layer was drawn in the last frame. */
   boxes(): (LayerBox | null)[];
+  /** How groups turn and size each layer (FrameDrawer.frames): a drag is undone through it, to move the layer the way it went. */
+  frames(): ([number, number, number, number] | null)[];
   /** The layer being edited at a place in the template, as typed. */
   layer(index: number): Layer | null;
   selected(): number;
@@ -67,9 +69,9 @@ export class PictureHandles {
     const index = this.#context.selected();
     const box = this.#context.boxes()[index] ?? null;
     const layer = this.#context.layer(index);
-    // An effect has no place, except a kaleidoscope, a vignette, trails, a displace or a mosaic, whose position is its centre; nor has a group, nor a solid colour.
+    // An effect has no place, except a kaleidoscope, a vignette, trails, a displace or a mosaic, whose position is its centre; nor has a solid colour.
     const centred = ['kaleidoscope', 'vignette', 'trails', 'displace', 'mosaic'];
-    const effect = layer ? (LAYER_TYPES[layer.type]?.effect === true && !centred.includes(layer.type)) || layer.type === 'group' || layer.type === 'solid' : true;
+    const effect = layer ? (LAYER_TYPES[layer.type]?.effect === true && !centred.includes(layer.type)) || layer.type === 'solid' : true;
     const { k, offsetX, offsetY } = this.#frame();
     this.#outline.hidden = !box;
     // A layer without a box (a gradient, glitter) has its position only; an effect has none.
@@ -171,10 +173,15 @@ export class PictureHandles {
       };
     } else {
       if (!plain('x') || !plain('y')) return this.#context.say(`${name}: its position follows an expression, so it is set in its settings, not by dragging.`);
+      // In a turned or sized group, the drag in the layer's own frame: the group's turn and size undone.
+      const [a, b, c, d] = this.#context.frames()[index] ?? [1, 0, 0, 1];
+      const det = a * d - b * c || 1;
       change = (moved) => {
         const p = this.#toCanvas(moved);
-        this.#context.set(index, 'x', round(Number(start.x ?? 50) + ((p.x - at.x) / canvas.width) * 100), drag);
-        this.#context.set(index, 'y', round(Number(start.y ?? 50) + ((p.y - at.y) / canvas.height) * 100), drag);
+        const [dx, dy] = [p.x - at.x, p.y - at.y];
+        const [fx, fy] = [(d * dx - c * dy) / det, (-b * dx + a * dy) / det];
+        this.#context.set(index, 'x', round(Number(start.x ?? 50) + (fx / canvas.width) * 100), drag);
+        this.#context.set(index, 'y', round(Number(start.y ?? 50) + (fy / canvas.height) * 100), drag);
       };
     }
 

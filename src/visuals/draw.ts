@@ -200,6 +200,13 @@ export class FrameDrawer {
 
   /** Where each layer was drawn in the last frame, by its place in the template; null for a layer not drawn, or without a box. */
   boxes: (LayerBox | null)[] = [];
+  /**
+   * For each layer inside groups that are turned or sized, how they turn and
+   * size it, as a 2×2 matrix (a, b, c, d, column by column) from its own
+   * frame to the picture's; null where nothing does. So that the editor can
+   * move a layer the way it is dragged.
+   */
+  frames: ([number, number, number, number] | null)[] = [];
   #index = 0;
   /**
    * When set, the time each layer takes is added up here, by its place and
@@ -247,6 +254,7 @@ export class FrameDrawer {
     ctx.fillRect(0, 0, width, height);
 
     this.boxes = layers.map(() => null);
+    this.frames = layers.map(() => null);
     this.changing = false;
     this.#drawRange(layers, 0, layers.length, frame);
     // The picture follows the sound's fades: black where it is silent, by the same curve.
@@ -402,6 +410,7 @@ export class FrameDrawer {
     const memory = (this.#memories[index] ??= {});
     // A group's layers are drawn first, on a canvas of their own, which is then laid on the picture as one layer.
     const group = layer.type === 'group' ? this.#drawGroup(layers, index + 1, index + 1 + inside, frame) : null;
+    if (group) this.#moveGroupBoxes(index, inside, params);
     this.#index = index;
     // Linear burn, which the canvas has not: the layer is drawn on its own, then burnt in.
     const burn = str(params, 'blend') === 'linear burn';
@@ -416,7 +425,7 @@ export class FrameDrawer {
     into.globalAlpha = alone ? 1 : Math.min(1, opacity);
     into.globalCompositeOperation = alone ? 'source-over' : BLENDS[str(params, 'blend')] ?? 'source-over';
     switch (layer.type) {
-      case 'group': into.drawImage(group!, 0, 0); break;
+      case 'group': this.#layGroup(group!, params); break;
       case 'solid': this.#solid(params); break;
       case 'gradient': this.#gradient(params, frame); break;
       case 'particles': this.#particles(params, frame); break;
@@ -655,6 +664,68 @@ export class FrameDrawer {
     this.#ctx = before;
     this.#depth--;
     return canvas;
+  }
+
+  /**
+   * Where a group's layers end up once it is laid down, moved: the middle of
+   * the picture they were drawn in goes to the group's position, turned and
+   * sized about it. At 50%, 50%, 100% and 0°, just where they were.
+   */
+  #groupMove(params: ResolvedParams): DOMMatrix {
+    const { width, height } = this.#canvas;
+    return new DOMMatrix()
+      .translateSelf((num(params, 'x') / 100) * width, (num(params, 'y') / 100) * height)
+      .rotateSelf(num(params, 'rotation'))
+      .scaleSelf(num(params, 'scale') / 100)
+      .translateSelf(-width / 2, -height / 2);
+  }
+
+  /** Lays a group's picture down, moved as its placement says. */
+  #layGroup(group: OffscreenCanvas, params: ResolvedParams) {
+    const ctx = this.#ctx;
+    ctx.save();
+    ctx.setTransform(ctx.getTransform().multiply(this.#groupMove(params)));
+    ctx.drawImage(group, 0, 0);
+    ctx.restore();
+  }
+
+  /**
+   * Notes where a group lies for the editor, and moves where its layers lie
+   * with it. Its outline is the box round all its layers' outlines, as they
+   * were drawn; one with none (only gradients, say) has none, so that it does
+   * not cover the whole picture when clicked on.
+   */
+  #moveGroupBoxes(index: number, inside: number, params: ResolvedParams) {
+    const move = this.#groupMove(params);
+    let [left, top, right, bottom] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (let i = index + 1; i <= index + inside; i++) {
+      // Within this group, inside any it holds.
+      const [a, b, c, d] = this.frames[i] ?? [1, 0, 0, 1];
+      this.frames[i] = [move.a * a + move.c * b, move.b * a + move.d * b, move.a * c + move.c * d, move.b * c + move.d * d];
+      const box = this.boxes[i];
+      if (!box) continue;
+      // Its corners as drawn, before the group moved them.
+      const turn = (box.rotation * Math.PI) / 180;
+      const [cos, sin] = [Math.cos(turn) * box.scale, Math.sin(turn) * box.scale];
+      for (const [cx, cy] of [[box.left, box.top], [box.left + box.w, box.top], [box.left, box.top + box.h], [box.left + box.w, box.top + box.h]]) {
+        const [x, y] = [box.x + cos * cx - sin * cy, box.y + sin * cx + cos * cy];
+        [left, top, right, bottom] = [Math.min(left, x), Math.min(top, y), Math.max(right, x), Math.max(bottom, y)];
+      }
+      // Moved as the group moves it: its anchor, its size and its turn.
+      const anchor = move.transformPoint(new DOMPoint(box.x, box.y));
+      this.boxes[i] = { ...box, x: anchor.x, y: anchor.y, scale: box.scale * (num(params, 'scale') / 100), rotation: box.rotation + num(params, 'rotation') };
+    }
+    if (left > right) return;
+    const { width, height } = this.#canvas;
+    // The group's anchor is its position; its box is round its layers, from the middle of the picture they were drawn in.
+    this.boxes[index] = {
+      x: (num(params, 'x') / 100) * width,
+      y: (num(params, 'y') / 100) * height,
+      left: left - width / 2, top: top - height / 2, w: right - left, h: bottom - top,
+      scale: num(params, 'scale') / 100,
+      rotation: num(params, 'rotation'),
+      circle: false,
+    };
   }
 
   /** How far a layer is shown at this moment: its time on screen, and its fades in and out. */

@@ -28,3 +28,5 @@ A group holds layers together, to show, hide, fade, blend and move them as one. 
 - Select several layers with ⌘-click (Ctrl-click) or Shift-click to group, delete, duplicate or drag them together.
 
 An effect inside a group changes only the group's own layers, not what is beneath the group: a blur in a group blurs only what is in it.
+
+A group can be moved, turned and sized as one, with **Placement** in its settings, or on the picture: select it in the list, and drag its outline, which is drawn round everything in it. Across and Down say where the middle of what it holds goes; at 50% and 50% it stays where its layers put it. Like any setting, a group's place can follow the music, to nudge a whole block of titles on the kick.

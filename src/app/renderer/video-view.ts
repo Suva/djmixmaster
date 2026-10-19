@@ -146,6 +146,7 @@ export class VideoView {
     this.#handles = new PictureHandles($('picture-overlay'), {
       canvas: this.#canvas,
       boxes: () => this.#drawer.boxes,
+      frames: () => this.#drawer.frames,
       layer: (index) => this.#editor.layer(index),
       selected: () => this.#editor.selected,
       select: (index) => this.#editor.select(index),

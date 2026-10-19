@@ -309,7 +309,7 @@ test('a template with groups is checked layer by layer, and a layer that cannot 
     format: 2,
     layers: [
       { type: 'gradient', params: {} },
-      { type: 'group', name: 'G', size: 3, params: { opacity: 0.5, x: 10 } },
+      { type: 'group', name: 'G', size: 3, params: { opacity: 0.5, x: 10, width: 10 } },
       { type: 'text', params: {} },
       { type: 'sparkler', params: {} },
       { type: 'text', name: 'last in G', params: {} },
@@ -317,10 +317,11 @@ test('a template with groups is checked layer by layer, and a layer that cannot 
     ],
   }, MUSIC_NAMES, TEXT_VARIABLES);
   assert.deepEqual(template.layers.map((layer) => `${layer.name ?? layer.type}${layer.size === undefined ? '' : `[${layer.size}]`}`), ['gradient', 'G[2]', 'text', 'last in G', 'top']);
-  // A group has no place of its own: its x is not one of its settings.
+  // A group has a place (moved as one), but no size of its own: its width is not one of its settings.
   assert.deepEqual(problems.map((p) => p.where), ['Layer 2 (G)', 'Layer 4']);
   assert.equal(template.layers[1].params.opacity, 0.5);
-  assert.equal('x' in template.layers[1].params, false);
+  assert.equal(template.layers[1].params.x, 10);
+  assert.equal('width' in template.layers[1].params, false);
 });
 
 test('a template says who made it and what it is, and what will not do is left out', () => {
