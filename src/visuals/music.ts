@@ -10,7 +10,7 @@ import type { Values } from './expression.ts';
 export const MUSIC_NAMES = [
   'bass', 'lowMids', 'mids', 'highs', 'level',
   'beat', 'beatPhase', 'barPhase', 'beats', 'tempo', 'energy',
-  'time', 'progress', 'length', 'dt', 'hasVideo', 'portrait', 'aspect',
+  'time', 'progress', 'trackProgress', 'length', 'dt', 'hasVideo', 'portrait', 'aspect',
 ] as const;
 
 /** What each music value is, for the manual. */
@@ -28,6 +28,7 @@ export const MUSIC_ABOUT: Record<(typeof MUSIC_NAMES)[number], string> = {
   energy: 'Moves slowly: high in a drop, low in a breakdown, 0 to 1.',
   time: 'Seconds since the start of the mix.',
   progress: 'How far through the mix, 0 at the start to 1 at the end.',
+  trackProgress: 'How far through the track playing, 0 at its start to 1 where the next begins. 0 where no tracks are marked.',
   length: 'The length of the mix in seconds.',
   dt: 'Seconds since the frame before: a thirtieth of a second in an export.',
   hasVideo: '1 when the recording is a video with a picture of its own, 0 when not.',
@@ -190,8 +191,9 @@ export class MusicReader {
     const step = inRecording * features.rate;
     const values: Values = {
       time: seconds, length: this.#length, dt, progress: this.#length ? Math.min(1, Math.max(0, seconds / this.#length)) : 0,
-      // Whether the recording is a video, and the shape of the picture, are no matter of the music:
+      // Whether the recording is a video, the shape of the picture and where the tracks are, are no matter of the music:
       // whoever draws, and knows, sets them.
+      trackProgress: 0,
       hasVideo: 0,
       portrait: 0,
       aspect: 16 / 9,

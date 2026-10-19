@@ -4,7 +4,9 @@
 // problem is reported with where it is rather than silently ignored.
 //
 // Values of parameters:
-//   number   a number, or an expression (expression.ts) as text
+//   number   a number, or an expression (expression.ts) as text. Positions
+//            and sizes are in percent of the picture; amounts are fractions,
+//            1 for all of it or for unchanged (see TEMPLATE_FORMAT)
 //   switch   true or false, or an expression: on when it is not 0
 //   colour   an expression giving a colour: "#3ddc97", "colour1 * 0.5",
 //            "complement(colour1)"; or "" for none
@@ -27,8 +29,15 @@ import { flatten, treeOf, type LayerNode } from './layer-tree.ts';
 import { compile, type Compiled, type Kind, type Problem, type Value } from './expression.ts';
 import { PLAYBACKS, RESTARTS } from './clip.ts';
 import { unpackLut, type PackedLut } from './lut.ts';
+import { motionExpression, parseMotion } from './motion.ts';
 
-export const TEMPLATE_FORMAT = 1;
+/**
+ * 2: amounts (opacities, a tint's amount, brightness and the like) are
+ * fractions, 1 for all of it, where 1 had them in percent. Sizes and
+ * positions are still percent of the picture. `upgradeTemplate` brings a
+ * template of format 1 up to date.
+ */
+export const TEMPLATE_FORMAT = 2;
 
 export type ParamKind = 'number' | 'switch' | 'colour' | 'text' | 'choice' | 'image' | 'font' | 'video' | 'lut';
 export type ParamValue = number | boolean | string;
@@ -60,7 +69,7 @@ const fixed = (spec: ParamSpec): ParamSpec => ({ ...spec, fixed: true });
 /** What every layer has. Positions and sizes are in percent of the frame, so a template fits any size. */
 export const COMMON_PARAMS: Record<string, ParamSpec> = {
   visible: toggle('Visible', true),
-  opacity: number('Opacity', 100, 0, 100, '%'),
+  opacity: number('Opacity', 1, 0, 1),
   // "add" is also known as linear dodge.
   blend: choice('Blend', 'normal', [
     'normal', 'add', 'screen', 'lighten', 'colour dodge',
@@ -87,31 +96,41 @@ export const COMMON_PARAMS: Record<string, ParamSpec> = {
 export const STYLE_PARAMS: Record<string, ParamSpec> = {
   dropShadow: toggle('Drop shadow', false),
   dropColour: colour('Colour', '#000000'),
-  dropOpacity: number('Opacity', 60, 0, 100, '%'),
+  dropOpacity: number('Opacity', 0.6, 0, 1),
   dropAngle: number('Light from', 120, 0, 360, '°'),
   dropDistance: number('Distance', 0.8, 0, 10, '%'),
   dropSize: number('Softness', 1, 0, 10, '%'),
   stroke: toggle('Stroke', false),
   strokeColour: colour('Colour', '#ffffff'),
-  strokeOpacity: number('Opacity', 100, 0, 100, '%'),
+  strokeOpacity: number('Opacity', 1, 0, 1),
   strokeWidth: number('Width', 0.3, 0, 5, '%'),
   outerGlow: toggle('Outer glow', false),
   glowColour: colour('Colour', '#fff2b0'),
-  glowOpacity: number('Opacity', 75, 0, 100, '%'),
+  glowOpacity: number('Opacity', 0.75, 0, 1),
   glowSize: number('Size', 2, 0, 10, '%'),
-  glowSpread: number('Spread', 0, 0, 100, '%'),
+  glowSpread: number('Spread', 0, 0, 1),
   innerShadow: toggle('Inner shadow', false),
   innerShadowColour: colour('Colour', '#000000'),
-  innerShadowOpacity: number('Opacity', 60, 0, 100, '%'),
+  innerShadowOpacity: number('Opacity', 0.6, 0, 1),
   innerShadowAngle: number('Light from', 120, 0, 360, '°'),
   innerShadowDistance: number('Distance', 0.5, 0, 10, '%'),
   innerShadowSize: number('Softness', 1, 0, 10, '%'),
   innerGlow: toggle('Inner glow', false),
   innerGlowColour: colour('Colour', '#fff2b0'),
-  innerGlowOpacity: number('Opacity', 75, 0, 100, '%'),
+  innerGlowOpacity: number('Opacity', 0.75, 0, 1),
   innerGlowSize: number('Size', 2, 0, 10, '%'),
-  innerGlowChoke: number('Choke', 0, 0, 100, '%'),
+  innerGlowChoke: number('Choke', 0, 0, 1),
 };
+
+/** The shapes a shape layer draws. Pentagon to octagon are polygons with that many sides; "polygon" takes them from its setting. */
+export const SHAPE_KINDS = [
+  'rectangle', 'ellipse', 'ring', 'triangle', 'diamond', 'pentagon', 'hexagon', 'octagon', 'polygon', 'star', 'cross', 'arrow', 'heart',
+] as const;
+/** Where a shape that is only partly drawn grows from as more of it is drawn. */
+export const REVEALS = [
+  'left', 'right', 'bottom', 'top', 'the middle', 'clockwise', 'anticlockwise',
+  'left, keeping its shape', 'bottom, keeping its shape', 'along the outline',
+] as const;
 
 export interface LayerSpec {
   label: string;
@@ -165,7 +184,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       turbulence: number('Turbulence', 10, 0, 100, '%'),
       lifetime: number('Lifetime', 6, 0.1, 60, 's'),
       twinkle: number('Twinkle', 2, 0, 20, 'Hz'),
-      twinkleDepth: number('Twinkle depth', 50, 0, 100, '%'),
+      twinkleDepth: number('Twinkle depth', 0.5, 0, 1),
       area: choice('Starts from', 'everywhere', ['everywhere', 'bottom', 'top', 'left', 'right', 'centre']),
       burst: number('Burst on beat', 0, 0, 500),
     },
@@ -182,9 +201,9 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       shadowColour: colour('Shadow colour', '#000000aa'),
       shadowBlur: number('Shadow blur', 0, 0, 10, '%'),
       tint: colour('Tint', '#ffffff'),
-      tintAmount: number('Tint amount', 0, 0, 100, '%'),
-      brightness: number('Brightness', 100, 0, 200, '%'),
-      saturation: number('Saturation', 100, 0, 200, '%'),
+      tintAmount: number('Tint amount', 0, 0, 1),
+      brightness: number('Brightness', 1, 0, 2, '×'),
+      saturation: number('Saturation', 1, 0, 2, '×'),
     },
   },
   video: {
@@ -193,7 +212,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     params: {
       video: { kind: 'video', label: 'Video', default: '' },
       playback: choice('Plays', 'loop', [...PLAYBACKS]),
-      speed: fixed(number('Speed', 100, 10, 400, '%')),
+      speed: fixed(number('Speed', 1, 0.1, 4, '×')),
       restart: choice('Starts again', 'never', [...RESTARTS]),
       inPoint: fixed(number('Clip from', 0, 0, 600, 's')),
       outPoint: fixed(number('Clip until, 0 for its end', 0, 0, 600, 's')),
@@ -205,13 +224,13 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       shadowColour: colour('Shadow colour', '#000000aa'),
       shadowBlur: number('Shadow blur', 0, 0, 10, '%'),
       tint: colour('Tint', '#ffffff'),
-      tintAmount: number('Tint amount', 0, 0, 100, '%'),
-      brightness: number('Brightness', 100, 0, 200, '%'),
-      saturation: number('Saturation', 100, 0, 200, '%'),
+      tintAmount: number('Tint amount', 0, 0, 1),
+      brightness: number('Brightness', 1, 0, 2, '×'),
+      saturation: number('Saturation', 1, 0, 2, '×'),
       key: choice('Key out', 'none', ['none', 'colour', 'dark']),
       keyColour: colour('Key colour', '#00ff00'),
-      keyTolerance: number('Key tolerance', 30, 0, 100, '%'),
-      keySoftness: number('Key softness', 10, 0, 100, '%'),
+      keyTolerance: number('Key tolerance', 0.3, 0, 1),
+      keySoftness: number('Key softness', 0.1, 0, 1),
     },
   },
   text: {
@@ -275,13 +294,39 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       radius: number('Radius, as a circle', 20, 0, 50, '%'),
     },
   },
+  shape: {
+    label: 'Shape',
+    description: 'A rectangle, an ellipse, a polygon, a star or another shape, filled with a colour or a gradient and outlined. Only part of it can be drawn, across or round, which with progress makes a progress bar or a ring that fills.',
+    params: {
+      shape: choice('Shape', 'rectangle', [...SHAPE_KINDS]),
+      width: number('Width', 30, 0, 100, '%'),
+      height: number('Height', 6, 0, 100, '%'),
+      square: toggle('Height the same as width', false),
+      rounding: number('Corner rounding', 0, 0, 50, '%'),
+      sides: number('Sides, or a star\'s points', 6, 3, 24),
+      inner: number('A star\'s inner points', 45, 0, 100, '%'),
+      thickness: number('Thickness of a ring, cross or arrow', 30, 1, 100, '%'),
+      fill: choice('Fill', 'one colour', ['one colour', 'linear gradient', 'radial gradient']),
+      fillColour: colour('Fill colour', '#3ddc97'),
+      fillColour2: colour('Second colour, of a gradient', '#6aa9ff'),
+      gradientAngle: number('Gradient angle', 90, 0, 360, '°'),
+      outlineWidth: number('Outline', 0, 0, 5, '%'),
+      outlineColour: colour('Outline colour', '#ffffff'),
+      outlineStyle: choice('Outline style', 'solid', ['solid', 'dashed', 'dotted']),
+      // For progress bars and rings, a fraction like the music's: `progress` here draws as much of the shape as of the mix.
+      amount: number('Drawn, 0 to 1', 1, 0, 1),
+      reveal: choice('Drawn from', 'left', [...REVEALS]),
+      startAngle: number('Going round, starts at', 0, 0, 360, '°'),
+      restColour: colour('Colour of the part not drawn', ''),
+    },
+  },
   glow: {
     label: 'Glow',
     description: 'Makes the bright parts of the picture beneath shine, spreading their light around them.',
     effect: true,
     params: {
-      threshold: number('Threshold', 60, 0, 100, '%'),
-      strength: number('Strength', 60, 0, 300, '%'),
+      threshold: number('Threshold', 0.6, 0, 1),
+      strength: number('Strength', 0.6, 0, 3, '×'),
       radius: number('Radius', 2, 0, 20, '%'),
       tint: colour('Tint', '#ffffff'),
     },
@@ -308,7 +353,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     description: 'Tears the picture beneath into slices thrown sideways, with the colours split, as a damaged video does.',
     effect: true,
     params: {
-      amount: number('How often', 30, 0, 100, '%'),
+      amount: number('How often', 0.3, 0, 1),
       slices: number('Slices', 10, 1, 60),
       shift: number('How far they tear', 6, 0, 40, '%'),
       split: number('Colour split', 0.6, 0, 5, '%'),
@@ -320,8 +365,8 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     description: 'Makes the picture beneath brighter or darker, and its contrast stronger or weaker.',
     effect: true,
     params: {
-      brightness: number('Brightness', 100, 0, 300, '%'),
-      contrast: number('Contrast', 100, 0, 300, '%'),
+      brightness: number('Brightness', 1, 0, 3, '×'),
+      contrast: number('Contrast', 1, 0, 3, '×'),
     },
   },
   hue: {
@@ -330,8 +375,8 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     effect: true,
     params: {
       hue: number('Hue', 0, -180, 180, '°'),
-      saturation: number('Saturation', 100, 0, 300, '%'),
-      lightness: number('Lightness', 0, -100, 100, '%'),
+      saturation: number('Saturation', 1, 0, 3, '×'),
+      lightness: number('Lightness', 0, -1, 1),
     },
   },
   kaleidoscope: {
@@ -379,7 +424,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     params: {
       colour: colour('Colour', '#000000'),
       size: number('Clear middle', 50, 0, 100, '%'),
-      softness: number('Softness', 100, 0, 100, '%'),
+      softness: number('Softness', 1, 0, 1),
       form: choice('Form', 'fits the picture', ['fits the picture', 'round']),
     },
     common: ['visible', 'opacity', 'blend', 'x', 'y', 'from', 'until', 'fadeIn', 'fadeOut'],
@@ -625,14 +670,65 @@ export function expressionNames(fields: Field[], musicNames: readonly string[]):
  * by the parameter's default, so that a slightly broken template still draws.
  * `textNames` are the variables the app provides to text.
  */
+/**
+ * The settings that format 1 had in percent and format 2 has as fractions,
+ * by kind of layer; those of every layer under "*". A record of what was, so
+ * it must not follow later changes to the settings.
+ */
+const PERCENT_IN_FORMAT_1: Record<string, string[]> = {
+  '*': ['opacity', 'dropOpacity', 'strokeOpacity', 'glowOpacity', 'glowSpread', 'innerShadowOpacity', 'innerGlowOpacity', 'innerGlowChoke'],
+  particles: ['twinkleDepth'],
+  image: ['tintAmount', 'brightness', 'saturation'],
+  video: ['speed', 'tintAmount', 'brightness', 'saturation', 'keyTolerance', 'keySoftness'],
+  glow: ['threshold', 'strength'],
+  glitch: ['amount'],
+  adjust: ['brightness', 'contrast'],
+  hue: ['saturation', 'lightness'],
+  vignette: ['softness'],
+};
+
+/** A value given in percent, as a fraction: a number divided, a "Moves with…" rewritten, any other expression divided as written. */
+function fractionOf(value: unknown): unknown {
+  if (typeof value === 'number') return value / 100;
+  if (typeof value !== 'string' || !value.trim()) return value;
+  const motion = parseMotion(value);
+  if (motion) return motionExpression({ ...motion, base: motion.base / 100, amount: motion.amount / 100 });
+  if (/^\s*-?\d+(\.\d+)?\s*$/.test(value)) return String(Number(value) / 100);
+  return `(${value.trim()}) / 100`;
+}
+
+/**
+ * A template as stored, brought up to the current format: one of format 1,
+ * or of none (from before formats), has its amounts made fractions. Nothing
+ * is checked, so a template as typed in the editor, half-written expressions
+ * and all, comes through as it was but for that. Anything else is returned
+ * as it is.
+ */
+export function upgradeTemplate(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const source = raw as { format?: unknown; layers?: unknown };
+  if (typeof source.format === 'number' && source.format >= 2) return raw;
+  if (source.format !== undefined && source.format !== 1) return raw;
+  const layers = Array.isArray(source.layers) ? source.layers.map((item: unknown) => {
+    const layer = item as { type?: unknown; params?: unknown };
+    if (typeof layer !== 'object' || layer === null || typeof layer.params !== 'object' || layer.params === null) return item;
+    const params = { ...(layer.params as Record<string, unknown>) };
+    for (const key of [...PERCENT_IN_FORMAT_1['*'], ...(PERCENT_IN_FORMAT_1[String(layer.type)] ?? [])]) {
+      if (key in params) params[key] = fractionOf(params[key]);
+    }
+    return { ...layer, params };
+  }) : source.layers;
+  return { ...source, format: 2, layers };
+}
+
 export function checkTemplate(raw: unknown, musicNames: readonly string[], textNames: readonly string[]): {
   template: Template;
   problems: TemplateProblem[];
 } {
   const problems: TemplateProblem[] = [];
-  const source = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<Template>;
+  const source = upgradeTemplate(typeof raw === 'object' && raw !== null ? raw : {}) as Partial<Template>;
   if (typeof raw !== 'object' || raw === null) problems.push({ where: 'Template', message: 'This is not a template' });
-  if (source.format !== undefined && source.format !== TEMPLATE_FORMAT) {
+  if (typeof source.format === 'number' && source.format > TEMPLATE_FORMAT) {
     problems.push({ where: 'Template', message: `Made for a newer version of the app (format ${source.format})` });
   }
 

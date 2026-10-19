@@ -192,6 +192,10 @@ export function drawVideoFrame(
   const { width, height } = drawer.size;
   music.portrait = height > width ? 1 : 0;
   music.aspect = width / height;
+  // The track's part of the mix, from its marker to the next or the mix's end, for a bar that fills once a track.
+  const playing = trackAt(mix.tracks, seconds);
+  const trackEnd = playing?.next?.at ?? length;
+  music.trackProgress = playing && trackEnd > playing.track.at ? Math.min(1, Math.max(0, (seconds - playing.track.at) / (trackEnd - playing.track.at))) : 0;
   drawer.draw(layers, {
     seconds,
     dt,

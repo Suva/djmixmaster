@@ -11,7 +11,7 @@ import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, FOLDER_LUT_PREFIX, folderLutsOf, keepFolderLuts, LAYER_TYPES, LUT_PREFIX, lutsOf, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEXT_VARIABLES,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, FOLDER_LUT_PREFIX, folderLutsOf, keepFolderLuts, LAYER_TYPES, LUT_PREFIX, lutsOf, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEXT_VARIABLES, upgradeTemplate,
   type Field, type MediaFile, type PreparedLayer, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
@@ -159,7 +159,8 @@ export class VideoView {
     this.#templatesLoaded = options.api.templates().then((stored) => {
       for (const { id, template } of stored) {
         USER_TEMPLATES.set(USER_TEMPLATE + id, checked(template).template);
-        this.#typed.set(USER_TEMPLATE + id, template);
+        // Brought up to date as typed too, so that the editor shows and saves it in today's units.
+        this.#typed.set(USER_TEMPLATE + id, upgradeTemplate(template));
       }
       this.#fillTemplates();
       this.#shownFor = '';

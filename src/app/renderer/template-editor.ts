@@ -460,13 +460,13 @@ export class TemplateEditor {
       value.classList.remove('on');
     };
     value.addEventListener('click', () => (pinned ? close() : open(true)));
-    // Dragged sideways, the opacity changes, half a percent a pixel; one that follows an expression is not dragged.
+    // Dragged sideways, the opacity changes, 0.005 a pixel; one that follows an expression is not dragged.
     scrubbable(value, {
-      value: () => (typeof (layer.params.opacity ?? 100) === 'number' ? Number(layer.params.opacity ?? 100) : null),
-      set: (opacity) => context.set('opacity', opacity),
-      perPixel: 0.5,
+      value: () => (typeof (layer.params.opacity ?? 1) === 'number' ? Number(layer.params.opacity ?? 1) : null),
+      set: (opacity) => context.set('opacity', Math.round(opacity * 1000) / 1000),
+      perPixel: 0.005,
       min: 0,
-      max: 100,
+      max: 1,
     });
     holder.addEventListener('mouseenter', () => {
       clearTimeout(timer);
@@ -492,12 +492,12 @@ export class TemplateEditor {
     });
 
     const show = () => {
-      const given = layer.params.opacity ?? 100;
-      if (typeof given === 'number') value.textContent = `${Math.round(given)}%`;
+      const given = layer.params.opacity ?? 1;
+      if (typeof given === 'number') value.textContent = given.toFixed(2);
       else {
-        // As drawn: an expression can come to more than 100, or less than nothing, but the picture cannot.
+        // As drawn: an expression can come to more than 1, or less than nothing, but the picture cannot.
         const now = context.live()?.opacity;
-        value.textContent = typeof now === 'number' ? `ƒ ${Math.round(Math.max(0, Math.min(100, now)))}%` : 'ƒ';
+        value.textContent = typeof now === 'number' ? `ƒ ${Math.max(0, Math.min(1, now)).toFixed(2)}` : 'ƒ';
       }
       value.classList.toggle('expression', typeof given !== 'number');
     };
@@ -528,7 +528,7 @@ export class TemplateEditor {
     label.textContent = 'Opacity';
     const value = document.createElement('button');
     value.className = 'opacity-value';
-    value.textContent = '100%';
+    value.textContent = '1.00';
     value.disabled = true;
     holder.append(label, value);
     box.append(blend, holder);

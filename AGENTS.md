@@ -45,6 +45,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/shape.ts` | The shapes a video is made in: landscape, vertical, square |
 | `src/visuals/clip.ts` | Where a video layer's clip is at each moment: loop, ping-pong, once, speed, restarts |
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
+| `src/visuals/outline.ts` | The outlines of a shape layer's shapes, as points: rounded corners, lengths for tracing them |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
 | `src/visuals/lut.ts` | Colour lookup tables: reading .cube files, packing them into templates, applying them without a graphics card |
 | `src/visuals/template.ts` | Templates: layer types and their settings, fields, text variables, checking |
@@ -111,6 +112,12 @@ and curves in the code are block indexes unless a name says seconds.
   anything about time: playback, export, drawing an edge, whether two mixes
   touch. Two mixes cut apart inside a block both have that block in their
   `region`, so do not compare regions to tell whether mixes overlap.
+- **Amounts are fractions, sizes are percent.** A new setting that says how
+  much (an opacity, a strength) goes from 0 to 1, like the music values; one
+  that says where or how big is in percent of the picture. A change to the
+  units of a setting that templates already have needs a new
+  `TEMPLATE_FORMAT` and a step in `upgradeTemplate`, or saved templates
+  change their look.
 - **Bump `ANALYSIS_VERSION`** in `loudness.ts` whenever a recording would
   measure differently. Stored analyses are keyed on it and are redone.
 - **Saved sessions are read defensively.** `restore` in `renderer.ts` checks

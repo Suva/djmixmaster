@@ -6,6 +6,8 @@ Besides the settings of its kind, every layer has the ones below. Not every kind
 
 Positions are in percent of the picture's width and height, so a template fits any shape. Sizes are in percent of the picture's short side.
 
+Amounts are not percentages but go from 0 to 1, as the [music values](functions.md#music-values) do: an opacity of 1 is fully seen, 0.5 half. Settings that make something stronger or weaker, such as brightness or a glow's strength, are 1 for unchanged, 2 for twice as much. So a music value can be put straight into one: an opacity of `level` follows the loudness.
+
 {{common-settings}}
 
 - **Anchor** says which part of the layer sits at its position: its centre, an edge or a corner.

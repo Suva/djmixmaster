@@ -6,6 +6,20 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Amounts go from 0 to 1.** Opacities, a tint's amount, brightness,
+  saturation, a glow's strength and the other settings that say how much,
+  rather than where or how big, are now fractions instead of percentages: an
+  opacity of 0.5 is half seen, a brightness of 1 leaves the picture as it is.
+  A music value can be put straight into one, such as an opacity of `level`.
+  Templates made before are brought over by themselves and look the same.
+- **A Shape layer.** Templates can draw rectangles, ellipses, rings,
+  triangles, diamonds, polygons, stars, crosses, arrows and hearts, with
+  rounded corners, a fill of one colour or a gradient, and a solid, dashed or
+  dotted outline. Only part of a shape need be drawn, filling across, up or
+  round, with the rest in a colour of its own: set Drawn to `progress` for
+  a progress bar or a ring that fills over the mix.
+- **`trackProgress` in formulas.** How far through the track playing, from 0
+  to 1, starting again at each track marker: a progress bar per track.
 - **ffmpeg's licence comes with the Windows app.** The Windows installer
   left out the licence of the ffmpeg it carries; it is now beside it, as on
   the Mac and Linux.

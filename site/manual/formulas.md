@@ -62,3 +62,6 @@ A formula gives a number or a colour, depending on what it is made of: `colour1 
 | `mix(colour1, complement(colour1), sine(beats / 8))` | Swings between a colour and its opposite every eight beats |
 | `portrait ? 15 : 9` | A larger size in the vertical shape |
 | `progress < 0.1 ? 1 : 0` | On for the first tenth of the mix only |
+| `smooth(level, 0.05, 0.5)` | As an opacity: seen as much as the music is loud |
+| `progress` | As a shape's Drawn: a progress bar, or a ring that fills, over the whole mix |
+| `trackProgress` | The same over each track, starting again at every track marker |

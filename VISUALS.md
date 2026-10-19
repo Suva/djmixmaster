@@ -75,7 +75,7 @@ template works at any size; times are in seconds unless they say beats.
 - Scale; detail (layers of noise); contrast
 - Speed; warp (how much the noise bends itself)
 
-**Shapes** — rings, polygons, lines, tunnels
+**Shapes** — rings, polygons, lines, tunnels. Built as the Shape layer, without copies (see `LAYER_TYPES` in `template.ts`)
 - Shape: circle, ring, rectangle, polygon (number of sides), line
 - Size; stroke width; fill colour; stroke colour
 - Copies: count, spacing, scale and rotation per copy (a tunnel is a ring
@@ -118,7 +118,7 @@ template works at any size; times are in seconds unless they say beats.
 - When what it says changes (a new track, say): cut, fade, slide or
   typewriter, and how long the change takes
 
-A progress bar is a rectangle from Shapes whose width follows `progress`.
+A progress bar is a shape whose Drawn follows `progress` (or `trackProgress`, per track).
 
 ## Showing the sound
 

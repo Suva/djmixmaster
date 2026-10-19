@@ -149,7 +149,9 @@ export class PictureHandles {
 
     if (corner && box) {
       const grabbed = PictureHandles.#local(box, at.x, at.y);
-      const keys = box.circle ? ['radius'] : 'width' in LAYER_TYPES[layer.type].params && layer.type !== 'text' ? ['width', 'height'] : layer.type === 'text' ? ['size'] : ['scale'];
+      // A shape whose height is its width is sized by its width alone, evenly.
+      const keys = box.circle ? ['radius'] : layer.type === 'shape' && layer.params.square === true ? ['width']
+        : 'width' in LAYER_TYPES[layer.type].params && layer.type !== 'text' ? ['width', 'height'] : layer.type === 'text' ? ['size'] : ['scale'];
       const following = keys.filter((key) => !plain(key));
       if (following.length) return this.#context.say(`${name}: its ${following.join(' and ')} ${following.length > 1 ? 'follow expressions' : 'follows an expression'}, so it is set in its settings, not by dragging.`);
       change = (moved) => {
@@ -159,7 +161,7 @@ export class PictureHandles {
         const fy = Math.abs(grabbed.y) > 2 ? now.y / grabbed.y : 1;
         const whole = Math.hypot(now.x, now.y) / Math.max(1, Math.hypot(grabbed.x, grabbed.y));
         const grow = (key: string, by: number) => this.#context.set(index, key, Math.max(0.1, round(Number(start[key]) * Math.max(0.01, by))), drag);
-        if (keys[0] === 'width' && !moved.shiftKey) {
+        if (keys.length === 2 && keys[0] === 'width' && !moved.shiftKey) {
           grow('width', fx);
           grow('height', fy);
         } else {

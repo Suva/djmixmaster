@@ -14,6 +14,7 @@ import { fontStack } from './fonts.ts';
 import { hexOf, LAYER_TYPES, type PreparedLayer, type ResolvedParams, type TextValues } from './template.ts';
 import type { ClipTiming, Playback } from './clip.ts';
 import { applyLut, type Lut } from './lut.ts';
+import { lengthOf, shapeOutline } from './outline.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -73,7 +74,7 @@ export function clipTimingOf(params: ResolvedParams, frame: Pick<Frame, 'seconds
     seconds: frame.seconds,
     started: Math.max(from, restarted),
     playback: str(params, 'playback') as Playback,
-    speed: num(params, 'speed') / 100,
+    speed: num(params, 'speed'),
     inPoint: num(params, 'inPoint'),
     outPoint: num(params, 'outPoint'),
     offset: num(params, 'offset'),
@@ -273,7 +274,7 @@ export class FrameDrawer {
     const params = layer.resolve(frame.music, frame.text);
     if (params.visible === false) return;
     const appear = this.#appearance(params, frame);
-    const opacity = (num(params, 'opacity') / 100) * appear;
+    const opacity = num(params, 'opacity') * appear;
     if (opacity <= 0) return;
     const memory = (this.#memories[index] ??= {});
     // A group's layers are drawn first, on a canvas of their own, which is then laid on the picture as one layer.
@@ -301,11 +302,12 @@ export class FrameDrawer {
       case 'text': this.#text(params, frame, memory); break;
       case 'spectrum': this.#spectrum(params, frame, memory); break;
       case 'waveform': this.#waveform(params, frame); break;
+      case 'shape': this.#shape(params); break;
       case 'glow': this.#glow(params, opacity); break;
       case 'split': this.#split(params); break;
       case 'glitch': this.#glitch(params, frame); break;
-      case 'adjust': this.#filtered(`brightness(${Math.max(0, num(params, 'brightness'))}%) contrast(${Math.max(0, num(params, 'contrast'))}%)`); break;
-      case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}%) brightness(${Math.max(0, 100 + num(params, 'lightness'))}%)`); break;
+      case 'adjust': this.#filtered(`brightness(${Math.max(0, num(params, 'brightness'))}) contrast(${Math.max(0, num(params, 'contrast'))})`); break;
+      case 'hue': this.#filtered(`hue-rotate(${num(params, 'hue')}deg) saturate(${Math.max(0, num(params, 'saturation'))}) brightness(${Math.max(0, 1 + num(params, 'lightness'))})`); break;
       case 'kaleidoscope': this.#kaleidoscope(params); break;
       case 'vignette': this.#vignette(params); break;
       case 'transform': this.#transform(params); break;
@@ -348,7 +350,7 @@ export class FrameDrawer {
     o.filter = 'none';
     o.clearRect(0, 0, width, height);
     const px = (key: string) => (Math.max(0, num(params, key)) / 100) * this.#unit;
-    const amount = (key: string) => Math.min(1, Math.max(0, num(params, key) / 100));
+    const amount = (key: string) => Math.min(1, Math.max(0, num(params, key)));
     /** Draws a shape onto the result, blurred so that `soft` is about how far it fades out. */
     const lay = (shape: OffscreenCanvas, alpha: number, soft: number, dx = 0, dy = 0) => {
       o.globalAlpha = alpha;
@@ -604,7 +606,7 @@ export class FrameDrawer {
     const rx = round ? Math.hypot(width, height) / 2 : (width / 2) * Math.SQRT2;
     const ry = round ? rx : (height / 2) * Math.SQRT2;
     const inner = Math.min(1, Math.max(0, num(params, 'size') / 100));
-    const outer = inner + (1 - inner) * Math.min(1, Math.max(0, num(params, 'softness') / 100));
+    const outer = inner + (1 - inner) * Math.min(1, Math.max(0, num(params, 'softness')));
     const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
     // Eased rather than straight, so that the clear middle gives way without a visible edge.
     const steps = 8;
@@ -696,7 +698,7 @@ export class FrameDrawer {
     const spread = (num(params, 'spread') * Math.PI) / 180;
     const turbulence = (num(params, 'turbulence') / 100) * this.#unit * 0.2;
     const twinkle = num(params, 'twinkle');
-    const depth = num(params, 'twinkleDepth') / 100;
+    const depth = num(params, 'twinkleDepth');
     const sizeLow = (num(params, 'sizeLow') / 100) * this.#unit;
     const sizeHigh = (num(params, 'sizeHigh') / 100) * this.#unit;
     const area = str(params, 'area');
@@ -782,7 +784,7 @@ export class FrameDrawer {
     s.clearRect(0, 0, scratch.width, scratch.height);
     const pw = Math.min(scratch.width, Math.ceil(w));
     const ph = Math.min(scratch.height, Math.ceil(h));
-    s.filter = `brightness(${num(params, 'brightness')}%) saturate(${num(params, 'saturation')}%)`;
+    s.filter = `brightness(${Math.max(0, num(params, 'brightness'))}) saturate(${Math.max(0, num(params, 'saturation'))})`;
     s.save();
     const rounding = (num(params, 'rounding') / 100) * Math.min(pw, ph);
     if (rounding > 0) {
@@ -796,7 +798,7 @@ export class FrameDrawer {
     const key = str(params, 'key');
     if (key === 'colour' || key === 'dark') keyOut(s, pw, ph, key, col(params, 'keyColour'), num(params, 'keyTolerance'), num(params, 'keySoftness'));
     const tint = col(params, 'tint');
-    const tintAmount = num(params, 'tintAmount') / 100;
+    const tintAmount = num(params, 'tintAmount');
     if (tint && tintAmount > 0) {
       s.globalCompositeOperation = 'source-atop';
       s.globalAlpha = tintAmount;
@@ -1055,12 +1057,164 @@ export class FrameDrawer {
     }
   }
 
+  /**
+   * A shape, filled and outlined. Only `amount` of it may be drawn: its fill
+   * cut off across, down or round from where `reveal` says, its outline
+   * whole; "keeping its shape", its fill the shape itself made that much as
+   * long, so that a rounded bar keeps its rounded end; or "along the
+   * outline", its outline traced part of the way round and its fill whole.
+   * What is not drawn can be shown in another colour, the empty part of a
+   * progress bar.
+   */
+  #shape(params: ResolvedParams) {
+    const ctx = this.#ctx;
+    const { width, height } = this.#canvas;
+    const w = Math.max(0, (num(params, 'width') / 100) * width);
+    const h = params.square === true ? w : Math.max(0, (num(params, 'height') / 100) * height);
+    this.#place(params);
+    const [left, top] = anchored(str(params, 'anchor'), 0, 0, w, h);
+    this.#record(params, left, top, w, h);
+    if (w <= 0 || h <= 0) return;
+    ctx.translate(left + w / 2, top + h / 2);
+
+    const options = {
+      sides: num(params, 'sides'),
+      inner: num(params, 'inner') / 100,
+      thickness: num(params, 'thickness') / 100,
+      rounding: num(params, 'rounding') / 100,
+    };
+    const contours = shapeOutline(str(params, 'shape'), w, h, options);
+    const pathOf = (contour: number[]) => {
+      const path = new Path2D();
+      for (let i = 0; i < contour.length; i += 2) (i === 0 ? path.moveTo : path.lineTo).call(path, contour[i], contour[i + 1]);
+      path.closePath();
+      return path;
+    };
+    const whole = new Path2D();
+    for (const contour of contours) whole.addPath(pathOf(contour));
+
+    const fillColour = col(params, 'fillColour');
+    let fill: string | CanvasGradient | null = fillColour ? hexOf(fillColour) : null;
+    const kind = str(params, 'fill');
+    const second = col(params, 'fillColour2');
+    if (fillColour && second && kind !== 'one colour') {
+      let gradient: CanvasGradient;
+      if (kind === 'radial gradient') gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) / 2);
+      else {
+        // 90° runs left to right, as the gradient layer's does; the ends are where the box's corners reach along that line.
+        const angle = (num(params, 'gradientAngle') * Math.PI) / 180 - Math.PI / 2;
+        const [dx, dy] = [Math.cos(angle), Math.sin(angle)];
+        const reach = (Math.abs(dx) * w + Math.abs(dy) * h) / 2;
+        gradient = ctx.createLinearGradient(-dx * reach, -dy * reach, dx * reach, dy * reach);
+      }
+      gradient.addColorStop(0, hexOf(fillColour));
+      gradient.addColorStop(1, hexOf(second));
+      fill = gradient;
+    }
+    const outlineColour = col(params, 'outlineColour');
+    const line = (num(params, 'outlineWidth') / 100) * this.#unit;
+    const outline = outlineColour && line > 0 ? hexOf(outlineColour) : null;
+    const rest = col(params, 'restColour');
+    const amount = Math.max(0, Math.min(1, num(params, 'amount')));
+    const reveal = str(params, 'reveal');
+    ctx.lineWidth = line;
+    ctx.lineJoin = num(params, 'rounding') > 0 ? 'round' : 'miter';
+
+    if (reveal === 'along the outline') {
+      if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fill(whole, 'evenodd');
+      }
+      if (!outline || line <= 0) return;
+      // Each contour traced from its start, the same fraction of its own length; its dashes are given over to that.
+      ctx.lineCap = 'butt';
+      for (const contour of contours) {
+        const path = pathOf(contour);
+        const length = lengthOf(contour);
+        if (rest && amount < 1) {
+          ctx.strokeStyle = hexOf(rest);
+          ctx.setLineDash([0, length * amount, length * (1 - amount), length]);
+          ctx.stroke(path);
+        }
+        if (amount > 0) {
+          ctx.strokeStyle = outline;
+          ctx.setLineDash(amount < 1 ? [length * amount, length * 2] : []);
+          ctx.stroke(path);
+        }
+      }
+      ctx.setLineDash([]);
+      return;
+    }
+
+    if (reveal.endsWith('keeping its shape')) {
+      // Beneath, the whole shape in the colour of what is not drawn; over it, the shape as long as is drawn, from its one edge.
+      if (rest && amount < 1) {
+        ctx.fillStyle = hexOf(rest);
+        ctx.fill(whole, 'evenodd');
+      }
+      if (fill && amount > 0) {
+        const across = reveal.startsWith('left');
+        const part = across
+          ? shapeOutline(str(params, 'shape'), w * amount, h, options).map((c) => c.map((v, i) => (i % 2 === 0 ? v - (w * (1 - amount)) / 2 : v)))
+          : shapeOutline(str(params, 'shape'), w, h * amount, options).map((c) => c.map((v, i) => (i % 2 === 1 ? v + (h * (1 - amount)) / 2 : v)));
+        const path = new Path2D();
+        for (const contour of part) path.addPath(pathOf(contour));
+        ctx.fillStyle = fill;
+        ctx.fill(path, 'evenodd');
+      }
+      this.#outline(params, whole, outline, line);
+      return;
+    }
+
+    // The part drawn, as a region to cut the fill to: far larger than the shape, so that only its one edge cuts.
+    const far = (w + h) * 2 + line * 4;
+    const drawn = new Path2D();
+    if (reveal === 'clockwise' || reveal === 'anticlockwise') {
+      const start = (num(params, 'startAngle') * Math.PI) / 180 - Math.PI / 2;
+      drawn.moveTo(0, 0);
+      drawn.arc(0, 0, far, start, start + (reveal === 'clockwise' ? 1 : -1) * amount * Math.PI * 2, reveal === 'anticlockwise');
+      drawn.closePath();
+    } else if (reveal === 'right') drawn.rect(w / 2 - w * amount, -far, far, far * 2);
+    else if (reveal === 'top') drawn.rect(-far, -far, far * 2, far - h / 2 + h * amount);
+    else if (reveal === 'bottom') drawn.rect(-far, h / 2 - h * amount, far * 2, far);
+    else if (reveal === 'the middle') drawn.rect((-w * amount) / 2, -far, w * amount, far * 2);
+    else drawn.rect(-far, -far, far - w / 2 + w * amount, far * 2);
+    const fillPart = (style: string | CanvasGradient, region: Path2D | null, rule: CanvasFillRule = 'nonzero') => {
+      ctx.save();
+      if (region) ctx.clip(region, rule);
+      ctx.fillStyle = style;
+      ctx.fill(whole, 'evenodd');
+      ctx.restore();
+    };
+    if (rest && amount < 1) {
+      // What is not drawn: everything but the part drawn, cut even-odd from a box larger still.
+      const undrawn = new Path2D();
+      undrawn.rect(-far * 2, -far * 2, far * 4, far * 4);
+      if (amount > 0) undrawn.addPath(drawn);
+      fillPart(hexOf(rest), undrawn, 'evenodd');
+    }
+    if (fill && amount > 0) fillPart(fill, amount < 1 ? drawn : null);
+    this.#outline(params, whole, outline, line);
+  }
+
+  /** A shape's outline all the way round, solid, dashed or dotted. */
+  #outline(params: ResolvedParams, path: Path2D, colour: string | null, line: number) {
+    if (!colour || line <= 0) return;
+    const ctx = this.#ctx;
+    const style = str(params, 'outlineStyle');
+    ctx.setLineDash(style === 'dashed' ? [line * 3, line * 2] : style === 'dotted' ? [0, line * 2] : []);
+    ctx.lineCap = style === 'dotted' ? 'round' : 'butt';
+    ctx.strokeStyle = colour;
+    ctx.stroke(path);
+    ctx.setLineDash([]);
+  }
+
   /** Glow: the picture so far, blurred and added onto itself. */
   #glow(params: ResolvedParams, opacity: number) {
     const ctx = this.#ctx;
     const { width, height } = this.#canvas;
     // Only what is brighter than the threshold glows; blurred to the edges, as the Blur effect is.
-    const threshold = num(params, 'threshold') / 100;
+    const threshold = num(params, 'threshold');
     const scratch = this.#extraCanvas(0);
     this.#blurInto(this.#copyOfPicture(), scratch, (num(params, 'radius') / 100) * this.#unit,
       `brightness(${Math.max(0, 1 - threshold) * 100 + 20}%) contrast(${100 + threshold * 300}%)`);
@@ -1072,7 +1226,7 @@ export class FrameDrawer {
       s.fillRect(0, 0, width, height);
     }
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = Math.min(1, opacity * (num(params, 'strength') / 100));
+    ctx.globalAlpha = Math.min(1, opacity * num(params, 'strength'));
     ctx.drawImage(scratch, 0, 0);
   }
 
@@ -1267,7 +1421,7 @@ export class FrameDrawer {
     const tick = Math.floor(frame.seconds * Math.max(0.1, num(params, 'rate')));
     const random = (n: number) => hash(tick * 7919 + n * 104729 + 17);
     // How often: the share of moments that glitch.
-    if (random(0) >= num(params, 'amount') / 100) return;
+    if (random(0) >= num(params, 'amount')) return;
     const copy = this.#copyOfPicture();
     const result = this.#extraCanvas(0);
     const split = (num(params, 'split') / 100) * width * (0.5 + random(1));
@@ -1555,9 +1709,9 @@ export class FrameDrawer {
 }
 /**
  * Makes part of a picture transparent: what is near the key colour (a green
- * screen), or what is dark (a clip made on black). Within `tolerance` percent
- * of the way to the furthest colour it goes entirely; over the next
- * `softness` percent it fades back in, so edges stay smooth.
+ * screen), or what is dark (a clip made on black). Within `tolerance` (a
+ * fraction) of the way to the furthest colour it goes entirely; over the
+ * next `softness` it fades back in, so edges stay smooth.
  */
 function keyOut(
   ctx: OffscreenCanvasRenderingContext2D, width: number, height: number, kind: 'colour' | 'dark', colour: Colour | null, tolerance: number, softness: number,
@@ -1567,8 +1721,8 @@ function keyOut(
   const data = image.data;
   const key = colour ?? parseHex('#00ff00')!;
   const [kr, kg, kb] = [key.r * 255, key.g * 255, key.b * 255];
-  const low = Math.max(0, tolerance) / 100;
-  const high = low + Math.max(1e-3, softness / 100);
+  const low = Math.max(0, tolerance);
+  const high = low + Math.max(1e-3, softness);
   // The furthest a colour can be from another: corner to corner of the colour cube.
   const furthest = Math.sqrt(3) * 255;
   for (let i = 0; i < data.length; i += 4) {

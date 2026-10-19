@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseHex, toHex, toLch, type Colour } from '../src/visuals/colour.ts';
 import { compile, type Value } from '../src/visuals/expression.ts';
+import { parseMotion } from '../src/visuals/motion.ts';
 import { MUSIC_NAMES, MusicReader } from '../src/visuals/music.ts';
-import { checkTemplate, fieldNameProblem, fillText, imagesOf, prepare, renameField, TEXT_VARIABLES } from '../src/visuals/template.ts';
+import { checkTemplate, fieldNameProblem, fillText, imagesOf, prepare, renameField, TEXT_VARIABLES, TEMPLATE_FORMAT, upgradeTemplate } from '../src/visuals/template.ts';
 import { BAND_COUNT, FEATURE_RATE, type Features } from '../src/features.ts';
 
 const value = (text: string, values: Record<string, number> = {}) => {
@@ -305,10 +306,10 @@ test('renaming a field renames it wherever a setting uses it', () => {
 
 test('a template with groups is checked layer by layer, and a layer that cannot be used leaves the groups right', () => {
   const { template, problems } = checkTemplate({
-    format: 1,
+    format: 2,
     layers: [
       { type: 'gradient', params: {} },
-      { type: 'group', name: 'G', size: 3, params: { opacity: 50, x: 10 } },
+      { type: 'group', name: 'G', size: 3, params: { opacity: 0.5, x: 10 } },
       { type: 'text', params: {} },
       { type: 'sparkler', params: {} },
       { type: 'text', name: 'last in G', params: {} },
@@ -318,7 +319,7 @@ test('a template with groups is checked layer by layer, and a layer that cannot 
   assert.deepEqual(template.layers.map((layer) => `${layer.name ?? layer.type}${layer.size === undefined ? '' : `[${layer.size}]`}`), ['gradient', 'G[2]', 'text', 'last in G', 'top']);
   // A group has no place of its own: its x is not one of its settings.
   assert.deepEqual(problems.map((p) => p.where), ['Layer 2 (G)', 'Layer 4']);
-  assert.equal(template.layers[1].params.opacity, 50);
+  assert.equal(template.layers[1].params.opacity, 0.5);
   assert.equal('x' in template.layers[1].params, false);
 });
 
@@ -332,4 +333,45 @@ test('a template says who made it and what it is, and what will not do is left o
   assert.deepEqual(problems.map((p) => p.where), ['About, email', 'About, website']);
   const fine = checkTemplate({ format: 1, about: { email: 'a@b.ee', website: 'https://example.com/x' }, layers: [] }, MUSIC_NAMES, TEXT_VARIABLES);
   assert.deepEqual(fine.template.about, { email: 'a@b.ee', website: 'https://example.com/x' });
+});
+
+test('a template of format 1 has its amounts made fractions, and its sizes left in percent', () => {
+  const old = {
+    format: 1, name: 'Old', fields: [{ key: 'how', label: 'How much', kind: 'number', default: 80 }],
+    layers: [
+      { type: 'image', params: { opacity: 50, tintAmount: '40', brightness: 'how', width: 30, dropShadow: true, dropOpacity: 60, dropDistance: 0.8 } },
+      { type: 'glow', params: { threshold: 55, strength: '50 + 40 * smooth(beat, 0, 0.3)', radius: 1.5 } },
+      { type: 'video', params: { speed: 200, keyTolerance: 30, inPoint: 2 } },
+      { type: 'split', params: { amount: 0.4 } },
+      { type: 'glitch', params: { amount: 30, split: 0.6 } },
+      { type: 'hue', params: { lightness: -20, saturation: 'bass * 200' } },
+    ],
+  };
+  const upgraded = upgradeTemplate(old) as typeof old;
+  assert.equal(upgraded.format, 2);
+  assert.equal(old.layers[0].params.opacity, 50, 'what was given is left alone');
+  const [image, glow, video, split, glitch, hue] = upgraded.layers.map((layer) => layer.params as Record<string, unknown>);
+  assert.deepEqual(image, { opacity: 0.5, tintAmount: '0.4', brightness: '(how) / 100', width: 30, dropShadow: true, dropOpacity: 0.6, dropDistance: 0.8 });
+  assert.equal(glow.threshold, 0.55);
+  assert.deepEqual(parseMotion(String(glow.strength)), { base: 0.5, amount: 0.4, source: 'beat', speed: 'smooth', period: 8 }, 'a "Moves with…" can still be read back');
+  assert.deepEqual(video, { speed: 2, keyTolerance: 0.3, inPoint: 2 });
+  assert.equal(split.amount, 0.4, 'a colour split\'s amount is a distance, and stays in percent');
+  assert.deepEqual(glitch, { amount: 0.3, split: 0.6 });
+  assert.deepEqual(hue, { lightness: -0.2, saturation: '(bass * 200) / 100' });
+
+  // Checked, it draws as it did: the expressions work, and the field is still 0 to 100.
+  const { template, problems } = checkTemplate(old, MUSIC_NAMES, TEXT_VARIABLES);
+  assert.deepEqual(problems, []);
+  assert.equal(template.format, TEMPLATE_FORMAT);
+  const [imageLayer, , , , , hueLayer] = prepare(template, {}, MUSIC_NAMES);
+  assert.equal(imageLayer.resolve({}, {}).brightness, 0.8);
+  assert.equal(hueLayer.resolve({ bass: 0.5 }, {}).saturation, 1);
+});
+
+test('a template of the current format, or a newer one, is not changed again', () => {
+  const now = { format: 2, layers: [{ type: 'solid', params: { opacity: 0.5 } }] };
+  assert.equal(upgradeTemplate(now), now);
+  const { problems } = checkTemplate({ format: 3, layers: [] }, MUSIC_NAMES, TEXT_VARIABLES);
+  assert.match(problems[0].message, /newer version/);
+  assert.equal((checkTemplate({ format: 2, layers: [{ type: 'solid', params: { opacity: 0.5 } }] }, MUSIC_NAMES, TEXT_VARIABLES)).template.layers[0].params.opacity, 0.5);
 });

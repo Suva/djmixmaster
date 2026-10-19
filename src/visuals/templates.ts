@@ -23,7 +23,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'glitter',
     template: {
-      format: 1,
+      format: 2,
       name: 'Glitter',
       about: { author: 'DJ Mix Master', description: 'A glow in your colour and glitter that thickens with the energy and bursts on the kick, round your logo and the artist\'s name.' },
       fields: [
@@ -50,7 +50,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
             count: '220 * sparkle', burst: '24 * sparkle', shape: 'soft dot',
             colour1: 'lighten(colour1, 0.25)', colour2: '#ffffff', colour3: 'lighten(hue(colour1, -50), 0.2)',
             sizeLow: 0.15, sizeHigh: '0.7 + 0.4 * smooth(highs, 0.02, 0.4)',
-            speed: '2 + 4 * energy', direction: 270, spread: 50, turbulence: 20, lifetime: 9, twinkle: 1.5, twinkleDepth: 60,
+            speed: '2 + 4 * energy', direction: 270, spread: 50, turbulence: 20, lifetime: 9, twinkle: 1.5, twinkleDepth: 0.6,
             blend: 'add',
           },
         },
@@ -73,14 +73,14 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           params: { text: '%mixName%', y: 80, size: 3.2, weight: 500, colour: 'lighten(colour1, 0.35)' },
         },
         nowPlaying,
-        { type: 'glow', params: { threshold: 55, strength: '50 + 40 * smooth(beat, 0, 0.3)', radius: 1.5 } },
+        { type: 'glow', params: { threshold: 0.55, strength: '0.5 + 0.4 * smooth(beat, 0, 0.3)', radius: 1.5 } },
       ],
     },
   },
   {
     id: 'ring',
     template: {
-      format: 1,
+      format: 2,
       name: 'Spectrum ring',
       about: { author: 'DJ Mix Master', description: 'The spectrum as a ring round your logo, from your colour to its opposite, over a soft background in both.' },
       fields: [
@@ -125,14 +125,14 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           params: { text: '%mixName%  ·  %elapsed%', y: 87, size: 2.6, weight: 400, colour: 'lighten(colour1, 0.3)' },
         },
         nowPlaying,
-        { type: 'glow', params: { threshold: 60, strength: 60, radius: 1.2 } },
+        { type: 'glow', params: { threshold: 0.6, strength: 0.6, radius: 1.2 } },
       ],
     },
   },
   {
     id: 'waveform',
     template: {
-      format: 1,
+      format: 2,
       name: 'Waveform',
       about: { author: 'DJ Mix Master', description: 'The level of the last seconds as a wave across the picture, a larger one behind, a spectrum underneath, and the time.' },
       fields: [
@@ -190,7 +190,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'photo',
     template: {
-      format: 1,
+      format: 2,
       name: 'Photo',
       about: { author: 'DJ Mix Master', description: 'Your photo, drifting a little and swelling with the bass, faint dust falling, the artist in the corner and the spectrum along the bottom.' },
       fields: [
@@ -226,7 +226,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
             // Drawn over the photo as it is, not lightened into it, so that it shows on bright photos too.
             count: 120, shape: 'soft dot', colour1: '#ffffff', colour2: 'colour1',
             sizeLow: 0.15, sizeHigh: 0.6, speed: 1.2, direction: 90, spread: 30, turbulence: 25,
-            lifetime: 20, twinkle: 0.3, twinkleDepth: 40, opacity: 70,
+            lifetime: 20, twinkle: 0.3, twinkleDepth: 0.4, opacity: 0.7,
           },
         },
         {
@@ -260,7 +260,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'original',
     template: {
-      format: 1,
+      format: 2,
       name: 'Original video',
       about: {
         author: 'DJ Mix Master',

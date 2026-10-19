@@ -48,7 +48,7 @@ const dark = { type: 'gradient', params: { kind: 'radial', colour1: '#2a1c5a', c
 const scene = [
   { type: 'gradient', params: { kind: 'linear', angle: 120, colour1: '#3a1c71', colour2: '#d76d77', colour3: '#ffaf7b' } },
   { type: 'particles', params: { count: 500, colour1: '#ffffff', colour2: '#ffe6a8' } },
-  { type: 'spectrum', params: { colourLow: '#ffffff', colourHigh: '#ffffff', y: 82, height: 16, opacity: 85 } },
+  { type: 'spectrum', params: { colourLow: '#ffffff', colourHigh: '#ffffff', y: 82, height: 16, opacity: 0.85 } },
   { type: 'text', params: { text: 'NIGHTSHIFT', size: 13, weight: 800, colour: '#ffffff', y: 40 } },
 ];
 const LAYERS = {
@@ -60,12 +60,21 @@ const LAYERS = {
   text: [dark, { type: 'text', params: { text: '%artist%\nLive at Saturday night', size: 9, weight: 700, colour: '#ffffff' } }],
   spectrum: [dark, { type: 'spectrum', params: { colourLow: '#3ddc97', colourHigh: '#ff4fa0' } }],
   waveform: [dark, { type: 'waveform', params: { colour: '#8fd3ff' } }],
-  glow: [...scene, { type: 'glow', params: { threshold: 45, strength: 150, radius: 3 } }],
+  // A few shapes, a ring that fills round and a progress bar that fills across.
+  shape: [
+    dark,
+    { type: 'shape', params: { shape: 'hexagon', square: true, width: 16, x: 20, y: 40, rounding: 6, fill: 'linear gradient', fillColour: '#ff4fa0', fillColour2: '#ffd27a', gradientAngle: 135 } },
+    { type: 'shape', params: { shape: 'star', square: true, width: 17, x: 40, y: 40, sides: 5, inner: 45, rounding: 4, fillColour: '', outlineWidth: 0.8, outlineColour: '#ffd27a' } },
+    { type: 'shape', params: { shape: 'ring', square: true, width: 15, x: 60, y: 40, thickness: 22, fillColour: '#3ddc97', restColour: '#ffffff26', amount: 0.65, reveal: 'clockwise' } },
+    { type: 'shape', params: { shape: 'heart', square: true, width: 13, x: 80, y: 41, fill: 'radial gradient', fillColour: '#ff8fb8', fillColour2: '#d0205a' } },
+    { type: 'shape', params: { shape: 'rectangle', width: 70, height: 2.4, y: 80, rounding: 50, fillColour: '#6aa9ff', restColour: '#ffffff26', amount: 0.4, reveal: 'left, keeping its shape' } },
+  ],
+  glow: [...scene, { type: 'glow', params: { threshold: 0.45, strength: 1.5, radius: 3 } }],
   group: scene,
   split: [...scene, { type: 'split', params: { amount: 1.2 } }],
-  glitch: [...scene, { type: 'glitch', params: { amount: 100, shift: 10 } }],
-  adjust: [...scene, { type: 'adjust', params: { brightness: 125, contrast: 170 } }],
-  hue: [...scene, { type: 'hue', params: { hue: 140, saturation: 160 } }],
+  glitch: [...scene, { type: 'glitch', params: { amount: 1, shift: 10 } }],
+  adjust: [...scene, { type: 'adjust', params: { brightness: 1.25, contrast: 1.7 } }],
+  hue: [...scene, { type: 'hue', params: { hue: 140, saturation: 1.6 } }],
   kaleidoscope: [...scene, { type: 'kaleidoscope', params: { segments: 8 } }],
   transform: [...scene, { type: 'transform', params: { scale: 45, rotation: 15, edges: 'mirror' } }],
   trails: [...scene, { type: 'trails', params: { length: 1.5, mode: 'bright parts', zoom: 25 } }],
@@ -80,7 +89,7 @@ const layers = Object.entries(LAYERS).flatMap(([type, inside], index) => [
 ]);
 const template = join(work, 'Manual pictures.djmtemplate');
 writeFileSync(template, JSON.stringify({
-  format: 1,
+  format: 2,
   name: 'Manual pictures',
   fields: [{ key: 'n', label: 'Which', kind: 'number', default: 1, min: 0, max: 100 }],
   assets: { Logo: logo },

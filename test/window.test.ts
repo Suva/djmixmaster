@@ -1276,7 +1276,7 @@ test('blends work out as their formulas say, linear burn included', { skip }, as
     }
     // Half as much of the layer: half way from the grey beneath to the burnt.
     const opacity = document.querySelector<HTMLInputElement>('#editor-layer-top .setting[data-key="opacity"] input[type="number"]')!;
-    opacity.value = '50';
+    opacity.value = '0.5';
     opacity.dispatchEvent(new Event('input', { bubbles: true }));
     await page.wait(150);
     levels['linear burn at half'] = middle();
@@ -1305,7 +1305,7 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     // A click opens the full control under the box; Escape closes it.
     box().click();
     const opened = !popover().hidden;
-    opacity().value = '40';
+    opacity().value = '0.4';
     opacity().dispatchEvent(new Event('input', { bubbles: true }));
     await page.wait(50);
     const shown = box().textContent;
@@ -1341,7 +1341,7 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     // The box keeps its size whatever it shows, so nothing beside it moves.
     const widths = new Set<number>();
     const expressionInput = document.querySelector<HTMLInputElement>('#editor-layer-top .expr-input')!;
-    for (const text of ['5', '40', '100', '250']) {
+    for (const text of ['0.05', '0.4', '1', '2.5']) {
       expressionInput.value = text;
       expressionInput.dispatchEvent(new Event('input', { bubbles: true }));
       await page.wait(120);
@@ -1354,14 +1354,14 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     const empty = page.element('editor-layer-top').querySelector('.empty') !== null;
     return { opened, shown, closed, hovered, left, stepped, redrawn, other, back, expression, widths: widths.size, atMost, below, empty };
   });
-  assert.deepEqual([seen.opened, seen.shown, seen.closed, seen.hovered, seen.left], [true, '40%', true, true, true]);
-  assert.equal(seen.expression, 'ƒ 40%');
-  assert.equal(seen.widths, 1, 'the box keeps its width from ƒ 5% to ƒ 100%');
-  assert.equal(seen.atMost, 'ƒ 100%', 'an expression past 100 shows what is drawn');
+  assert.deepEqual([seen.opened, seen.shown, seen.closed, seen.hovered, seen.left], [true, '0.40', true, true, true]);
+  assert.equal(seen.expression, 'ƒ 0.40');
+  assert.equal(seen.widths, 1, 'the box keeps its width from ƒ 0.05 to ƒ 1.00');
+  assert.equal(seen.atMost, 'ƒ 1.00', 'an expression past 1 shows what is drawn');
   assert.deepEqual(seen.stepped, ['add', true], '↓ chose the next blend and the list kept the keys');
   assert.ok(seen.redrawn, 'the picture was drawn again with each blend reached');
-  assert.deepEqual(seen.other, ['100', 'normal']);
-  assert.deepEqual(seen.back, ['40', 'screen']);
+  assert.deepEqual(seen.other, ['1', 'normal']);
+  assert.deepEqual(seen.back, ['0.4', 'screen']);
   assert.equal(seen.below, 0, 'not repeated below the list');
   assert.ok(seen.empty);
 });
@@ -1389,12 +1389,12 @@ test('number boxes change when dragged sideways, and a click is still a click', 
     const popover = () => document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
     // The box shows the value on the next frame drawn, which on a machine without a graphics card takes a while.
     drag(box(), -40);
-    await page.until(() => box().textContent === '80%', 'the opacity to show 80%', 3000).catch(() => {});
+    await page.until(() => box().textContent === '0.80', 'the opacity to show 0.80', 3000).catch(() => {});
     // The full control under the box follows, slider and all.
     const slider = popover().querySelector<HTMLInputElement>('input[type="range"]')!.value;
     const lowered = { shown: box().textContent, opened: !popover().hidden, slider };
     drag(box(), 400);
-    await page.until(() => box().textContent === '100%', 'the opacity to show 100%', 3000).catch(() => {});
+    await page.until(() => box().textContent === '1.00', 'the opacity to show 1.00', 3000).catch(() => {});
     const raised = box().textContent;
     drag(box(), 0);
     const clicked = !popover().hidden;
@@ -1415,8 +1415,8 @@ test('number boxes change when dragged sideways, and a click is still a click', 
     const undone = Number(rotation().value);
     return { lowered, raised, clicked, turned, finer, typing, undone };
   });
-  assert.deepEqual(seen.lowered, { shown: '80%', opened: false, slider: '80' }, 'a drag is not a click, and the slider follows');
-  assert.equal(seen.raised, '100%', 'opacity stops at 100');
+  assert.deepEqual(seen.lowered, { shown: '0.80', opened: false, slider: '0.8' }, 'a drag is not a click, and the slider follows');
+  assert.equal(seen.raised, '1.00', 'opacity stops at 1');
   assert.ok(seen.clicked, 'a click without a drag opens the full control');
   assert.equal(seen.turned, 60);
   assert.equal(seen.finer, 54, 'with Shift, ten times finer');
@@ -1559,7 +1559,7 @@ test('the + menu opens with Shift+⌘N, fits the window, scrolls, and finds a ki
     return { listHeight, opened, found, added, closed, short };
   });
   assert.ok(seen.listHeight >= 220, `the list starts tall: ${seen.listHeight}`);
-  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 20 });
+  assert.deepEqual(seen.opened, { fits: true, focused: true, kinds: 21 });
   assert.deepEqual(seen.found, ['Glitter', 'Glitch']);
   assert.equal(seen.added, 'Glitter', 'Enter adds the first that matches');
   assert.ok(seen.closed);
