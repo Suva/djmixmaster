@@ -4,6 +4,13 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- **A change made just before quitting is kept.** The app now finishes
+  saving before it quits, and saves each file whole, so a change made a
+  moment before closing the window is there next time, and no saved file is
+  left half written.
+
 ## 0.10.0 — 18 October 2026
 
 - **A manual.** Every part of the app explained, with pictures, on the
