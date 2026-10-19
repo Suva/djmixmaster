@@ -6,6 +6,13 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A Displace layer.** Moves the picture beneath about: wobbling with
+  noise, waving like a flag, rippling out from a point, swirled round it, or
+  bulged and pinched as through a lens, with an optional colour split. Its
+  amount can follow the music, so the picture can shake on every kick.
+  Near the edges, the picture is mirrored to fill in what moves in; or Hold
+  the edges keeps the frame's edges still and eases the movement in from
+  them.
 - **A Noise layer.** Patterns that slowly change and drift: clouds,
   turbulence, ridges, cells, cell edges, marble and plasma, in two or three
   colours. Warp bends them into smoke and liquid; Coverage cuts them down to

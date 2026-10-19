@@ -16,6 +16,7 @@ import type { ClipTiming, Playback } from './clip.ts';
 import { applyLut, scalingLut, type Lut } from './lut.ts';
 import { lengthOf, shapeOutline } from './outline.ts';
 import { covered, kindNumber, NOISE_SHADER, noiseValue, seedBits, type NoiseOptions } from './noise.ts';
+import { DISPLACE_SHADER, displacementAt, modeNumber, type Displacement } from './displace.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -317,6 +318,7 @@ export class FrameDrawer {
       case 'blur': this.#blurred((Math.max(0, num(params, 'radius')) / 100) * this.#unit); break;
       case 'lut': this.#lut(params, frame); break;
       case 'whiteBalance': this.#whiteBalance(params); break;
+      case 'displace': this.#displace(params, frame); break;
     }
     into.restore();
     if (!alone) return;
@@ -1391,6 +1393,118 @@ export class FrameDrawer {
     ctx.restore();
   }
 
+  #displaceGl: DisplaceGl | null | undefined;
+
+  /** Displace: each pixel of the picture beneath read from a little way off, as displace.ts says; on the graphics card, or else on the processor. */
+  #displace(params: ResolvedParams, frame: Frame) {
+    const { width, height } = this.#canvas;
+    const unit = this.#unit;
+    const speed = num(params, 'speed');
+    const displacement: Displacement = {
+      mode: str(params, 'mode'),
+      amount: (num(params, 'amount') / 100) * unit,
+      twist: (num(params, 'twist') * Math.PI) / 180,
+      size: Math.max(1, (num(params, 'size') / 100) * unit),
+      radius: Math.max(1, (num(params, 'radius') / 100) * unit),
+      direction: (num(params, 'direction') * Math.PI) / 180,
+      time: speed * frame.seconds,
+      noise: { kind: str(params, 'kind'), detail: num(params, 'detail'), roughness: 0.5, warp: 0, seed: num(params, 'seed') },
+      ...(params.hold === true ? { hold: { width, height, margin: (Math.max(0, num(params, 'holdMargin')) / 100) * unit } } : {}),
+    };
+    const middle: [number, number] = [(num(params, 'x') / 100) * width, (num(params, 'y') / 100) * height];
+    const split = Math.max(0, num(params, 'split'));
+    // Held, nothing is read past the edges but what a colour split reaches, which the edge pixels give.
+    const edges = displacement.hold ? 'extend' : str(params, 'edges');
+    if (this.#displaceGl === undefined) this.#displaceGl = DisplaceGl.make();
+    const result = this.#displaceGl?.apply(this.#surface, width, height, displacement, middle, split, edges)
+      ?? this.#displaceOnProcessor(displacement, middle, split, edges);
+    this.#putBack(result);
+  }
+
+  /**
+   * The same without a graphics card: the offsets worked out every fourth
+   * pixel each way and filled in between (they change smoothly), and each
+   * pixel then read from the picture, between its pixels.
+   */
+  #displaceOnProcessor(d: Displacement, middle: [number, number], split: number, edges: string): OffscreenCanvas {
+    const { width, height } = this.#canvas;
+    const source = this.#copyOfPicture().getContext('2d')!.getImageData(0, 0, width, height).data;
+    const step = 4;
+    const [gw, gh] = [Math.ceil(width / step) + 1, Math.ceil(height / step) + 1];
+    const grid = new Float32Array(gw * gh * 2);
+    for (let j = 0; j < gh; j++) {
+      for (let i = 0; i < gw; i++) {
+        const [dx, dy] = displacementAt(i * step + 0.5, j * step + 0.5, middle[0], middle[1], d);
+        grid[(j * gw + i) * 2] = dx;
+        grid[(j * gw + i) * 2 + 1] = dy;
+      }
+    }
+    /** Where (x, y) falls when it lies past the edges, as the choice says; null for nothing there. */
+    const place = (v: number, size: number): number | null => {
+      if (v >= 0 && v <= size - 1) return v;
+      if (edges === 'none') return null;
+      if (edges === 'repeat') return ((v % size) + size) % size;
+      if (edges === 'mirror') {
+        const m = ((v % (2 * size)) + 2 * size) % (2 * size);
+        return m < size ? m : 2 * size - 1 - m;
+      }
+      return Math.min(size - 1, Math.max(0, v));
+    };
+    // Read between pixels, premultiplied, so that see-through edges do not darken.
+    const sample = (x: number, y: number, into: number[]) => {
+      const px = place(x - 0.5, width);
+      const py = place(y - 0.5, height);
+      if (px === null || py === null) return into.fill(0);
+      const [x0, y0] = [Math.floor(px), Math.floor(py)];
+      const [x1, y1] = [Math.min(width - 1, x0 + 1), Math.min(height - 1, y0 + 1)];
+      const [fx, fy] = [px - x0, py - y0];
+      into.fill(0);
+      for (const [xx, yy, w] of [[x0, y0, (1 - fx) * (1 - fy)], [x1, y0, fx * (1 - fy)], [x0, y1, (1 - fx) * fy], [x1, y1, fx * fy]]) {
+        const k = (yy * width + xx) * 4;
+        const a = source[k + 3] / 255;
+        into[0] += source[k] * a * w;
+        into[1] += source[k + 1] * a * w;
+        into[2] += source[k + 2] * a * w;
+        into[3] += a * w;
+      }
+      return into;
+    };
+    const out = this.#extraCanvas(0);
+    const o = out.getContext('2d')!;
+    const image = o.createImageData(width, height);
+    const [c, red, blue] = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    for (let y = 0; y < height; y++) {
+      const gy = y / step;
+      const j = Math.min(gh - 2, Math.floor(gy));
+      const fy = gy - j;
+      for (let x = 0; x < width; x++) {
+        const gx = x / step;
+        const i = Math.min(gw - 2, Math.floor(gx));
+        const fx = gx - i;
+        const at = (ii: number, jj: number, k: number) => grid[(jj * gw + ii) * 2 + k];
+        const off = (k: number) => (at(i, j, k) * (1 - fx) + at(i + 1, j, k) * fx) * (1 - fy) + (at(i, j + 1, k) * (1 - fx) + at(i + 1, j + 1, k) * fx) * fy;
+        const [dx, dy] = [off(0), off(1)];
+        const [sx, sy] = [x + 0.5 + dx, y + 0.5 + dy];
+        sample(sx, sy, c);
+        if (split > 0) {
+          sample(x + 0.5 + dx * (1 + split), y + 0.5 + dy * (1 + split), red);
+          sample(x + 0.5 + dx * (1 - split), y + 0.5 + dy * (1 - split), blue);
+          c[0] = red[0];
+          c[2] = blue[2];
+          c[3] = Math.max(c[3], red[3], blue[3]);
+        }
+        const k = (y * width + x) * 4;
+        const a = c[3];
+        image.data[k] = a > 0 ? c[0] / a : 0;
+        image.data[k + 1] = a > 0 ? c[1] / a : 0;
+        image.data[k + 2] = a > 0 ? c[2] / a : 0;
+        image.data[k + 3] = a * 255;
+      }
+    }
+    o.putImageData(image, 0, 0);
+    return out;
+  }
+
   /** The graphics card's way of applying LUTs; null where WebGL 2 is not to be had, and the processor does it. */
   #lutGl: LutGl | null | undefined;
 
@@ -1915,6 +2029,79 @@ class NoiseGl {
     gl.uniform1f(this.#at('coverage'), look.coverage);
     gl.uniform1f(this.#at('softness'), look.softness);
     look.colours.forEach((c, i) => gl.uniform4fv(this.#at(`colour${i + 1}`), c));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
+  }
+}
+
+/** Moves the picture about on the graphics card, as displace.ts says, onto a canvas of its own. */
+class DisplaceGl {
+  readonly #canvas: OffscreenCanvas;
+  readonly #gl: WebGL2RenderingContext;
+  readonly #program: WebGLProgram;
+  readonly #picture: WebGLTexture;
+  readonly #uniforms = new Map<string, WebGLUniformLocation | null>();
+
+  static make(): DisplaceGl | null {
+    try {
+      return typeof OffscreenCanvas === 'undefined' ? null : new DisplaceGl();
+    } catch {
+      return null;
+    }
+  }
+
+  constructor() {
+    [this.#canvas, this.#gl] = glCanvas();
+    this.#program = glProgram(this.#gl, DISPLACE_SHADER);
+    this.#picture = this.#gl.createTexture()!;
+  }
+
+  #at(name: string): WebGLUniformLocation | null {
+    if (!this.#uniforms.has(name)) this.#uniforms.set(name, this.#gl.getUniformLocation(this.#program, name));
+    return this.#uniforms.get(name)!;
+  }
+
+  /** The picture moved about, on this class's canvas; null if the card could not do it. */
+  apply(source: Canvas, width: number, height: number, d: Displacement, middle: [number, number], split: number, edges: string): OffscreenCanvas | null {
+    const gl = this.#gl;
+    if (gl.isContextLost()) return null;
+    if (this.#canvas.width !== width || this.#canvas.height !== height) {
+      this.#canvas.width = width;
+      this.#canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(this.#program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#picture);
+    // Premultiplied, as the canvas keeps it, so that reading between a see-through pixel and another does not darken.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    // Past the edges, the card's own wrapping: drawn out, repeated or mirrored; "none" is cut off in the shader.
+    const wrap = edges === 'repeat' ? gl.REPEAT : edges === 'mirror' ? gl.MIRRORED_REPEAT : gl.CLAMP_TO_EDGE;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.uniform1i(this.#at('picture'), 0);
+    gl.uniform2f(this.#at('size'), width, height);
+    gl.uniform2f(this.#at('middle'), middle[0], middle[1]);
+    gl.uniform1i(this.#at('mode'), modeNumber(d.mode));
+    gl.uniform1f(this.#at('amount'), d.amount);
+    gl.uniform1f(this.#at('twist'), d.twist);
+    gl.uniform1f(this.#at('scale'), d.size);
+    gl.uniform1f(this.#at('radius'), d.radius);
+    gl.uniform2f(this.#at('direction'), Math.cos(d.direction), Math.sin(d.direction));
+    gl.uniform1f(this.#at('time'), d.time);
+    gl.uniform1f(this.#at('split'), split);
+    gl.uniform1i(this.#at('edges'), edges === 'none' ? 0 : 1);
+    gl.uniform1f(this.#at('hold'), d.hold ? d.hold.margin : -1);
+    gl.uniform1i(this.#at('kind'), kindNumber(d.noise.kind));
+    gl.uniform1i(this.#at('octaves'), Math.max(1, Math.min(8, Math.round(d.noise.detail))));
+    gl.uniform1f(this.#at('roughness'), d.noise.roughness);
+    gl.uniform1f(this.#at('warp'), d.noise.warp);
+    gl.uniform1ui(this.#at('seed'), seedBits(d.noise.seed));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
   }

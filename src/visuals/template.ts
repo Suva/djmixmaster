@@ -31,6 +31,7 @@ import { PLAYBACKS, RESTARTS } from './clip.ts';
 import { unpackLut, type PackedLut } from './lut.ts';
 import { motionExpression, parseMotion } from './motion.ts';
 import { NOISE_KINDS } from './noise.ts';
+import { DISPLACE_MODES } from './displace.ts';
 
 /**
  * 2: amounts (opacities, a tint's amount, brightness and the like) are
@@ -400,6 +401,31 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       saturation: number('Saturation', 1, 0, 3, '×'),
       lightness: number('Lightness', 0, -1, 1),
     },
+  },
+  displace: {
+    label: 'Displace',
+    description: 'Moves the picture beneath about: wobbling with noise, waving like a flag, rippling out from a point, swirled round it, or bulged and pinched as through a lens. Inside a group, only the group\'s layers.',
+    effect: true,
+    // Its position is the middle of ripples, a swirl or a bulge, and what noise and waves are measured from.
+    params: {
+      mode: choice('Mode', 'noise', [...DISPLACE_MODES]),
+      amount: number('Amount', 1, -10, 10, '%'),
+      twist: number('Twist, of a swirl', 90, -720, 720, '°'),
+      size: number('Size of the waves or the noise', 20, 1, 200, '%'),
+      radius: number('Radius, of ripples, a swirl or a bulge', 40, 1, 150, '%'),
+      direction: number('Direction of the waves', 0, 0, 360, '°'),
+      // Added up over the mix, so it cannot follow the music: the picture would jump.
+      speed: fixed(number('Speed', 0.2, -5, 5, '/s')),
+      kind: choice('Kind of noise', 'clouds', [...NOISE_KINDS]),
+      detail: number('Detail of the noise', 3, 1, 8),
+      seed: number('Seed', 0, 0, 1000),
+      split: number('Colour split', 0, 0, 1),
+      // Mirrored, the picture carries on past its edges without a seam or a smear.
+      edges: choice('Past the edges', 'mirror', ['none', 'repeat', 'mirror', 'extend']),
+      hold: toggle('Hold the edges', false),
+      holdMargin: number('Held over, from the edges', 10, 0, 50, '%'),
+    },
+    common: ['visible', 'opacity', 'blend', 'x', 'y', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
   whiteBalance: {
     label: 'White balance',

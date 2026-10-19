@@ -181,30 +181,18 @@ export function covered(value: number, coverage: number, softness: number): numb
 }
 
 /**
- * The same steps for the graphics card. Uniforms: the picture's height in
- * pixels, `origin` (the pattern's middle, in pixels, moved along as it
- * drifts), `axes` (pixels to pattern units: a 2×2 matrix that sizes and
- * turns), `time`, the options, `coverage` and `softness`, and three colours
- * as RGBA, alpha 0 for none.
+ * The patterns' steps for the graphics card, to be put into a shader after
+ * its `#version` and precisions: `pattern(p, t)` gives what `noiseValue`
+ * does, with the options as the uniforms `kind` (kindNumber), `octaves`,
+ * `roughness`, `warp` and `seed` (seedBits). The noise layer's shader and
+ * the displace layer's are both made with it.
  */
-export const NOISE_SHADER = `#version 300 es
-precision highp float;
-precision highp int;
-uniform float height;
-uniform vec2 origin;
-uniform mat2 axes;
-uniform float time;
+export const NOISE_GLSL = `
 uniform int kind;
 uniform int octaves;
 uniform float roughness;
 uniform float warp;
 uniform uint seed;
-uniform float coverage;
-uniform float softness;
-uniform vec4 colour1;
-uniform vec4 colour2;
-uniform vec4 colour3;
-out vec4 colour;
 
 uint mixBits(uint x) {
   x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; return x ^ (x >> 16);
@@ -296,6 +284,29 @@ float pattern(vec2 p, float t) {
   float s = sin(p.x * 6.0 + t) + sin(p.y * 4.8 + t * 1.3) + sin((p.x + p.y) * 3.6 + t * 0.7) + sin(length(p - c) * 7.0 - t);
   return 0.5 + s / 8.0;
 }
+`;
+
+/**
+ * The noise layer's shader. Uniforms: the picture's height in
+ * pixels, `origin` (the pattern's middle, in pixels, moved along as it
+ * drifts), `axes` (pixels to pattern units: a 2×2 matrix that sizes and
+ * turns), `time`, the options, `coverage` and `softness`, and three colours
+ * as RGBA, alpha 0 for none.
+ */
+export const NOISE_SHADER = `#version 300 es
+precision highp float;
+precision highp int;
+uniform float height;
+uniform vec2 origin;
+uniform mat2 axes;
+uniform float time;
+uniform float coverage;
+uniform float softness;
+uniform vec4 colour1;
+uniform vec4 colour2;
+uniform vec4 colour3;
+out vec4 colour;
+${NOISE_GLSL}
 void main() {
   // The canvas counts down from the top; the card, up from the bottom.
   vec2 pixel = vec2(gl_FragCoord.x, height - gl_FragCoord.y);

@@ -46,6 +46,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/clip.ts` | Where a video layer's clip is at each moment: loop, ping-pong, once, speed, restarts |
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
 | `src/visuals/noise.ts` | A noise layer's patterns, as a shader for the graphics card and the same steps in TypeScript |
+| `src/visuals/displace.ts` | Where a displace layer reads each pixel from, as a shader and the same steps in TypeScript |
 | `src/visuals/outline.ts` | The outlines of a shape layer's shapes, as points: rounded corners, lengths for tracing them |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
 | `src/visuals/lut.ts` | Colour lookup tables: reading .cube files, packing them into templates, applying them without a graphics card |
