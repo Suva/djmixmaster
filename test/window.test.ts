@@ -223,13 +223,14 @@ test('work is remembered, and the last recording comes back by itself', { skip }
   const data = await fresh();
   await runApp({ recording: mix, data }, async (page) => {
     page.type('mix-name', 'Warm-up');
-    page.type('mix-artist', 'Suva');
     page.slide('cut', 6);
     page.key('Enter');
     for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
     page.click('split-here');
     await page.settle();
+    // The last change, and the app quits straight after: saved as the window closes, and written before it is gone.
+    page.type('mix-artist', 'Suva');
   });
   // No recording is named this time: the app is started as from the Dock.
   const back = await runApp({ data }, (page) => ({
@@ -1386,13 +1387,14 @@ test('number boxes change when dragged sideways, and a click is still a click', 
     // Looked up each time: once a change settles, the bar above the layers is made anew.
     const box = () => document.querySelector<HTMLButtonElement>('#editor-layer-top .opacity-value')!;
     const popover = () => document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
+    // The box shows the value on the next frame drawn, which on a machine without a graphics card takes a while.
     drag(box(), -40);
-    await page.wait(50);
+    await page.until(() => box().textContent === '80%', 'the opacity to show 80%', 3000).catch(() => {});
     // The full control under the box follows, slider and all.
     const slider = popover().querySelector<HTMLInputElement>('input[type="range"]')!.value;
     const lowered = { shown: box().textContent, opened: !popover().hidden, slider };
     drag(box(), 400);
-    await page.wait(50);
+    await page.until(() => box().textContent === '100%', 'the opacity to show 100%', 3000).catch(() => {});
     const raised = box().textContent;
     drag(box(), 0);
     const clicked = !popover().hidden;

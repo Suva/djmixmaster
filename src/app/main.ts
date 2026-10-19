@@ -258,7 +258,7 @@ async function lastRecording(): Promise<string | null> {
   if (typeof last?.path !== 'string' || !available(last.path)) return null;
   // Forgotten until it has opened again, so a recording that brings the app
   // down while opening is not tried on every start.
-  await rm(lastRecordingFile(), { force: true });
+  await removeStored(lastRecordingFile());
   return last.path;
 }
 
@@ -423,10 +423,66 @@ async function readJson(file: string): Promise<unknown> {
   }
 }
 
-async function writeStored(file: string, data: string | Uint8Array) {
-  await mkdir(join(file, '..'), { recursive: true });
-  await writeFile(file, data);
+/** Writes of the app's own files still under way, which quitting waits for. */
+const writing = new Set<Promise<void>>();
+/** The last change asked for of each of the app's own files: each waits for the one before, so they land in order. */
+const lastChange = new Map<string, Promise<void>>();
+
+/** Changes one of the app's own files after whatever was asked of it before, and keeps count for quitting. */
+function changeStored(file: string, change: () => Promise<void>): Promise<void> {
+  const before = lastChange.get(file) ?? Promise.resolve();
+  const write = before.catch(() => {}).then(change);
+  lastChange.set(file, write);
+  writing.add(write);
+  const done = () => {
+    writing.delete(write);
+    if (lastChange.get(file) === write) lastChange.delete(file);
+  };
+  write.then(done, done);
+  return write;
 }
+
+/** Removes one of the app's own files, after any write to it asked for before. */
+function removeStored(file: string): Promise<void> {
+  return changeStored(file, () => rm(file, { force: true }));
+}
+
+/**
+ * Writes one of the app's own files: to a file beside it first, then put in
+ * its place in one step, so that a file is never left half written, whatever
+ * happens meanwhile.
+ */
+function writeStored(file: string, data: string | Uint8Array): Promise<void> {
+  return changeStored(file, async () => {
+    await mkdir(join(file, '..'), { recursive: true });
+    const partial = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.partial`;
+    try {
+      await writeFile(partial, data);
+      // On Windows a file being scanned, by antivirus say, cannot be replaced for a moment: tried again a few times.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await rename(partial, file);
+          break;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (attempt >= 5 || !['EPERM', 'EACCES', 'EBUSY'].includes(code ?? '')) throw error;
+          await new Promise((done) => setTimeout(done, 50 * (attempt + 1)));
+        }
+      }
+    } catch (error) {
+      await rm(partial, { force: true });
+      throw error;
+    }
+  });
+}
+
+// Quitting waits for what is being saved: a change made a moment before, sent as the window closed, is kept.
+// By now the windows are closed and all has been told to quit, so once written the app exits: asked to quit again
+// from here, it may not.
+app.on('will-quit', (event) => {
+  event.preventDefault();
+  Promise.allSettled([saving, ...writing]).then(() => app.exit(0));
+});
 
 /** Drops the analyses that have gone unused the longest. */
 async function pruneAnalyses(folder: string) {
@@ -1380,7 +1436,7 @@ async function checkForUpdatesNow() {
 
 // A recording closed by hand is not brought back at the next start.
 ipcMain.on('closed', () => {
-  rm(lastRecordingFile(), { force: true }).catch(() => {});
+  removeStored(lastRecordingFile()).catch(() => {});
   recordingOpen = false;
   buildMenu();
 });
