@@ -330,10 +330,16 @@ Do not write test data there.
   `.github/workflows/release.yml`, which tests and packages on macOS,
   Windows and Linux and publishes the three installers. The version comes
   from the tag. None is signed for distribution.
-- **A package for the Microsoft Store** (`.appx`) is built beside the Windows
+- **A package for the Microsoft Store** (`.msix`) is built beside the Windows
   installer and kept with the workflow run, under its downloads, not put on
-  the release: it is uploaded to Partner Center by hand, and the Store signs
-  it. Its settings are `build.appx` in `package.json`; its identity comes from
+  the release; the Store signs it. For a version tag, the release workflow's
+  `store` job hands it to Partner Center as a new submission (`msstore
+  publish`), once the variable `STORE_PRODUCT_ID` and the four
+  `PARTNER_CENTER_*` secrets are set: as a draft, to be submitted in Partner
+  Center, unless `STORE_SUBMIT` is `true`. Partner Center accepts this only
+  for an app already live in the Store, so the first version goes up by hand.
+  A failure there leaves the release alone. Its listing text is drafted in
+  `store/listing.md`. Its settings are `build.appx` in `package.json`; its identity comes from
   the repository's variables `STORE_IDENTITY_NAME` and `STORE_PUBLISHER`,
   and without them a stand-in is used that builds but would be refused. Its
   tiles are in `build/appx/`, made from the icon by
