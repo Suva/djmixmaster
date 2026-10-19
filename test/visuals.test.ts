@@ -130,8 +130,8 @@ test('a broken template still loads, with each problem said and placed', () => {
     'Field 3 (bass): The name bass is already taken',
     'Layer 1: Unknown kind of layer: hologram',
     'Layer 2 (Gradient): Gradient has no setting called sparkle',
-    'Layer 2 (Gradient), Colour 1: Unknown name pink',
-    'Layer 2 (Gradient), Colour 2: Use the field by its name, without percent signs: name',
+    'Layer 2 (Gradient), Stop 1: Unknown name pink',
+    'Layer 2 (Gradient), Stop 2: Use the field by its name, without percent signs: name',
     'Layer 3 (Text), Text: There is no variable called nmae',
     'Layer 3 (Text), Size: Unknown name bas; did you mean bass?',
   ]);
@@ -348,7 +348,7 @@ test('a template of format 1 has its amounts made fractions, and its sizes left 
     ],
   };
   const upgraded = upgradeTemplate(old) as typeof old;
-  assert.equal(upgraded.format, 2);
+  assert.equal(upgraded.format, 3);
   assert.equal(old.layers[0].params.opacity, 50, 'what was given is left alone');
   const [image, glow, video, split, glitch, hue] = upgraded.layers.map((layer) => layer.params as Record<string, unknown>);
   assert.deepEqual(image, { opacity: 0.5, tintAmount: '0.4', brightness: '(how) / 100', width: 30, dropShadow: true, dropOpacity: 0.6, dropDistance: 0.8 });
@@ -369,9 +369,35 @@ test('a template of format 1 has its amounts made fractions, and its sizes left 
 });
 
 test('a template of the current format, or a newer one, is not changed again', () => {
-  const now = { format: 2, layers: [{ type: 'solid', params: { opacity: 0.5 } }] };
+  const now = { format: TEMPLATE_FORMAT, layers: [{ type: 'solid', params: { opacity: 0.5 } }] };
   assert.equal(upgradeTemplate(now), now);
-  const { problems } = checkTemplate({ format: 3, layers: [] }, MUSIC_NAMES, TEXT_VARIABLES);
+  const { problems } = checkTemplate({ format: TEMPLATE_FORMAT + 1, layers: [] }, MUSIC_NAMES, TEXT_VARIABLES);
   assert.match(problems[0].message, /newer version/);
-  assert.equal((checkTemplate({ format: 2, layers: [{ type: 'solid', params: { opacity: 0.5 } }] }, MUSIC_NAMES, TEXT_VARIABLES)).template.layers[0].params.opacity, 0.5);
+  assert.equal((checkTemplate(now, MUSIC_NAMES, TEXT_VARIABLES)).template.layers[0].params.opacity, 0.5);
+});
+
+test('a template of format 2 has its gradients\' colours made stops, where they fell before', () => {
+  const old = {
+    format: 2, name: 'Old', fields: [],
+    layers: [
+      { type: 'gradient', params: { colour1: '#ff0000' } },
+      { type: 'gradient', params: { kind: 'conic', colour1: '#ff0000', colour2: 'complement(#ff0000)', colour3: '#0000ff' } },
+      { type: 'noise', params: { colour2: '#ff0000', colour3: '#ffffff' } },
+      { type: 'spectrum', params: { colourHigh: '' } },
+      { type: 'shape', params: { fillColour2: '#000000' } },
+    ],
+  };
+  const layers = (upgradeTemplate(old) as typeof old).layers.map((layer) => layer.params as Record<string, unknown>);
+  const stops = (params: Record<string, unknown>) => [1, 2, 3, 4, 5].filter((n) => params[`colour${n}`] !== '').map((n) => [params[`colour${n}`], params[`position${n}`]]);
+  assert.deepEqual(stops(layers[0]), [['#ff0000', 0], ['#2a0f3c', 1]], 'the second colour left out was the old default, and sat at the end');
+  assert.deepEqual(stops(layers[1]), [['#ff0000', 0], ['complement(#ff0000)', 1 / 3], ['#0000ff', 2 / 3]], 'a conic gradient came round to its first colour');
+  assert.deepEqual(stops(layers[2]), [['#00000000', 0], ['#ff0000', 0.5], ['#ffffff', 1]], 'noise\'s empty low colour was see-through');
+  assert.deepEqual(stops(layers[3]), [['#3ddc97', 0]], 'an empty high colour was the low one');
+  assert.ok(!('colourLow' in layers[3]) && !('colourHigh' in layers[3]));
+  assert.equal(layers[3].stopBlend, 'round the colour wheel', 'a spectrum blended round the colour wheel');
+  assert.ok(!('stopBlend' in layers[0]), 'the others evenly, as is the default');
+  assert.deepEqual(stops(layers[4]), [['#3ddc97', 0], ['#000000', 1]]);
+  assert.ok(!('fillColour' in layers[4]));
+  const { problems } = checkTemplate(old, MUSIC_NAMES, TEXT_VARIABLES);
+  assert.deepEqual(problems, [], 'nothing left over that the layers no longer have');
 });

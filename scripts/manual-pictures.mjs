@@ -43,33 +43,39 @@ for (let b = 0; b < size; b++) for (let g = 0; g < size; g++) for (let r = 0; r 
 writeFileSync(join(data, 'luts', 'Teal and orange.cube'), `${cube.join('\n')}\n`);
 const logo = `data:image/png;base64,${readFileSync(join(root, 'site', 'icon.png')).toString('base64')}`;
 
+// A gradient's five stops: these colours spread evenly from 0 to 1, the rest not used (see src/visuals/templates.ts).
+const stops = (...colours) => Object.fromEntries([1, 2, 3, 4, 5].flatMap((n) => [
+  [`colour${n}`, colours[n - 1] ?? ''],
+  [`position${n}`, n > colours.length ? 1 : colours.length < 2 ? 0 : (n - 1) / (colours.length - 1)],
+]));
+
 // What each kind of layer is shown with. Effects are shown changing a scene of glitter, the spectrum and a title.
-const dark = { type: 'gradient', params: { kind: 'radial', colour1: '#2a1c5a', colour2: '#0b0a18' } };
+const dark = { type: 'gradient', params: { kind: 'radial', ...stops('#2a1c5a', '#0b0a18') } };
 const scene = [
-  { type: 'gradient', params: { kind: 'linear', angle: 120, colour1: '#3a1c71', colour2: '#d76d77', colour3: '#ffaf7b' } },
+  { type: 'gradient', params: { kind: 'linear', angle: 120, ...stops('#3a1c71', '#d76d77', '#ffaf7b') } },
   { type: 'particles', params: { count: 500, colour1: '#ffffff', colour2: '#ffe6a8' } },
-  { type: 'spectrum', params: { colourLow: '#ffffff', colourHigh: '#ffffff', y: 82, height: 16, opacity: 0.85 } },
+  { type: 'spectrum', params: { ...stops('#ffffff'), y: 82, height: 16, opacity: 0.85 } },
   { type: 'text', params: { text: 'NIGHTSHIFT', size: 13, weight: 800, colour: '#ffffff', y: 40 } },
 ];
 const LAYERS = {
   solid: [...scene, { type: 'solid', params: { colour: '#1e6cff', blend: 'colour' } }],
-  gradient: [{ type: 'gradient', params: { kind: 'linear', angle: 120, colour1: '#3a1c71', colour2: '#d76d77', colour3: '#ffaf7b' } }],
+  gradient: [{ type: 'gradient', params: { kind: 'linear', angle: 120, ...stops('#3a1c71', '#d76d77', '#ffaf7b') } }],
   particles: [dark, { type: 'particles', params: { count: 1200, shape: 'sparkle', colour1: '#ffffff', colour2: '#ffd27a', colour3: '#8fd3ff', sizeLow: 0.5, sizeHigh: 2 } }],
   image: [dark, { type: 'image', params: { image: 'asset:Logo', width: 28, height: 28 } }],
   video: [dark, { type: 'video', params: { video: clip, fit: 'cover', width: 70, height: 70, rounding: 3 } }],
   text: [dark, { type: 'text', params: { text: '%artist%\nLive at Saturday night', size: 9, weight: 700, colour: '#ffffff' } }],
-  spectrum: [dark, { type: 'spectrum', params: { colourLow: '#3ddc97', colourHigh: '#ff4fa0' } }],
+  spectrum: [dark, { type: 'spectrum', params: { ...stops('#3ddc97', '#ff4fa0'), stopBlend: 'round the colour wheel' } }],
   waveform: [dark, { type: 'waveform', params: { colour: '#8fd3ff' } }],
   // Smoky clouds, bent by a second noise, in three colours over the dark background.
-  noise: [dark, { type: 'noise', params: { kind: 'clouds', warp: 0.6, size: 45, seed: 4, colour1: '', colour2: '#7a4fd0', colour3: '#ffd27a', coverage: 0.8, softness: 0.8, blend: 'screen' } }],
+  noise: [dark, { type: 'noise', params: { kind: 'clouds', warp: 0.6, size: 45, seed: 4, ...stops('#00000000', '#7a4fd0', '#ffd27a'), coverage: 0.8, softness: 0.8, blend: 'screen' } }],
   // A few shapes, a ring that fills round and a progress bar that fills across.
   shape: [
     dark,
-    { type: 'shape', params: { shape: 'hexagon', square: true, width: 16, x: 20, y: 40, rounding: 6, fill: 'linear gradient', fillColour: '#ff4fa0', fillColour2: '#ffd27a', gradientAngle: 135 } },
-    { type: 'shape', params: { shape: 'star', square: true, width: 17, x: 40, y: 40, sides: 5, inner: 45, rounding: 4, fillColour: '', outlineWidth: 0.8, outlineColour: '#ffd27a' } },
-    { type: 'shape', params: { shape: 'ring', square: true, width: 15, x: 60, y: 40, thickness: 22, fillColour: '#3ddc97', restColour: '#ffffff26', amount: 0.65, reveal: 'clockwise' } },
-    { type: 'shape', params: { shape: 'heart', square: true, width: 13, x: 80, y: 41, fill: 'radial gradient', fillColour: '#ff8fb8', fillColour2: '#d0205a' } },
-    { type: 'shape', params: { shape: 'rectangle', width: 70, height: 2.4, y: 80, rounding: 50, fillColour: '#6aa9ff', restColour: '#ffffff26', amount: 0.4, reveal: 'left, keeping its shape' } },
+    { type: 'shape', params: { shape: 'hexagon', square: true, width: 16, x: 20, y: 40, rounding: 6, fill: 'linear gradient', ...stops('#ff4fa0', '#ffd27a'), gradientAngle: 135 } },
+    { type: 'shape', params: { shape: 'star', square: true, width: 17, x: 40, y: 40, sides: 5, inner: 45, rounding: 4, ...stops(), outlineWidth: 0.8, outlineColour: '#ffd27a' } },
+    { type: 'shape', params: { shape: 'ring', square: true, width: 15, x: 60, y: 40, thickness: 22, ...stops('#3ddc97'), restColour: '#ffffff26', amount: 0.65, reveal: 'clockwise' } },
+    { type: 'shape', params: { shape: 'heart', square: true, width: 13, x: 80, y: 41, fill: 'radial gradient', ...stops('#ff8fb8', '#d0205a') } },
+    { type: 'shape', params: { shape: 'rectangle', width: 70, height: 2.4, y: 80, rounding: 50, ...stops('#6aa9ff'), restColour: '#ffffff26', amount: 0.4, reveal: 'left, keeping its shape' } },
   ],
   glow: [...scene, { type: 'glow', params: { threshold: 0.45, strength: 1.5, radius: 3 } }],
   group: scene,
@@ -77,7 +83,7 @@ const LAYERS = {
   glitch: [...scene, { type: 'glitch', params: { amount: 1, shift: 10 } }],
   adjust: [...scene, { type: 'adjust', params: { brightness: 1.25, contrast: 1.7 } }],
   hue: [...scene, { type: 'hue', params: { hue: 140, saturation: 1.6 } }],
-  gradientMap: [...scene, { type: 'gradientMap', params: { colour1: '#0b1a3a', colour2: '', colour3: '#2fbfa8', colour4: '', colour5: '#fff3c4' } }],
+  gradientMap: [...scene, { type: 'gradientMap', params: { ...stops('#0b1a3a', '#2fbfa8', '#fff3c4') } }],
   displace: [...scene, { type: 'displace', params: { mode: 'swirl', twist: 160, radius: 55, y: 45 } }],
   whiteBalance: [...scene, { type: 'whiteBalance', params: { temperature: -0.8, tint: -0.3 } }],
   kaleidoscope: [...scene, { type: 'kaleidoscope', params: { segments: 8 } }],
@@ -94,7 +100,7 @@ const layers = Object.entries(LAYERS).flatMap(([type, inside], index) => [
 ]);
 const template = join(work, 'Manual pictures.djmtemplate');
 writeFileSync(template, JSON.stringify({
-  format: 2,
+  format: 3,
   name: 'Manual pictures',
   fields: [{ key: 'n', label: 'Which', kind: 'number', default: 1, min: 0, max: 100 }],
   assets: { Logo: logo },

@@ -290,8 +290,8 @@ float pattern(vec2 p, float t) {
  * The noise layer's shader. Uniforms: the picture's height in
  * pixels, `origin` (the pattern's middle, in pixels, moved along as it
  * drifts), `axes` (pixels to pattern units: a 2×2 matrix that sizes and
- * turns), `time`, the options, `coverage` and `softness`, and three colours
- * as RGBA, alpha 0 for none.
+ * turns), `time`, the options, `coverage` and `softness`, and `table`, the
+ * gradient's 256 colours (see gradientMapTable), not premultiplied.
  */
 export const NOISE_SHADER = `#version 300 es
 precision highp float;
@@ -302,9 +302,7 @@ uniform mat2 axes;
 uniform float time;
 uniform float coverage;
 uniform float softness;
-uniform vec4 colour1;
-uniform vec4 colour2;
-uniform vec4 colour3;
+uniform sampler2D table;
 out vec4 colour;
 ${NOISE_GLSL}
 void main() {
@@ -313,10 +311,8 @@ void main() {
   vec2 p = axes * (pixel - origin);
   float threshold = 1.0 - clamp(coverage, 0.0, 1.0);
   float v = clamp((pattern(p, time) - threshold) / max(1e-3, clamp(softness, 0.0, 1.0) * (1.0 - threshold)), 0.0, 1.0);
-  // Mixed premultiplied, so that a colour left empty fades out rather than towards black.
-  vec4 a = vec4(colour1.rgb * colour1.a, colour1.a);
-  vec4 b = vec4(colour2.rgb * colour2.a, colour2.a);
-  vec4 c3 = vec4(colour3.rgb * colour3.a, colour3.a);
-  colour = colour3.a > 0.0 ? (v < 0.5 ? mix(a, b, v * 2.0) : mix(b, c3, v * 2.0 - 1.0)) : mix(a, b, v);
+  // The colour for the value from the gradient's table (gradient-map.ts), at the middle of its entries; written premultiplied.
+  vec4 m = texture(table, vec2((v * 255.0 + 0.5) / 256.0, 0.5));
+  colour = vec4(m.rgb * m.a, m.a);
 }
 `;

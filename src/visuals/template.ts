@@ -31,15 +31,20 @@ import { PLAYBACKS, RESTARTS } from './clip.ts';
 import { unpackLut, type PackedLut } from './lut.ts';
 import { motionExpression, parseMotion } from './motion.ts';
 import { NOISE_KINDS } from './noise.ts';
+import { STOP_BLENDS, STOP_COUNT } from './gradient-map.ts';
 import { DISPLACE_MODES } from './displace.ts';
 
 /**
  * 2: amounts (opacities, a tint's amount, brightness and the like) are
  * fractions, 1 for all of it, where 1 had them in percent. Sizes and
- * positions are still percent of the picture. `upgradeTemplate` brings a
- * template of format 1 up to date.
+ * positions are still percent of the picture.
+ * 3: gradients are stops (colour1…colour5 and position1…position5, see
+ * gradient-map.ts) in the gradient, noise, spectrum and shape layers, which
+ * had two or three colours of their own, blended evenly or round the colour
+ * wheel (stopBlend), as spectrums were.
+ * `upgradeTemplate` brings a template of an earlier format up to date.
  */
-export const TEMPLATE_FORMAT = 2;
+export const TEMPLATE_FORMAT = 3;
 
 export type ParamKind = 'number' | 'switch' | 'colour' | 'text' | 'choice' | 'image' | 'font' | 'video' | 'lut';
 export type ParamValue = number | boolean | string;
@@ -124,12 +129,19 @@ export const STYLE_PARAMS: Record<string, ParamSpec> = {
   innerGlowChoke: number('Choke', 0, 0, 1),
 };
 
-/** A gradient's stops as settings: a colour, empty for a stop not used, and a place, 0 to 1, evenly spread to start with. */
+/**
+ * A gradient's stops as settings: a colour, empty for a stop not used, and a
+ * place, 0 to 1, evenly spread to start with. Given the five colours. And how
+ * the colours blend between stops (gradient-map.ts).
+ */
 function stopParams(colours: string[]): Record<string, ParamSpec> {
-  return Object.fromEntries(colours.flatMap((value, i) => [
-    [`colour${i + 1}`, colour(`Stop ${i + 1}`, value)],
-    [`position${i + 1}`, number(`Stop ${i + 1} at`, i / (colours.length - 1), 0, 1)],
-  ]));
+  return {
+    ...Object.fromEntries(colours.flatMap((value, i) => [
+      [`colour${i + 1}`, colour(`Stop ${i + 1}`, value)],
+      [`position${i + 1}`, number(`Stop ${i + 1} at`, i / (colours.length - 1), 0, 1)],
+    ])),
+    stopBlend: choice('Colours blend', 'even', [...STOP_BLENDS]),
+  };
 }
 
 /** The shapes a shape layer draws. Pentagon to octagon are polygons with that many sides; "polygon" takes them from its setting. */
@@ -171,12 +183,11 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   gradient: {
     label: 'Gradient',
-    description: 'Two or three colours blending into each other, in a line, in circles or round a point. It can turn slowly and shift its colours over time.',
+    description: 'Up to five colours blending into each other, in a line, in circles or round a point. It can turn slowly and shift its colours over time.',
+    stops: true,
     params: {
       kind: choice('Kind', 'linear', ['linear', 'radial', 'conic']),
-      colour1: colour('Colour 1', '#101830'),
-      colour2: colour('Colour 2', '#2a0f3c'),
-      colour3: colour('Colour 3', ''),
+      ...stopParams(['#101830', '', '', '', '#2a0f3c']),
       angle: number('Angle', 90, 0, 360, '°'),
       drift: number('Drift', 0, 0, 90, '°/s'),
       hueShift: number('Hue shift', 0, 0, 60, '°/s'),
@@ -275,6 +286,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   spectrum: {
     label: 'Spectrum',
+    stops: true,
     description: 'Bars that rise and fall with the music, from the bass on one side to the highs on the other, in a row or round a circle.',
     params: {
       bars: number('Bars', 48, 4, 256),
@@ -284,9 +296,9 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       height: number('Height', 25, 0, 100, '%'),
       gap: number('Gap between bars', 30, 0, 90, '%'),
       rounded: toggle('Rounded ends', true),
-      colourLow: colour('Colour, low bars', '#3ddc97'),
-      colourHigh: colour('Colour, high bars', '#6aa9ff'),
+      // One colour is the first stop's; along and by height, the whole gradient, from the bass to the highs or from the foot to the top.
       colouring: choice('Colouring', 'along', ['one colour', 'along', 'by height']),
+      ...stopParams(['#3ddc97', '', '', '', '#6aa9ff']),
       mirrored: toggle('Mirrored', false),
       rise: number('Rise time', 0.03, 0, 1, 's'),
       fall: number('Fall time', 0.25, 0, 2, 's'),
@@ -311,6 +323,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   shape: {
     label: 'Shape',
+    stops: true,
     description: 'A rectangle, an ellipse, a polygon, a star or another shape, filled with a colour or a gradient and outlined. Only part of it can be drawn, across or round, which with progress makes a progress bar or a ring that fills.',
     params: {
       shape: choice('Shape', 'rectangle', [...SHAPE_KINDS]),
@@ -321,9 +334,9 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       sides: number('Sides, or a star\'s points', 6, 3, 24),
       inner: number('A star\'s inner points', 45, 0, 100, '%'),
       thickness: number('Thickness of a ring, cross or arrow', 30, 1, 100, '%'),
+      // One colour is the first stop's; none in use, and the shape is not filled.
       fill: choice('Fill', 'one colour', ['one colour', 'linear gradient', 'radial gradient']),
-      fillColour: colour('Fill colour', '#3ddc97'),
-      fillColour2: colour('Second colour, of a gradient', '#6aa9ff'),
+      ...stopParams(['#3ddc97', '', '', '', '#6aa9ff']),
       gradientAngle: number('Gradient angle', 90, 0, 360, '°'),
       outlineWidth: number('Outline', 0, 0, 5, '%'),
       outlineColour: colour('Outline colour', '#ffffff'),
@@ -337,7 +350,8 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   noise: {
     label: 'Noise',
-    description: 'Patterns that evolve and drift: clouds, smoke, ridges, cells, cracks, marble and plasma, in two or three colours. A colour left empty is see-through, so white clouds can float over what is beneath.',
+    description: 'Patterns that evolve and drift: clouds, smoke, ridges, cells, cracks, marble and plasma, coloured by a gradient from their low to their high parts. A see-through stop lets what is beneath show, so white clouds can float over it.',
+    stops: true,
     params: {
       kind: choice('Kind', 'clouds', [...NOISE_KINDS]),
       size: number('Size', 30, 1, 200, '%'),
@@ -351,9 +365,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       seed: number('Seed', 0, 0, 1000),
       coverage: number('Coverage', 1, 0, 1),
       softness: number('Softness of the edges', 1, 0, 1),
-      colour1: colour('Low colour', ''),
-      colour2: colour('High colour', '#ffffff'),
-      colour3: colour('Highest colour, for three', ''),
+      ...stopParams(['#ffffff00', '', '', '', '#ffffff']),
     },
   },
   glow: {
@@ -792,19 +804,71 @@ function fractionOf(value: unknown): unknown {
  */
 export function upgradeTemplate(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null) return raw;
-  const source = raw as { format?: unknown; layers?: unknown };
-  if (typeof source.format === 'number' && source.format >= 2) return raw;
-  if (source.format !== undefined && source.format !== 1) return raw;
-  const layers = Array.isArray(source.layers) ? source.layers.map((item: unknown) => {
-    const layer = item as { type?: unknown; params?: unknown };
-    if (typeof layer !== 'object' || layer === null || typeof layer.params !== 'object' || layer.params === null) return item;
-    const params = { ...(layer.params as Record<string, unknown>) };
-    for (const key of [...PERCENT_IN_FORMAT_1['*'], ...(PERCENT_IN_FORMAT_1[String(layer.type)] ?? [])]) {
-      if (key in params) params[key] = fractionOf(params[key]);
+  let source = raw as { format?: unknown; layers?: unknown };
+  // One step a format, each changing the layers' settings as that format did.
+  const steps: [number, (type: string, params: Record<string, unknown>) => void][] = [[1, amountsAsFractions], [2, coloursAsStops]];
+  if (source.format !== undefined && (typeof source.format !== 'number' || source.format > TEMPLATE_FORMAT)) return raw;
+  for (const [from, step] of steps) {
+    if ((source.format ?? 1) !== from) continue;
+    const layers = Array.isArray(source.layers) ? source.layers.map((item: unknown) => {
+      const layer = item as { type?: unknown; params?: unknown };
+      if (typeof layer !== 'object' || layer === null || typeof layer.params !== 'object' || layer.params === null) return item;
+      const params = { ...(layer.params as Record<string, unknown>) };
+      step(String(layer.type), params);
+      return { ...layer, params };
+    }) : source.layers;
+    source = { ...source, format: from + 1, layers };
+  }
+  return source;
+}
+
+/** Format 1 to 2: the amounts that were percent, as fractions. */
+function amountsAsFractions(type: string, params: Record<string, unknown>) {
+  for (const key of [...PERCENT_IN_FORMAT_1['*'], ...(PERCENT_IN_FORMAT_1[type] ?? [])]) {
+    if (key in params) params[key] = fractionOf(params[key]);
+  }
+}
+
+/**
+ * Format 2 to 3: the colours of gradients, noise, spectrums and shapes as
+ * stops, where they fell before. The colours a layer left out are written
+ * in at what they were by default then, as the defaults are now others.
+ */
+function coloursAsStops(type: string, params: Record<string, unknown>) {
+  const given = (key: string, then: string) => (key in params ? params[key] : then);
+  const unused = (value: unknown) => value === '';
+  /** Stops 1, 2… in this order, at these places; the rest not used. */
+  const write = (stops: [unknown, number][]) => {
+    for (let i = 0; i < STOP_COUNT; i++) {
+      params[`colour${i + 1}`] = stops[i] ? stops[i][0] : '';
+      if (stops[i]) params[`position${i + 1}`] = stops[i][1];
     }
-    return { ...layer, params };
-  }) : source.layers;
-  return { ...source, format: 2, layers };
+  };
+  if (type === 'gradient') {
+    // Spread evenly over the colours in use; going round, a conic one came back to its first colour at the end.
+    const colours = [given('colour1', '#101830'), given('colour2', '#2a0f3c'), given('colour3', '')].filter((c) => !unused(c));
+    const conic = params.kind === 'conic';
+    write(colours.map((c, i) => [c, colours.length < 2 ? 0 : conic ? i / colours.length : i / (colours.length - 1)]));
+  } else if (type === 'noise') {
+    // An empty colour was see-through, not left out; a third, when there was one, took the top half.
+    const seen = (c: unknown) => (unused(c) ? '#00000000' : c);
+    const third = given('colour3', '');
+    write(unused(third)
+      ? [[seen(given('colour1', '')), 0], [seen(given('colour2', '#ffffff')), 1]]
+      : [[seen(given('colour1', '')), 0], [seen(given('colour2', '#ffffff')), 0.5], [third, 1]]);
+  } else if (type === 'spectrum') {
+    const [low, high] = [given('colourLow', '#3ddc97'), given('colourHigh', '#6aa9ff')];
+    // An empty high colour was the low one. The colours blended round the colour wheel then.
+    write(unused(high) ? [[low, 0]] : [[low, 0], [high, 1]]);
+    params.stopBlend = 'round the colour wheel';
+    delete params.colourLow;
+    delete params.colourHigh;
+  } else if (type === 'shape') {
+    const [fill, second] = [given('fillColour', '#3ddc97'), given('fillColour2', '#6aa9ff')];
+    write(unused(fill) ? [] : unused(second) ? [[fill, 0]] : [[fill, 0], [second, 1]]);
+    delete params.fillColour;
+    delete params.fillColour2;
+  }
 }
 
 export function checkTemplate(raw: unknown, musicNames: readonly string[], textNames: readonly string[]): {

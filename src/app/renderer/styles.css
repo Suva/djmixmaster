@@ -470,6 +470,9 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
 /* The selected layer's settings in the template editor. */
 #editor-layer > .editor-section { margin: 4px 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .layer-settings details { margin-bottom: 8px; border-top: 1px solid var(--border); padding-top: 6px; }
+/* A gradient's stops one by one, folded under its bar: set apart from the layer's own group, not a group of its own. */
+.layer-settings details.stop-settings { margin: -4px 0 10px; border-top: none; padding: 0 0 0 10px; border-left: 2px solid var(--border); }
+.layer-settings details.stop-settings > summary { font-size: 12px; color: var(--muted); }
 .layer-settings summary { cursor: pointer; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: var(--label, #c9ced8); }
 .layer-settings summary .style-on { display: inline-block; width: 6px; height: 6px; margin-left: 7px; vertical-align: middle; border-radius: 50%; background: var(--accent); }
 .layer-settings summary .style-on[hidden] { display: none; }

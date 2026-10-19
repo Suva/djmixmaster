@@ -20,6 +20,7 @@ import { lutPicker, type LutChoice } from './lut-picker.ts';
 import { fontPicker } from './font-picker.ts';
 import { scrubbableInput } from './scrub.ts';
 import { stopBar } from './stop-bar.ts';
+import { STOP_COUNT } from '../../visuals/gradient-map.ts';
 import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
 
 export interface LayerSettingsContext {
@@ -616,8 +617,22 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
           defaults: Object.fromEntries(Object.entries(all).map(([key, param]) => [key, param.default])),
           refresh: (key) => rebuilds.get(key)?.(),
         });
-        details.querySelector('summary')!.after(bar.element);
+        // Just above the stops' own settings, where the layer has others first.
+        (details.querySelector('.setting[data-key="colour1"]') ?? details.querySelector('summary')!.nextSibling)!.before(bar.element);
         ticks.set('stop-bar', () => bar.tick());
+        // The stops' own settings, folded under the bar, which sets them well enough for a gradient that holds still.
+        // Opened for one to follow the music; and open by itself where one does, so that nothing moving is hidden.
+        const keys = Array.from({ length: STOP_COUNT }, (_, i) => [`colour${i + 1}`, `position${i + 1}`]).flat();
+        const each = document.createElement('details');
+        each.className = 'stop-settings';
+        const moving = keys.some((key) => isExpression(layer.params[key] ?? all[key].default, all[key]));
+        each.open = moving || (opened.get('Each stop') ?? false);
+        each.addEventListener('toggle', () => opened.set('Each stop', each.open));
+        const summary = document.createElement('summary');
+        summary.textContent = 'Each stop';
+        summary.title = 'Each stop\'s colour and place as settings: to make one follow the music, or to set it exactly';
+        each.append(summary, ...keys.map((key) => details.querySelector(`.setting[data-key="${key}"]`)!));
+        bar.element.after(each);
       }
       element.append(details);
     }

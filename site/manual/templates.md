@@ -42,7 +42,11 @@ A layer's settings are the ones of its kind, then those every layer has: where i
 
 ### Gradients
 
-A gradient map's colours are shown as a bar above its settings, as in a photo editor. Drag a stop's marker to move it, click it to choose its colour, click the bar to add a stop there (five at most), or drag a marker away from the bar to take it out. Each stop is also an ordinary colour and position below the bar, so it can follow the music: a stop whose place follows a formula moves on the bar by itself, and is set below rather than dragged.
+A layer with a gradient (a gradient, noise, a spectrum, a shape, a gradient map) shows its colours as a bar, as in a photo editor. Drag a stop's marker to move it, click it to choose its colour, click the bar to add a stop there (five at most), or drag a marker away from the bar to take it out.
+
+Under the bar, **Each stop** holds every stop's colour and place as ordinary settings, folded away until wanted: open it to make a stop follow the music. A stop whose place follows a formula moves on the bar by itself, and is set there rather than dragged; while any stop follows the music, Each stop stays open.
+
+**Colours blend** says how the colours pass from one stop to the next. *Even* is smooth and true for colours close to each other, and for fades. *Round the colour wheel* keeps colours far apart rich, passing through the hues between them: use it for rainbows, or for a colour and its opposite, which would otherwise meet in grey.
 
 ![A gradient map's stops on their bar](pictures/gradient-map.png)
 

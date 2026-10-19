@@ -9,6 +9,16 @@ export interface BuiltIn {
   template: unknown;
 }
 
+/**
+ * A gradient's five stops (see gradient-map.ts): these colours spread evenly
+ * from 0 to 1, and the rest not used, written out so that no stop's default
+ * creeps in.
+ */
+const stops = (...colours: string[]) => Object.fromEntries([1, 2, 3, 4, 5].flatMap((n) => [
+  [`colour${n}`, colours[n - 1] ?? ''],
+  [`position${n}`, n > colours.length ? 1 : colours.length < 2 ? 0 : (n - 1) / (colours.length - 1)],
+]));
+
 const logo = { key: 'logo', label: 'Logo', kind: 'image', default: '' };
 const nowPlaying = {
   type: 'text',
@@ -23,7 +33,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'glitter',
     template: {
-      format: 2,
+      format: 3,
       name: 'Glitter',
       about: { author: 'DJ Mix Master', description: 'A glow in your colour and glitter that thickens with the energy and bursts on the kick, round your logo and the artist\'s name.' },
       fields: [
@@ -38,9 +48,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           name: 'Background',
           params: {
             kind: 'radial', y: 40, scale: 110,
-            colour1: 'darken(colour1, 0.35 - 0.1 * smooth(bass, 0.05, 0.6))',
-            colour2: 'darken(hue(colour1, 40), 0.62)',
-            colour3: '#05030a',
+            ...stops('darken(colour1, 0.35 - 0.1 * smooth(bass, 0.05, 0.6))', 'darken(hue(colour1, 40), 0.62)', '#05030a'),
           },
         },
         {
@@ -80,7 +88,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'ring',
     template: {
-      format: 2,
+      format: 3,
       name: 'Spectrum ring',
       about: { author: 'DJ Mix Master', description: 'The spectrum as a ring round your logo, from your colour to its opposite, over a soft background in both.' },
       fields: [
@@ -96,9 +104,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           // left anything but the lightest colours almost black.
           params: {
             kind: 'linear', angle: 120, drift: 2,
-            colour1: 'oklch(0.34, 0.6 * chroma(colour1), hueOf(colour1))',
-            colour2: 'oklch(0.17, 0.25 * chroma(colour1), hueOf(colour1))',
-            colour3: 'oklch(0.3, 0.5 * chroma(colour1), hueOf(colour1) + 180)',
+            ...stops('oklch(0.34, 0.6 * chroma(colour1), hueOf(colour1))', 'oklch(0.17, 0.25 * chroma(colour1), hueOf(colour1))', 'oklch(0.3, 0.5 * chroma(colour1), hueOf(colour1) + 180)'),
           },
         },
         {
@@ -106,7 +112,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           name: 'Ring',
           params: {
             form: 'circle', y: 44, radius: 17, height: '13 + 4 * beat', bars: 120, gap: 35, rounded: true,
-            colourLow: 'colour1', colourHigh: 'complement(colour1)', colouring: 'along', rise: 0.02, fall: 0.3,
+            ...stops('colour1', 'complement(colour1)'), stopBlend: 'round the colour wheel', colouring: 'along', rise: 0.02, fall: 0.3,
           },
         },
         {
@@ -132,7 +138,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'waveform',
     template: {
-      format: 2,
+      format: 3,
       name: 'Waveform',
       about: { author: 'DJ Mix Master', description: 'The level of the last seconds as a wave across the picture, a larger one behind, a spectrum underneath, and the time.' },
       fields: [
@@ -140,7 +146,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
         { key: 'font', label: 'Font', kind: 'font', default: 'Bebas Neue' },
       ],
       layers: [
-        { type: 'gradient', name: 'Background', params: { kind: 'linear', angle: 90, colour1: '#0b0c10', colour2: 'darken(colour1, 0.7)' } },
+        { type: 'gradient', name: 'Background', params: { kind: 'linear', angle: 90, ...stops('#0b0c10', 'darken(colour1, 0.7)') } },
         {
           type: 'waveform',
           name: 'Wave behind',
@@ -165,7 +171,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           name: 'Bars',
           params: {
             y: 96, anchor: 'bottom', width: 92, height: 10, bars: 64, gap: 25, rounded: false,
-            colourLow: 'alpha(lighten(colour1, 0.15), 0.6)', colourHigh: 'alpha(hue(colour1, 60), 0.6)',
+            ...stops('alpha(lighten(colour1, 0.15), 0.6)', 'alpha(hue(colour1, 60), 0.6)'), stopBlend: 'round the colour wheel',
           },
         },
         {
@@ -190,7 +196,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'photo',
     template: {
-      format: 2,
+      format: 3,
       name: 'Photo',
       about: { author: 'DJ Mix Master', description: 'Your photo, drifting a little and swelling with the bass, faint dust falling, the artist in the corner and the spectrum along the bottom.' },
       fields: [
@@ -200,7 +206,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       ],
       layers: [
         // Seen only until a photo is chosen.
-        { type: 'gradient', name: 'Background', params: { kind: 'radial', colour1: '#22252c', colour2: '#08090b' } },
+        { type: 'gradient', name: 'Background', params: { kind: 'radial', ...stops('#22252c', '#08090b') } },
         {
           type: 'image',
           name: 'Photo',
@@ -217,7 +223,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           type: 'gradient',
           name: 'Shade',
           // Darker at the top and the bottom, where the writing and the spectrum are.
-          params: { kind: 'linear', angle: 90, colour1: '#00000080', colour2: '#00000000', colour3: '#000000a0' },
+          params: { kind: 'linear', angle: 90, ...stops('#00000080', '#00000000', '#000000a0') },
         },
         {
           type: 'particles',
@@ -234,7 +240,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
           name: 'Spectrum',
           params: {
             y: 100, anchor: 'bottom', width: 100, height: 16, bars: 96, gap: 30, rounded: false,
-            colourLow: 'alpha(colour1, 0.85)', colourHigh: 'alpha(hue(colour1, 40), 0.85)',
+            ...stops('alpha(colour1, 0.85)', 'alpha(hue(colour1, 40), 0.85)'), stopBlend: 'round the colour wheel',
           },
         },
         {
@@ -260,7 +266,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
   {
     id: 'original',
     template: {
-      format: 2,
+      format: 3,
       name: 'Original video',
       about: {
         author: 'DJ Mix Master',
@@ -269,7 +275,7 @@ export const BUILT_IN_TEMPLATES: BuiltIn[] = [
       fields: [{ key: 'font', label: 'Font', kind: 'font', default: 'Space Grotesk' }],
       layers: [
         // Seen only where the picture does not fill the frame, or the recording has none.
-        { type: 'gradient', name: 'Background', params: { kind: 'radial', colour1: '#22252c', colour2: '#08090b' } },
+        { type: 'gradient', name: 'Background', params: { kind: 'radial', ...stops('#22252c', '#08090b') } },
         { type: 'video', name: 'Picture', params: { video: 'recording:video', fit: 'contain', width: 100, height: 100 } },
         {
           type: 'text',

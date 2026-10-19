@@ -76,6 +76,7 @@ test('every kind of noise is drawn in the window as the processor works it out',
     return { width: picture.width, height: picture.height, kinds, places };
   });
   // At the mix's start, before anything has evolved or drifted.
+  const greys = gradientMapTable([{ colour: parseHex('#000000')!, position: 0 }, { colour: parseHex('#ffffff')!, position: 1 }], { shift: 0, hueShift: 0, low: 0, high: 1 })!;
   const size = 0.2 * Math.min(seen.width, seen.height);
   const turn = (30 * Math.PI) / 180;
   seen.kinds.forEach((drawn, i) => {
@@ -84,7 +85,10 @@ test('every kind of noise is drawn in the window as the processor works it out',
       const vy = Math.floor(seen.height * y) + 0.5 - seen.height / 2;
       const px = (Math.cos(turn) * vx + Math.sin(turn) * vy) / size;
       const py = (-Math.sin(turn) * vx + Math.cos(turn) * vy) / size;
-      return Math.round(255 * noiseValue(px, py, 0, { kind: NOISE_KINDS[i], detail: 5, roughness: 0.5, warp: i === 0 ? 0.5 : 0, seed: 7 }));
+      // Black to white, blended as the gradient blends: through its table, between its entries.
+      const at = 255 * noiseValue(px, py, 0, { kind: NOISE_KINDS[i], detail: 5, roughness: 0.5, warp: i === 0 ? 0.5 : 0, seed: 7 });
+      const k = Math.min(254, Math.floor(at));
+      return Math.round(greys[k * 4] * (1 - (at - k)) + greys[(k + 1) * 4] * (at - k));
     });
     drawn.forEach((value, j) => assert.ok(Math.abs(value - want[j]) <= 2, `${NOISE_KINDS[i]}: drawn ${drawn}, worked out ${want}`));
   });
@@ -219,6 +223,7 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     layers: [
       { type: 'gradient', params: { kind: 'linear', angle: 0, colour1: '#000000', colour2: '#ffffff' } },
       { type: 'gradientMap', params: { colour1: '#ff0000', position1: 0, colour2: '', colour3: '', colour4: '', colour5: '#0000ff', position5: 1 } },
+      { type: 'gradient', name: 'Moving', params: { colour1: '#ff0000', position1: 0, colour5: '#0000ff', position5: '0.5 + 0.5 * bass' } },
     ],
   }));
   const data = await dataFolder(work, analysed);
@@ -247,6 +252,8 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     const marker = (n: number) => document.querySelector<HTMLElement>(`.stop-marker[data-stop="${n}"]`)!;
     const at = (f: number) => { const box = track.getBoundingClientRect(); return [box.left + box.width * f, box.top + box.height / 2]; };
     const first = shown();
+    // Each stop's own settings are folded under the bar for a gradient that holds still.
+    const folded = !document.querySelector<HTMLDetailsElement>('#editor-layer details.stop-settings')!.open;
 
     // Stop 1 dragged a quarter of the way along.
     drag(marker(1), at(0.25)[0], at(0.25)[1]);
@@ -268,10 +275,18 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     page.click('undo');
     await page.wait(300);
     const back = shown();
+    // A gradient with a stop that follows the music shows them unfolded.
+    const moving = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Moving')!;
+    moving.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: moving.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await page.until(() => document.querySelector('#editor-layer-title')?.textContent === 'Moving', 'the moving gradient to be selected');
+    const unfolded = document.querySelector<HTMLDetailsElement>('#editor-layer details.stop-settings')!.open;
     page.click('editor-done');
-    return { first, dragged, added, removed, back };
+    return { first, folded, dragged, added, removed, back, unfolded };
   });
   assert.deepEqual(seen.first, [1, 5]);
+  assert.ok(seen.folded, 'each stop folded away for a gradient that holds still');
+  assert.ok(seen.unfolded, 'and open where a stop follows the music');
   assert.ok(Math.abs(seen.dragged - 0.25) < 0.02, `dragged to ${seen.dragged}`);
   assert.deepEqual(seen.added.shown, [1, 2, 5]);
   assert.ok(Math.abs(seen.added.at - 0.6) < 0.02, `added at ${seen.added.at}`);

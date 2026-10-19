@@ -44,21 +44,50 @@ export interface Lch {
   h: number;
 }
 
-export function toLch({ r, g, b }: Colour): Lch {
+/** OKLab: lightness 0 to 1, and two axes of colour, green to red and blue to yellow. */
+export function toOklab({ r, g, b }: Colour): [number, number, number] {
   const [lr, lg, lb] = [toLinear(r), toLinear(g), toLinear(b)];
   const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
   const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
   const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
-  const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
-  const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
-  const B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+export function toLch(colour: Colour): Lch {
+  const [L, A, B] = toOklab(colour);
   const h = (Math.atan2(B, A) * 180) / Math.PI;
   return { l: L, c: Math.hypot(A, B), h: h < 0 ? h + 360 : h };
 }
 
+/** The colour at these OKLab values; one past what a screen shows is clamped. */
+export function fromOklab([L, A, B]: [number, number, number], a = 1): Colour {
+  const [r, g, b] = oklabToRgb(L, A, B);
+  return { r: clamp01(r), g: clamp01(g), b: clamp01(b), a };
+}
+
+/**
+ * Between two colours, blended in OKLab: the steps look even, and the middle
+ * keeps the ends' brightness and richness rather than going grey, as blending
+ * red, green and blue does. Transparency blends too, each colour counting as
+ * much as it shows, so fading to nothing does not fade through black.
+ */
+export function blendOklab(from: Colour, to: Colour, t: number): Colour {
+  const a = from.a + (to.a - from.a) * t;
+  if (a <= 0) return { ...from, a: 0 };
+  const [p, q] = [toOklab(from), toOklab(to)];
+  const [wp, wq] = [from.a * (1 - t), to.a * t];
+  return fromOklab([0, 1, 2].map((i) => (p[i] * wp + q[i] * wq) / (wp + wq)) as [number, number, number], a);
+}
+
 function lchToRgb({ l: L, c, h }: Lch): [number, number, number] {
-  const A = c * Math.cos((h * Math.PI) / 180);
-  const B = c * Math.sin((h * Math.PI) / 180);
+  return oklabToRgb(L, c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180));
+}
+
+function oklabToRgb(L: number, A: number, B: number): [number, number, number] {
   const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
   const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
   const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
@@ -99,6 +128,26 @@ export function fromHsl(h: number, s: number, l: number): Colour {
   const amount = s * Math.min(l, 1 - l);
   const f = (n: number) => l - amount * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
   return { r: f(0), g: f(8), b: f(4), a: 1 };
+}
+
+/**
+ * Between two colours, blended round the colour wheel (in OKLCH): lightness
+ * and richness change evenly, and the hue turns the shorter way round, so the
+ * middle stays as rich as the ends, through the hues between them. With both
+ * colours opaque, the same as mixColours. Transparency blends as in
+ * blendOklab, and a colour not showing, or a grey, takes the other's hue.
+ */
+export function blendOklch(from: Colour, to: Colour, t: number): Colour {
+  const a = from.a + (to.a - from.a) * t;
+  if (a <= 0) return { ...from, a: 0 };
+  const [p, q] = [toLch(from), toLch(to)];
+  const f = (to.a * t) / (from.a * (1 - t) + to.a * t);
+  const hp = p.c < 1e-4 || from.a <= 0 ? q.h : p.h;
+  const hq = q.c < 1e-4 || to.a <= 0 ? hp : q.h;
+  let turn = hq - hp;
+  if (turn > 180) turn -= 360;
+  if (turn < -180) turn += 360;
+  return fromLch({ l: p.l + (q.l - p.l) * f, c: p.c + (q.c - p.c) * f, h: hp + turn * f }, a);
 }
 
 /** Between two colours, blended so that the steps between look even. */

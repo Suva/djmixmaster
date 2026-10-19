@@ -1,17 +1,20 @@
-// A gradient map: each pixel's brightness looked up in a gradient of colours,
-// so that dark parts take the first colours and bright parts the last, as a
-// photo editor's gradient map does. The gradient is up to STOP_COUNT stops,
-// each an ordinary colour setting and an ordinary position setting, so that
-// any of them can follow the music; the editor's stop bar is only a way of
-// setting them.
+// Gradients of stops, as every layer with a gradient has them: up to
+// STOP_COUNT stops, each an ordinary colour setting and an ordinary position
+// setting, so that any of them can follow the music; the editor's stop bar is
+// only a way of setting them. Between stops, colours blend evenly, in OKLab,
+// which is true to colours near each other; or round the colour wheel, in
+// OKLCH, which keeps colours far apart rich through the hues between them,
+// where OKLab would pass close to grey.
 //
-// Each frame the gradient is made into a table of 256 colours, by brightness,
-// with the shift, hue shift and range already in it; drawing then only looks
-// pixels up in it.
+// And the gradient map: each pixel's brightness looked up in such a gradient,
+// so that dark parts take the first colours and bright parts the last. Each
+// frame the gradient is made into a table of 256 colours, with the shift, hue
+// shift and range already in it; drawing then only looks pixels up in it. The
+// noise layer colours its patterns the same way.
 //
 // Kept free of Node imports: the window draws with it.
 
-import { turnHue, type Colour } from './colour.ts';
+import { blendOklab, blendOklch, turnHue, type Colour } from './colour.ts';
 
 /** How many stops a gradient of settings has, as colour1…colour5 and position1…position5. */
 export const STOP_COUNT = 5;
@@ -40,12 +43,18 @@ export function stopsOf(colour: (n: number) => Colour | null, position: (n: numb
   return stops.map((stop, i) => ({ stop, i })).sort((a, b) => a.stop.position - b.stop.position || a.i - b.i).map(({ stop }) => stop);
 }
 
+/** The two ways a gradient blends between its stops, as its Blend setting names them. */
+export const STOP_BLENDS = ['even', 'round the colour wheel'] as const;
+
+/** How two stops' colours blend: evenly, or round the colour wheel. */
+const blender = (wheel: boolean) => (wheel ? blendOklch : blendOklab);
+
 /**
  * The gradient's colour at `t`, 0 to 1: the first stop's colour before it,
- * the last's after it, and in between blended in straight lines, as the
- * canvas blends a gradient. Transparency blends as well, without darkening.
+ * the last's after it, and in between blended in OKLab, or round the colour
+ * wheel. Transparency blends as well, without darkening.
  */
-export function gradientAt(stops: Stop[], t: number): Colour {
+export function gradientAt(stops: Stop[], t: number, wheel = false): Colour {
   if (stops.length === 0) return { r: 0, g: 0, b: 0, a: 0 };
   if (t <= stops[0].position) return stops[0].colour;
   const last = stops[stops.length - 1];
@@ -54,11 +63,44 @@ export function gradientAt(stops: Stop[], t: number): Colour {
   while (stops[i].position < t) i++;
   const [from, to] = [stops[i - 1], stops[i]];
   const span = to.position - from.position;
-  const f = span > 0 ? (t - from.position) / span : 1;
-  const a = from.colour.a + (to.colour.a - from.colour.a) * f;
-  // Mixed with each colour weighed by how much of it shows, so that fading to nothing does not fade through black.
-  const mix = (key: 'r' | 'g' | 'b') => (a > 0 ? (from.colour[key] * from.colour.a * (1 - f) + to.colour[key] * to.colour.a * f) / a : 0);
-  return { r: mix('r'), g: mix('g'), b: mix('b'), a };
+  return blender(wheel)(from.colour, to.colour, span > 0 ? (t - from.position) / span : 1);
+}
+
+/** Stops with every colour turned round the colour wheel, in degrees. */
+export const turnStops = (stops: Stop[], degrees: number): Stop[] =>
+  degrees ? stops.map((stop) => ({ ...stop, colour: turnHue(stop.colour, degrees) })) : stops;
+
+/**
+ * The stops a canvas gradient is given for these, which blends between its
+ * stops in red, green and blue: several between each two, so that it follows
+ * OKLab, or the colour wheel, closely. A gradient that goes round (`wrap`, a conic one) blends from
+ * its last stop back to its first. A stop's place held by two (a hard edge)
+ * stays hard.
+ */
+export function canvasStops(stops: Stop[], wrap = false, wheel = false): [number, Colour][] {
+  const blend = blender(wheel);
+  if (stops.length === 0) return [];
+  if (stops.length === 1) return [[0, stops[0].colour], [1, stops[0].colour]];
+  const pieces = 8;
+  const out: [number, Colour][] = [];
+  const segment = (from: Stop, to: Stop, start: number, end: number) => {
+    for (let k = 0; k <= pieces; k++) out.push([start + ((end - start) * k) / pieces, blend(from.colour, to.colour, k / pieces)]);
+  };
+  for (let i = 0; i + 1 < stops.length; i++) segment(stops[i], stops[i + 1], stops[i].position, stops[i + 1].position);
+  if (wrap) {
+    const [first, last] = [stops[0], stops[stops.length - 1]];
+    const span = first.position + 1 - last.position;
+    if (span > 0) {
+      // Round past 1 and on from 0: the part past 1 goes to the start, and the colour where it crosses ends one and starts the other.
+      const crossing = blend(last.colour, first.colour, (1 - last.position) / span);
+      const before = out.length;
+      segment(last, first, last.position, first.position + 1);
+      const round = out.splice(before);
+      out.push(...round.filter(([at]) => at <= 1), [1, crossing]);
+      out.unshift([0, crossing], ...round.filter(([at]) => at > 1).map(([at, c]) => [at - 1, c] as [number, Colour]));
+    }
+  }
+  return out.map(([at, c]) => [Math.min(1, Math.max(0, at)), c] as [number, Colour]);
 }
 
 export interface GradientMapOptions {
@@ -69,6 +111,8 @@ export interface GradientMapOptions {
   /** The brightnesses that take the gradient's two ends; below and above them, its end colours. */
   low: number;
   high: number;
+  /** Blended round the colour wheel rather than evenly. */
+  wheel?: boolean;
 }
 
 /**
@@ -78,7 +122,7 @@ export interface GradientMapOptions {
  */
 export function gradientMapTable(stops: Stop[], options: GradientMapOptions): Uint8ClampedArray | null {
   if (stops.length === 0) return null;
-  const turned = options.hueShift ? stops.map((stop) => ({ ...stop, colour: turnHue(stop.colour, options.hueShift) })) : stops;
+  const turned = turnStops(stops, options.hueShift);
   const table = new Uint8ClampedArray(256 * 4);
   const { low, high, shift } = options;
   for (let i = 0; i < 256; i++) {
@@ -90,7 +134,7 @@ export function gradientMapTable(stops: Stop[], options: GradientMapOptions): Ui
       const u = (((t + shift) % 2) + 2) % 2;
       t = u <= 1 ? u : 2 - u;
     }
-    const c = gradientAt(turned, t);
+    const c = gradientAt(turned, t, options.wheel);
     table[i * 4] = c.r * 255;
     table[i * 4 + 1] = c.g * 255;
     table[i * 4 + 2] = c.b * 255;

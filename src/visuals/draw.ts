@@ -7,7 +7,7 @@
 //
 // Kept free of Node imports; it runs in a window.
 
-import { fromHsl, mixColours, parseHex, turnHue, whiteBalance, type Colour } from './colour.ts';
+import { fromHsl, parseHex, whiteBalance, type Colour } from './colour.ts';
 import { BAND_COUNT, HIGHEST_HZ, LOWEST_HZ } from '../features.ts';
 import type { Values } from './expression.ts';
 import { fontStack } from './fonts.ts';
@@ -17,7 +17,7 @@ import { applyLut, scalingLut, type Lut } from './lut.ts';
 import { lengthOf, shapeOutline } from './outline.ts';
 import { covered, kindNumber, NOISE_SHADER, noiseValue, seedBits, type NoiseOptions } from './noise.ts';
 import { DISPLACE_SHADER, displacementAt, modeNumber, type Displacement } from './displace.ts';
-import { brightnessOf, gradientMapTable, stopsOf } from './gradient-map.ts';
+import { brightnessOf, canvasStops, gradientAt, gradientMapTable, stopsOf, turnStops, type Stop } from './gradient-map.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -126,6 +126,17 @@ const BLENDS: Record<string, GlobalCompositeOperation> = {
   overlay: 'overlay', 'soft light': 'soft-light', 'hard light': 'hard-light', difference: 'difference', exclusion: 'exclusion',
   hue: 'hue', saturation: 'saturation', colour: 'color', luminosity: 'luminosity',
 };
+
+/** A layer's gradient: its stops in use (gradient-map.ts), in order. */
+const stopsIn = (params: ResolvedParams): Stop[] => stopsOf((n) => col(params, `colour${n}`), (n) => num(params, `position${n}`));
+
+/** Whether a layer's gradient blends round the colour wheel rather than evenly. */
+const wheelIn = (params: ResolvedParams) => str(params, 'stopBlend') === 'round the colour wheel';
+
+/** Gives a canvas gradient a layer's stops, closely following their blending; going round, for a conic one. */
+function giveStops(gradient: CanvasGradient, stops: Stop[], params: ResolvedParams, wrap = false) {
+  for (const [at, colour] of canvasStops(stops, wrap, wheelIn(params))) gradient.addColorStop(at, hexOf(colour));
+}
 
 const num = (params: ResolvedParams, key: string) => (typeof params[key] === 'number' ? (params[key] as number) : 0);
 const str = (params: ResolvedParams, key: string) => String(params[key] ?? '');
@@ -633,10 +644,8 @@ export class FrameDrawer {
   #gradient(params: ResolvedParams, frame: Frame) {
     const ctx = this.#ctx;
     const { width, height } = this.#canvas;
-    const shift = num(params, 'hueShift') * frame.seconds;
-    const colours = ['colour1', 'colour2', 'colour3'].map((key) => col(params, key)).filter((c): c is Colour => c !== null)
-      .map((c) => (shift ? turnHue(c, shift) : c));
-    if (colours.length === 0) return;
+    const stops = turnStops(stopsIn(params), num(params, 'hueShift') * frame.seconds);
+    if (stops.length === 0) return;
     const angle = ((num(params, 'angle') + num(params, 'drift') * frame.seconds) * Math.PI) / 180;
     const cx = (num(params, 'x') / 100) * width;
     const cy = (num(params, 'y') / 100) * height;
@@ -646,8 +655,7 @@ export class FrameDrawer {
     if (kind === 'radial') gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, reach);
     else if (kind === 'conic') gradient = ctx.createConicGradient(angle, cx, cy);
     else gradient = ctx.createLinearGradient(cx - Math.cos(angle) * reach, cy - Math.sin(angle) * reach, cx + Math.cos(angle) * reach, cy + Math.sin(angle) * reach);
-    const stops = kind === 'conic' ? [...colours, colours[0]] : colours;
-    stops.forEach((c, i) => gradient.addColorStop(stops.length === 1 ? 0 : i / (stops.length - 1), hexOf(c)));
+    giveStops(gradient, stops, params, kind === 'conic');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, width, height);
   }
@@ -957,11 +965,13 @@ export class FrameDrawer {
 
     const w = (num(params, 'width') / 100) * width;
     const h = (num(params, 'height') / 100) * height;
-    const lowColour = col(params, 'colourLow') ?? fromHsl(150, 0.7, 0.55);
-    const highColour = col(params, 'colourHigh') ?? lowColour;
+    // With no stop in use, a green, rather than nothing.
+    const stops = stopsIn(params);
+    if (stops.length === 0) stops.push({ colour: fromHsl(150, 0.7, 0.55), position: 0 });
     const colouring = str(params, 'colouring');
+    const wheel = wheelIn(params);
     const colourOf = (i: number, value: number) =>
-      colouring === 'one colour' ? lowColour : mixColours(lowColour, highColour, colouring === 'by height' ? value : i / Math.max(1, bars - 1));
+      colouring === 'one colour' ? stops[0].colour : gradientAt(stops, colouring === 'by height' ? value : i / Math.max(1, bars - 1), wheel);
     const gap = Math.max(0, Math.min(0.9, num(params, 'gap') / 100));
     const mirrored = params.mirrored === true;
     const rounded = params.rounded === true;
@@ -1100,11 +1110,10 @@ export class FrameDrawer {
     const whole = new Path2D();
     for (const contour of contours) whole.addPath(pathOf(contour));
 
-    const fillColour = col(params, 'fillColour');
-    let fill: string | CanvasGradient | null = fillColour ? hexOf(fillColour) : null;
+    const stops = stopsIn(params);
     const kind = str(params, 'fill');
-    const second = col(params, 'fillColour2');
-    if (fillColour && second && kind !== 'one colour') {
+    let fill: string | CanvasGradient | null = stops.length ? hexOf(stops[0].colour) : null;
+    if (stops.length > 1 && kind !== 'one colour') {
       let gradient: CanvasGradient;
       if (kind === 'radial gradient') gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(w, h) / 2);
       else {
@@ -1114,8 +1123,7 @@ export class FrameDrawer {
         const reach = (Math.abs(dx) * w + Math.abs(dy) * h) / 2;
         gradient = ctx.createLinearGradient(-dx * reach, -dy * reach, dx * reach, dy * reach);
       }
-      gradient.addColorStop(0, hexOf(fillColour));
-      gradient.addColorStop(1, hexOf(second));
+      giveStops(gradient, stops, params);
       fill = gradient;
     }
     const outlineColour = col(params, 'outlineColour');
@@ -1232,10 +1240,9 @@ export class FrameDrawer {
     // Drifting moves its middle across the picture, so the pattern goes the way the direction says, at its speed.
     const way = (num(params, 'direction') * Math.PI) / 180;
     const travelled = (num(params, 'drift') / 100) * this.#unit * frame.seconds;
-    const colourOf = (key: string): [number, number, number, number] => {
-      const c = col(params, key);
-      return c ? [c.r, c.g, c.b, c.a] : [0, 0, 0, 0];
-    };
+    // The gradient as a table of 256 colours, by the pattern's value, as a gradient map has it.
+    const table = gradientMapTable(stopsIn(params), { shift: 0, hueShift: 0, low: 0, high: 1, wheel: wheelIn(params) });
+    if (!table) return;
     const look: NoiseLook = {
       origin: [(num(params, 'x') / 100) * width + Math.cos(way) * travelled, (num(params, 'y') / 100) * height + Math.sin(way) * travelled],
       axes: [cos, -sin, sin, cos],
@@ -1243,7 +1250,7 @@ export class FrameDrawer {
       options: { kind: str(params, 'kind'), detail: num(params, 'detail'), roughness: num(params, 'roughness'), warp: num(params, 'warp'), seed: num(params, 'seed') },
       coverage: num(params, 'coverage'),
       softness: num(params, 'softness'),
-      colours: [colourOf('colour1'), colourOf('colour2'), colourOf('colour3')],
+      table,
     };
     if (this.#noiseGl === undefined) this.#noiseGl = NoiseGl.make();
     const picture = this.#noiseGl?.draw(width, height, look) ?? this.#noiseOnProcessor(look);
@@ -1266,24 +1273,19 @@ export class FrameDrawer {
     const o = out.getContext('2d')!;
     const image = o.createImageData(w, h);
     const [a, b, c, d] = look.axes;
-    const [low, high, highest] = look.colours;
-    const premultiplied = (colour: number[]) => [colour[0] * colour[3], colour[1] * colour[3], colour[2] * colour[3], colour[3]];
-    const [pa, pb, pc] = [premultiplied(low), premultiplied(high), premultiplied(highest)];
-    const mix = (from: number[], to: number[], t: number) => from.map((v, i) => v + (to[i] - v) * t);
+    const table = look.table;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         // The middle of the block of pixels this one stands for, as the card takes the middle of each.
         const vx = (x + 0.5) * step - look.origin[0];
         const vy = (y + 0.5) * step - look.origin[1];
         const value = covered(noiseValue(a * vx + c * vy, b * vx + d * vy, look.time, look.options), look.coverage, look.softness);
-        const colour = highest[3] > 0 ? (value < 0.5 ? mix(pa, pb, value * 2) : mix(pb, pc, value * 2 - 1)) : mix(pa, pb, value);
+        // Between the table's two nearest entries, as the card reads it; the table is not premultiplied, as the canvas takes it.
+        const at = value * 255;
+        const k = Math.min(254, Math.floor(at));
+        const f = at - k;
         const i = (y * w + x) * 4;
-        // The canvas takes colours as they are, not premultiplied.
-        const alpha = colour[3];
-        image.data[i] = alpha > 0 ? (colour[0] / alpha) * 255 : 0;
-        image.data[i + 1] = alpha > 0 ? (colour[1] / alpha) * 255 : 0;
-        image.data[i + 2] = alpha > 0 ? (colour[2] / alpha) * 255 : 0;
-        image.data[i + 3] = alpha * 255;
+        for (let ch = 0; ch < 4; ch++) image.data[i + ch] = table[k * 4 + ch] * (1 - f) + table[(k + 1) * 4 + ch] * f;
       }
     }
     o.putImageData(image, 0, 0);
@@ -1400,7 +1402,7 @@ export class FrameDrawer {
   /** Gradient map: each pixel of the picture beneath recoloured by its brightness, from a table made for this frame. */
   #gradientMap(params: ResolvedParams) {
     const stops = stopsOf((n) => col(params, `colour${n}`), (n) => num(params, `position${n}`));
-    const table = gradientMapTable(stops, { shift: num(params, 'shift'), hueShift: num(params, 'hueShift'), low: num(params, 'low'), high: num(params, 'high') });
+    const table = gradientMapTable(stops, { shift: num(params, 'shift'), hueShift: num(params, 'hueShift'), low: num(params, 'low'), high: num(params, 'high'), wheel: wheelIn(params) });
     if (!table) return;
     const { width, height } = this.#canvas;
     if (this.#gradientMapGl === undefined) this.#gradientMapGl = GradientMapGl.make();
@@ -2019,6 +2021,7 @@ class NoiseGl {
   readonly #canvas: OffscreenCanvas;
   readonly #gl: WebGL2RenderingContext;
   readonly #program: WebGLProgram;
+  readonly #table: WebGLTexture;
   readonly #uniforms = new Map<string, WebGLUniformLocation | null>();
 
   static make(): NoiseGl | null {
@@ -2031,7 +2034,14 @@ class NoiseGl {
 
   constructor() {
     [this.#canvas, this.#gl] = glCanvas();
-    this.#program = glProgram(this.#gl, NOISE_SHADER);
+    const gl = this.#gl;
+    this.#program = glProgram(gl, NOISE_SHADER);
+    // The gradient's table, read between its entries.
+    this.#table = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, this.#table);
+    for (const [name, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) {
+      gl.texParameteri(gl.TEXTURE_2D, name, value);
+    }
   }
 
   #at(name: string): WebGLUniformLocation | null {
@@ -2060,7 +2070,10 @@ class NoiseGl {
     gl.uniform1ui(this.#at('seed'), seedBits(look.options.seed));
     gl.uniform1f(this.#at('coverage'), look.coverage);
     gl.uniform1f(this.#at('softness'), look.softness);
-    look.colours.forEach((c, i) => gl.uniform4fv(this.#at(`colour${i + 1}`), c));
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#table);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(look.table.buffer, look.table.byteOffset, look.table.byteLength));
+    gl.uniform1i(this.#at('table'), 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
   }
@@ -2220,8 +2233,8 @@ interface NoiseLook {
   options: NoiseOptions;
   coverage: number;
   softness: number;
-  /** Low, high and highest, as red, green, blue and alpha from 0 to 1; alpha 0 for none. */
-  colours: [number, number, number, number][];
+  /** The gradient's 256 colours by value, not premultiplied (gradientMapTable). */
+  table: Uint8ClampedArray;
 }
 
 /**

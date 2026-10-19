@@ -129,7 +129,7 @@
   await until(() => document.querySelector('.stop-track'));
   const stops = document.querySelector('.stop-bar').parentElement;
   stops.scrollIntoView({ block: 'start' });
-  await shot('gradient-map.png', [document.querySelector('.stop-bar'), stops.querySelector('.setting[data-key="position3"]')]);
+  await shot('gradient-map.png', [document.querySelector('.stop-bar'), stops.querySelector('.setting[data-key="stopBlend"]')]);
   $('editor-delete').click();
   await w(300);
   $('editor-tab-fields').click();

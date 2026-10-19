@@ -136,7 +136,7 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
     const n = free + 1;
     const box = track.getBoundingClientRect();
     const at = Math.round(Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)) * 1000) / 1000;
-    const colour = gradientAt(stops(), at);
+    const colour = gradientAt(stops(), at, wheel());
     context.set({ [`colour${n}`]: toHex(colour), [`position${n}`]: at });
     context.refresh(`colour${n}`);
     context.refresh(`position${n}`);
@@ -144,13 +144,15 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
   });
 
   const stops = () => stopsOf((n) => now(n).colour, (n) => now(n).position);
+  const wheel = () => (context.live()?.stopBlend ?? given('stopBlend')) === 'round the colour wheel';
 
   let last = '';
   function draw() {
     const shown = stops();
     const css = shown.length === 0 ? 'transparent'
       : shown.length === 1 ? cssColour(shown[0].colour)
-      : `linear-gradient(to right, ${shown.map((stop) => `${cssColour(stop.colour)} ${(stop.position * 100).toFixed(2)}%`).join(', ')})`;
+      // Blended as it will be drawn: CSS blends in OKLab or OKLCH when asked, the shorter way round as the drawing does.
+      : `linear-gradient(${wheel() ? 'in oklch shorter hue' : 'in oklab'} to right, ${shown.map((stop) => `${cssColour(stop.colour)} ${(stop.position * 100).toFixed(2)}%`).join(', ')})`;
     const free = items.some((_, i) => plainColour(i + 1) === '');
     track.classList.toggle('full', !free);
     track.title = free ? 'Click to add a stop here' : 'Five stops at most: drag one away from the bar to take it out';

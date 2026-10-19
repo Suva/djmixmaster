@@ -6,11 +6,17 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Gradients of up to five colours, set on a bar.** The Gradient, Noise,
+  Spectrum and Shape layers take a gradient of up to five stops, set on a
+  bar in the editor as in a photo editor: drag a stop to move it, click the
+  bar to add one, drag one away to take it out. Each stop's colour and place
+  can also follow the music. Colours blend evenly, or round the colour wheel
+  through the hues between them, as the spectrum always did. Templates made
+  before are brought over by themselves; gradients' middles may look a
+  little brighter and richer.
 - **A Gradient map layer.** Recolours everything beneath it by brightness,
   from shadows to highlights, through up to five colours: a duotone, or any
-  palette. Its colours are set on a bar in the editor, as in a photo editor:
-  drag a stop to move it, click the bar to add one, drag one away to take it
-  out. The colours can slide along it, or each follow the music.
+  palette. The colours can slide along it, or each follow the music.
 - **A Displace layer.** Moves the picture beneath about: wobbling with
   noise, waving like a flag, rippling out from a point, swirled round it, or
   bulged and pinched as through a lens, with an optional colour split. Its
@@ -19,10 +25,10 @@ are under "Not released yet" and appear there once they are.
   the edges keeps the frame's edges still and eases the movement in from
   them.
 - **A Noise layer.** Patterns that slowly change and drift: clouds,
-  turbulence, ridges, cells, cell edges, marble and plasma, in two or three
-  colours. Warp bends them into smoke and liquid; Coverage cuts them down to
-  patches, such as scattered clouds; and a colour left empty is see-through,
-  so clouds can float over a video.
+  turbulence, ridges, cells, cell edges, marble and plasma, coloured by a
+  gradient. Warp bends them into smoke and liquid; Coverage cuts them down
+  to patches, such as scattered clouds; and a see-through colour lets what
+  is beneath show, so clouds can float over a video.
 - **A White balance layer.** Warms or cools the colours beneath it and moves
   them towards green or magenta, to correct a photo or video taken under the
   wrong light. Put it in a group with a picture to change only that picture.
