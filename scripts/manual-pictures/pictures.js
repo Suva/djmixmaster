@@ -123,6 +123,15 @@
   styles.scrollIntoView({ block: 'center' });
   await shot('styles.png', styles.parentElement);
   styles.parentElement.open = false;
+  // A gradient map's stop bar, on a layer added for it and deleted after.
+  $('editor-add').click();
+  document.querySelector('#editor-add-menu button[data-type="gradientMap"]').click();
+  await until(() => document.querySelector('.stop-track'));
+  const stops = document.querySelector('.stop-bar').parentElement;
+  stops.scrollIntoView({ block: 'start' });
+  await shot('gradient-map.png', [document.querySelector('.stop-bar'), stops.querySelector('.setting[data-key="position3"]')]);
+  $('editor-delete').click();
+  await w(300);
   $('editor-tab-fields').click();
   await shot('fields.png', $('editor-fields-pane'));
   $('editor-tab-about').click();

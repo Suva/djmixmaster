@@ -124,6 +124,14 @@ export const STYLE_PARAMS: Record<string, ParamSpec> = {
   innerGlowChoke: number('Choke', 0, 0, 1),
 };
 
+/** A gradient's stops as settings: a colour, empty for a stop not used, and a place, 0 to 1, evenly spread to start with. */
+function stopParams(colours: string[]): Record<string, ParamSpec> {
+  return Object.fromEntries(colours.flatMap((value, i) => [
+    [`colour${i + 1}`, colour(`Stop ${i + 1}`, value)],
+    [`position${i + 1}`, number(`Stop ${i + 1} at`, i / (colours.length - 1), 0, 1)],
+  ]));
+}
+
 /** The shapes a shape layer draws. Pentagon to octagon are polygons with that many sides; "polygon" takes them from its setting. */
 export const SHAPE_KINDS = [
   'rectangle', 'ellipse', 'ring', 'triangle', 'diamond', 'pentagon', 'hexagon', 'octagon', 'polygon', 'star', 'cross', 'arrow', 'heart',
@@ -143,6 +151,11 @@ export interface LayerSpec {
   params: Record<string, ParamSpec>;
   /** Which of the settings every layer has apply; all of them when not given. */
   common?: string[];
+  /**
+   * Its settings colour1…colour5 and position1…position5 are a gradient's
+   * stops (gradient-map.ts), which the editor shows as a bar to drag them on.
+   */
+  stops?: boolean;
 }
 
 /** The kinds of layer, with the parameters of each besides the common ones. The first set; see VISUALS.md for more. */
@@ -426,6 +439,20 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       holdMargin: number('Held over, from the edges', 10, 0, 50, '%'),
     },
     common: ['visible', 'opacity', 'blend', 'x', 'y', 'from', 'until', 'fadeIn', 'fadeOut'],
+  },
+  gradientMap: {
+    label: 'Gradient map',
+    description: 'Recolours the picture beneath by its brightness: dark parts take the gradient\'s first colours, bright parts its last. Two colours make a duotone; more, any palette. The colours can slide along it with the music.',
+    effect: true,
+    stops: true,
+    params: {
+      shift: number('Shift', 0, 0, 1),
+      hueShift: number('Hue shift', 0, -180, 180, '°'),
+      low: number('Darkest from brightness', 0, 0, 1),
+      high: number('Brightest from brightness', 1, 0, 1),
+      ...stopParams(['#140a33', '', '#ff4fa0', '', '#ffe8a8']),
+    },
+    common: ['visible', 'opacity', 'blend', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
   whiteBalance: {
     label: 'White balance',

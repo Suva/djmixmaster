@@ -1,5 +1,6 @@
-// Tests of noise and displace layers in the window: that the graphics card
-// draws what the processor works out. See window.test.ts for how these run.
+// Tests of the layers drawn on the graphics card (noise, displace, gradient
+// map): that the window draws what the processor works out. And the gradient
+// map's stop bar in the editor. See window.test.ts for how these run.
 
 import assert from 'node:assert/strict';
 import { rm, writeFile } from 'node:fs/promises';
@@ -7,6 +8,8 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { NOISE_KINDS, noiseValue } from '../src/visuals/noise.ts';
 import { DISPLACE_MODES, displacementAt } from '../src/visuals/displace.ts';
+import { gradientMapTable } from '../src/visuals/gradient-map.ts';
+import { parseHex } from '../src/visuals/colour.ts';
 import { writeSyntheticMix } from './synthetic-mix.ts';
 import { dataFolder, electronPath, runApp, workFolder } from './window-app.ts';
 
@@ -168,4 +171,111 @@ test('every mode of displace, and the edges held, move the picture as the proces
       assert.ok(Math.abs(found - (x + dx)) <= 6, `${name} at ${px}, ${py}: read from column ${found.toFixed(1)}, worked out ${(x + dx).toFixed(1)}`);
     });
   });
+});
+
+test('a gradient map recolours each pixel by its brightness, as its table says', { skip }, async () => {
+  // Grey from black to white beneath, then red in the shadows through to blue in the highlights.
+  const file = join(work, 'Map.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 2, name: 'Map', fields: [{ key: 'n', label: 'Shown', kind: 'number', default: 0, min: 0, max: 1 }],
+    layers: [
+      { type: 'gradient', params: { kind: 'linear', angle: 0, colour1: '#000000', colour2: '#ffffff' } },
+      { type: 'gradientMap', params: { visible: 'n == 1', colour1: '#ff0000', position1: 0.1, colour2: '', colour3: '#ffff00', position3: 0.5, colour4: '', colour5: '#0000ff', position5: 0.9, low: 0.1 } },
+    ],
+  }));
+  const data = await dataFolder(work, analysed);
+  const seen = await runApp({ recording: mix, data, template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Map', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const row = () => {
+      const pixels = picture.getContext('2d')!.getImageData(0, Math.floor(picture.height / 2), picture.width, 1).data;
+      return Array.from({ length: 9 }, (_, i) => [...pixels.slice(Math.floor(((i + 0.5) / 9) * picture.width) * 4, Math.floor(((i + 0.5) / 9) * picture.width) * 4 + 3)]);
+    };
+    await page.until(() => row()[8][0] > 200, 'the grey to be drawn');
+    const grey = row();
+    const field = page.element<HTMLInputElement>('field-n');
+    field.value = '1';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await page.until(() => row()[8][2] > 200 && row()[8][0] < 50, 'the map to be drawn');
+    await page.wait(200);
+    return { grey, mapped: row() };
+  });
+  const table = gradientMapTable([
+    { colour: parseHex('#ff0000')!, position: 0.1 }, { colour: parseHex('#ffff00')!, position: 0.5 }, { colour: parseHex('#0000ff')!, position: 0.9 },
+  ], { shift: 0, hueShift: 0, low: 0.1, high: 1 })!;
+  seen.grey.forEach(([g], i) => {
+    const want = [...table.slice(g * 4, g * 4 + 3)];
+    seen.mapped[i].forEach((v, c) => assert.ok(Math.abs(v - want[c]) <= 3, `grey ${g} became ${seen.mapped[i]}, should be ${want}`));
+  });
+});
+
+test('a gradient map\'s stops are dragged, added and taken out on its bar, and undone', { skip }, async () => {
+  const file = join(work, 'Stops.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 2, name: 'Stops', fields: [],
+    layers: [
+      { type: 'gradient', params: { kind: 'linear', angle: 0, colour1: '#000000', colour2: '#ffffff' } },
+      { type: 'gradientMap', params: { colour1: '#ff0000', position1: 0, colour2: '', colour3: '', colour4: '', colour5: '#0000ff', position5: 1 } },
+    ],
+  }));
+  const data = await dataFolder(work, analysed);
+  const seen = await runApp({ recording: mix, data, template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Stops', 'the template to be added');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Gradient map')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await page.until(() => document.querySelector('.stop-track') !== null, 'the stop bar');
+    const track = document.querySelector<HTMLElement>('.stop-track')!;
+    const shown = () => [...document.querySelectorAll<HTMLElement>('.stop-marker')].filter((m) => !m.hidden).map((m) => Number(m.dataset.stop));
+    const number = (key: string) => Number(document.querySelector<HTMLInputElement>(`#editor-layer .setting[data-key="${key}"] input[type="number"]`)!.value);
+    const colour = (key: string) => document.querySelector(`#editor-layer .setting[data-key="${key}"] .colour-code`)!.textContent;
+    const drag = (marker: HTMLElement, x: number, y: number) => {
+      const box = marker.getBoundingClientRect();
+      const [sx, sy] = [box.left + box.width / 2, box.top + box.height / 2];
+      marker.dispatchEvent(new PointerEvent('pointerdown', { clientX: sx, clientY: sy, bubbles: true }));
+      for (const part of [0.3, 0.7, 1]) window.dispatchEvent(new PointerEvent('pointermove', { clientX: sx + (x - sx) * part, clientY: sy + (y - sy) * part }));
+      window.dispatchEvent(new PointerEvent('pointerup', { clientX: x, clientY: y }));
+    };
+    const marker = (n: number) => document.querySelector<HTMLElement>(`.stop-marker[data-stop="${n}"]`)!;
+    const at = (f: number) => { const box = track.getBoundingClientRect(); return [box.left + box.width * f, box.top + box.height / 2]; };
+    const first = shown();
+
+    // Stop 1 dragged a quarter of the way along.
+    drag(marker(1), at(0.25)[0], at(0.25)[1]);
+    await page.wait(50);
+    const dragged = number('position1');
+
+    // A click on the bar adds the first stop not in use, there, in the colour the gradient has there.
+    const [cx, cy] = at(0.6);
+    track.dispatchEvent(new MouseEvent('click', { clientX: cx, clientY: cy, bubbles: true }));
+    await page.wait(50);
+    const added = { shown: shown(), at: number('position2'), colour: colour('colour2') };
+
+    // Dragged well below the bar, it is taken out; undo puts it back.
+    await page.wait(1100);
+    drag(marker(2), at(0.6)[0], at(0.6)[1] + 80);
+    await page.wait(50);
+    const removed = { shown: shown(), colour: colour('colour2') };
+    await page.wait(1100);
+    page.click('undo');
+    await page.wait(300);
+    const back = shown();
+    page.click('editor-done');
+    return { first, dragged, added, removed, back };
+  });
+  assert.deepEqual(seen.first, [1, 5]);
+  assert.ok(Math.abs(seen.dragged - 0.25) < 0.02, `dragged to ${seen.dragged}`);
+  assert.deepEqual(seen.added.shown, [1, 2, 5]);
+  assert.ok(Math.abs(seen.added.at - 0.6) < 0.02, `added at ${seen.added.at}`);
+  assert.match(seen.added.colour ?? '', /^#[0-9a-f]{6}$/, `added in ${seen.added.colour}`);
+  assert.deepEqual(seen.removed, { shown: [1, 5], colour: 'None' });
+  assert.deepEqual(seen.back, [1, 2, 5]);
 });

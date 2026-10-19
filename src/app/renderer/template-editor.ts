@@ -772,6 +772,8 @@ export class TemplateEditor {
     const context: Parameters<typeof layerSettings>[1] = {
       template: () => this.#template!,
       set: (key, value) => this.#change(kindOf(key), () => (layer.params[key] = value)),
+      // Changes of the same settings close together are one step, as a drag of a stop is.
+      setMany: (values) => this.#change(kindOf(Object.keys(values).join('+')), () => Object.assign(layer.params, values)),
       pack: (key, name, data) => this.#change('', (template) => {
         template.assets = { ...template.assets, [name]: data };
         layer.params[key] = `asset:${name}`;

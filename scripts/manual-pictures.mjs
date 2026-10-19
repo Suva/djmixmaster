@@ -77,6 +77,7 @@ const LAYERS = {
   glitch: [...scene, { type: 'glitch', params: { amount: 1, shift: 10 } }],
   adjust: [...scene, { type: 'adjust', params: { brightness: 1.25, contrast: 1.7 } }],
   hue: [...scene, { type: 'hue', params: { hue: 140, saturation: 1.6 } }],
+  gradientMap: [...scene, { type: 'gradientMap', params: { colour1: '#0b1a3a', colour2: '', colour3: '#2fbfa8', colour4: '', colour5: '#fff3c4' } }],
   displace: [...scene, { type: 'displace', params: { mode: 'swirl', twist: 160, radius: 55, y: 45 } }],
   whiteBalance: [...scene, { type: 'whiteBalance', params: { temperature: -0.8, tint: -0.3 } }],
   kaleidoscope: [...scene, { type: 'kaleidoscope', params: { segments: 8 } }],

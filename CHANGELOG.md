@@ -6,6 +6,11 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A Gradient map layer.** Recolours everything beneath it by brightness,
+  from shadows to highlights, through up to five colours: a duotone, or any
+  palette. Its colours are set on a bar in the editor, as in a photo editor:
+  drag a stop to move it, click the bar to add one, drag one away to take it
+  out. The colours can slide along it, or each follow the music.
 - **A Displace layer.** Moves the picture beneath about: wobbling with
   noise, waving like a flag, rippling out from a point, swirled round it, or
   bulged and pinched as through a lens, with an optional colour split. Its

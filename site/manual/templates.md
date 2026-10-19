@@ -40,6 +40,12 @@ A layer's settings are the ones of its kind, then those every layer has: where i
 - The **∿** button beside a setting makes it [move with the music](formulas.md#moves-with).
 - The **ƒ** button turns a setting into a [formula](formulas.md).
 
+### Gradients
+
+A gradient map's colours are shown as a bar above its settings, as in a photo editor. Drag a stop's marker to move it, click it to choose its colour, click the bar to add a stop there (five at most), or drag a marker away from the bar to take it out. Each stop is also an ordinary colour and position below the bar, so it can follow the music: a stop whose place follows a formula moves on the bar by itself, and is set below rather than dragged.
+
+![A gradient map's stops on their bar](pictures/gradient-map.png)
+
 The editor has its own undo while it is open: ⌘Z (Ctrl+Z) undoes changes to the template.
 
 {{shortcuts: Editing a video template}}

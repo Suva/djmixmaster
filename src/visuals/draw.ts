@@ -17,6 +17,7 @@ import { applyLut, scalingLut, type Lut } from './lut.ts';
 import { lengthOf, shapeOutline } from './outline.ts';
 import { covered, kindNumber, NOISE_SHADER, noiseValue, seedBits, type NoiseOptions } from './noise.ts';
 import { DISPLACE_SHADER, displacementAt, modeNumber, type Displacement } from './displace.ts';
+import { brightnessOf, gradientMapTable, stopsOf } from './gradient-map.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -319,6 +320,7 @@ export class FrameDrawer {
       case 'lut': this.#lut(params, frame); break;
       case 'whiteBalance': this.#whiteBalance(params); break;
       case 'displace': this.#displace(params, frame); break;
+      case 'gradientMap': this.#gradientMap(params); break;
     }
     into.restore();
     if (!alone) return;
@@ -1393,6 +1395,36 @@ export class FrameDrawer {
     ctx.restore();
   }
 
+  #gradientMapGl: GradientMapGl | null | undefined;
+
+  /** Gradient map: each pixel of the picture beneath recoloured by its brightness, from a table made for this frame. */
+  #gradientMap(params: ResolvedParams) {
+    const stops = stopsOf((n) => col(params, `colour${n}`), (n) => num(params, `position${n}`));
+    const table = gradientMapTable(stops, { shift: num(params, 'shift'), hueShift: num(params, 'hueShift'), low: num(params, 'low'), high: num(params, 'high') });
+    if (!table) return;
+    const { width, height } = this.#canvas;
+    if (this.#gradientMapGl === undefined) this.#gradientMapGl = GradientMapGl.make();
+    const result = this.#gradientMapGl?.apply(this.#surface, table, width, height);
+    if (result) return this.#putBack(result);
+    // On the processor: slower, the same colours.
+    const copy = this.#copyOfPicture();
+    const pixels = copy.getContext('2d')!.getImageData(0, 0, width, height);
+    const data = pixels.data;
+    for (let i = 0; i < data.length; i += 4) {
+      // Between the table's two nearest entries, as the card reads it.
+      const at = brightnessOf(data[i], data[i + 1], data[i + 2]);
+      const k = Math.min(254, Math.floor(at));
+      const f = at - k;
+      for (let c = 0; c < 4; c++) {
+        const v = table[k * 4 + c] * (1 - f) + table[(k + 1) * 4 + c] * f;
+        data[i + c] = c === 3 ? (v * data[i + 3]) / 255 : v;
+      }
+    }
+    const out = this.#extraCanvas(0);
+    out.getContext('2d')!.putImageData(pixels, 0, 0);
+    this.#putBack(out);
+  }
+
   #displaceGl: DisplaceGl | null | undefined;
 
   /** Displace: each pixel of the picture beneath read from a little way off, as displace.ts says; on the graphics card, or else on the processor. */
@@ -2029,6 +2061,77 @@ class NoiseGl {
     gl.uniform1f(this.#at('coverage'), look.coverage);
     gl.uniform1f(this.#at('softness'), look.softness);
     look.colours.forEach((c, i) => gl.uniform4fv(this.#at(`colour${i + 1}`), c));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
+  }
+}
+
+/** Recolours the picture by its brightness on the graphics card, from a table of 256 colours (gradient-map.ts). */
+class GradientMapGl {
+  readonly #canvas: OffscreenCanvas;
+  readonly #gl: WebGL2RenderingContext;
+  readonly #program: WebGLProgram;
+  readonly #picture: WebGLTexture;
+  readonly #table: WebGLTexture;
+
+  static make(): GradientMapGl | null {
+    try {
+      return typeof OffscreenCanvas === 'undefined' ? null : new GradientMapGl();
+    } catch {
+      return null;
+    }
+  }
+
+  constructor() {
+    [this.#canvas, this.#gl] = glCanvas();
+    const gl = this.#gl;
+    // The picture's pixels are read as they are, not premultiplied, and written back premultiplied, as the canvas keeps them.
+    // A brightness of 0 or 1 lands on the middle of the table's first or last entry, as the processor reads it.
+    this.#program = glProgram(gl, `#version 300 es
+      precision highp float;
+      uniform sampler2D picture;
+      uniform sampler2D table;
+      out vec4 colour;
+      void main() {
+        ivec2 at = ivec2(gl_FragCoord.xy);
+        at.y = textureSize(picture, 0).y - 1 - at.y;
+        vec4 c = texelFetch(picture, at, 0);
+        float b = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+        vec4 m = texture(table, vec2((b * 255.0 + 0.5) / 256.0, 0.5));
+        float a = m.a * c.a;
+        colour = vec4(m.rgb * a, a);
+      }`);
+    // The picture read pixel by pixel; the table between its entries. Without filters set, a texture reads as black.
+    this.#picture = gl.createTexture()!;
+    this.#table = gl.createTexture()!;
+    for (const [texture, filter] of [[this.#picture, gl.NEAREST], [this.#table, gl.LINEAR]] as const) {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      for (const [name, value] of [[gl.TEXTURE_MIN_FILTER, filter], [gl.TEXTURE_MAG_FILTER, filter], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) {
+        gl.texParameteri(gl.TEXTURE_2D, name, value);
+      }
+    }
+  }
+
+  /** The picture recoloured, on this class's canvas; null if the card could not do it. */
+  apply(source: Canvas, table: Uint8ClampedArray, width: number, height: number): OffscreenCanvas | null {
+    const gl = this.#gl;
+    if (gl.isContextLost()) return null;
+    if (this.#canvas.width !== width || this.#canvas.height !== height) {
+      this.#canvas.width = width;
+      this.#canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(this.#program);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.#table);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(table.buffer, table.byteOffset, table.byteLength));
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#picture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.uniform1i(gl.getUniformLocation(this.#program, 'picture'), 0);
+    gl.uniform1i(gl.getUniformLocation(this.#program, 'table'), 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
   }

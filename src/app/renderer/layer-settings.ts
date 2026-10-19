@@ -19,6 +19,7 @@ import type { FolderLut } from '../api.ts';
 import { lutPicker, type LutChoice } from './lut-picker.ts';
 import { fontPicker } from './font-picker.ts';
 import { scrubbableInput } from './scrub.ts';
+import { stopBar } from './stop-bar.ts';
 import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
 
 export interface LayerSettingsContext {
@@ -26,6 +27,8 @@ export interface LayerSettingsContext {
   template(): Template;
   /** Gives a setting of the layer a new value. */
   set(key: string, value: ParamValue): void;
+  /** Gives several settings new values, as one change; one at a time where it is not given. */
+  setMany?(values: Record<string, ParamValue>): void;
   /** Packs a picture into the template and gives the setting it. */
   pack(key: string, name: string, data: string): void;
   /** What the layer's settings came to in the frame last drawn, or null. */
@@ -129,6 +132,8 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
    * elsewhere: the opacity box above the layers, a drag on the picture.
    */
   const syncs = new Map<string, () => void>();
+  /** Each setting's way of showing its value again, after it was changed elsewhere: from a gradient's stop bar. */
+  const rebuilds = new Map<string, () => void>();
 
   const group = (title: string, keys: string[], open: boolean) => {
     const details = document.createElement('details');
@@ -590,6 +595,7 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
     }
 
     build();
+    rebuilds.set(key, build);
     return row;
   }
 
@@ -600,7 +606,21 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
     // A group of settings with none that apply (a layer group has no placement) is left out.
     const all = settingsOf(spec);
     const own = Object.keys(spec.params);
-    if (own.length) element.append(group(spec.label, own, true));
+    if (own.length) {
+      const details = group(spec.label, own, true);
+      // A gradient's stops as a bar to drag them on, above the settings it sets.
+      if (spec.stops) {
+        const bar = stopBar(layer, {
+          set: (values) => (context.setMany ? context.setMany(values) : Object.entries(values).forEach(([key, value]) => context.set(key, value))),
+          live: () => context.live(),
+          defaults: Object.fromEntries(Object.entries(all).map(([key, param]) => [key, param.default])),
+          refresh: (key) => rebuilds.get(key)?.(),
+        });
+        details.querySelector('summary')!.after(bar.element);
+        ticks.set('stop-bar', () => bar.tick());
+      }
+      element.append(details);
+    }
     for (const [title, keys, open] of GROUPS) if (keys.some((key) => all[key])) element.append(group(title, keys, open));
   }
   return {

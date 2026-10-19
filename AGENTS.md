@@ -47,6 +47,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
 | `src/visuals/noise.ts` | A noise layer's patterns, as a shader for the graphics card and the same steps in TypeScript |
 | `src/visuals/displace.ts` | Where a displace layer reads each pixel from, as a shader and the same steps in TypeScript |
+| `src/visuals/gradient-map.ts` | A gradient of stops that are settings, and the table a gradient map recolours by |
 | `src/visuals/outline.ts` | The outlines of a shape layer's shapes, as points: rounded corners, lengths for tracing them |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
 | `src/visuals/lut.ts` | Colour lookup tables: reading .cube files, packing them into templates, applying them without a graphics card |
@@ -63,6 +64,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/template-editor.ts` | The template editor in the Video view's panel, with its own undo |
 | `src/app/renderer/layer-settings.ts` | The selected layer's settings in the editor, made from its kind's list of settings |
 | `src/app/renderer/fields-editor.ts` | The editor's Fields tab: what a template asks to be filled in |
+| `src/app/renderer/stop-bar.ts` | A gradient's stops as a bar in the editor, to drag, add and take out |
 | `src/app/renderer/picture-handles.ts` | Picking, moving and resizing layers on the picture while editing, from where the drawer says each was drawn |
 | `src/app/renderer/video-sources.ts` | The frames of a template's videos: video elements in the view, ffmpeg in the export |
 | `src/app/renderer/video-frame.ts` | A frame of a mix's video, drawn the same for the view and the export |
