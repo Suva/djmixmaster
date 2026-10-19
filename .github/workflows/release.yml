@@ -1,6 +1,7 @@
 # Builds the installers for macOS, Windows and Linux and publishes them as a release when a version tag
-# such as v0.2.0 is pushed. It can also be started by hand from the Actions
-# tab, which builds the installers without publishing anything.
+# such as v0.2.0 is pushed, and the package for the Microsoft Store, which is
+# kept with the run rather than published. It can also be started by hand from
+# the Actions tab, which builds them all without publishing anything.
 name: Release
 
 on:
@@ -87,14 +88,43 @@ jobs:
           path: ${{ matrix.installer }}
           if-no-files-found: error
 
+      # The package for the Microsoft Store, which signs it itself. It is not
+      # put on the release: it is uploaded to Partner Center by hand, from this
+      # run's downloads. Its identity comes from Partner Center, kept as the
+      # repository's variables STORE_IDENTITY_NAME and STORE_PUBLISHER (Settings
+      # → Secrets and variables → Actions → Variables); until they are set, a
+      # stand-in is used, which builds but would be refused by the Store.
+      - name: Build the Microsoft Store package
+        if: matrix.name == 'Windows'
+        shell: bash
+        run: |
+          if [ -z "$STORE_IDENTITY_NAME" ] || [ -z "$STORE_PUBLISHER" ]; then
+            echo "::notice::STORE_IDENTITY_NAME or STORE_PUBLISHER is not set: the Store package has a stand-in identity and cannot be submitted."
+          fi
+          npx electron-builder --win appx --publish never \
+            -c.appx.identityName="${STORE_IDENTITY_NAME:-DJMixMaster.Placeholder}" \
+            -c.appx.publisher="${STORE_PUBLISHER:-CN=Placeholder}"
+        env:
+          STORE_IDENTITY_NAME: ${{ vars.STORE_IDENTITY_NAME }}
+          STORE_PUBLISHER: ${{ vars.STORE_PUBLISHER }}
+
+      - uses: actions/upload-artifact@v7
+        if: matrix.name == 'Windows'
+        with:
+          name: microsoft-store-package
+          path: release/*.appx
+          if-no-files-found: error
+
   release:
     name: Publish the release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # The installers only: the Store package stays with the run.
       - uses: actions/download-artifact@v8
         with:
+          pattern: installer-*
           path: installers
           merge-multiple: true
       # A tag made on GitHub's "new release" page already has its release; one

@@ -13,6 +13,13 @@ import { isNewer, parseVersion } from '../version.ts';
 /** GitHub's public list entry for the newest full release; pre-releases are not offered. */
 const FEED = process.env.DJMASTER_UPDATE_FEED ?? 'https://api.github.com/repos/Suva/djmixmaster/releases/latest';
 export const DOWNLOAD_PAGE = 'https://suva.github.io/djmixmaster/';
+
+/**
+ * Whether this copy came from the Microsoft Store, which brings its updates
+ * itself: the app then neither looks for a newer version nor points to the
+ * download page, as the Store asks. DJMASTER_STORE=1 acts as such a copy.
+ */
+export const UPDATES_FROM_STORE = process.windowsStore === true || process.env.DJMASTER_STORE === '1';
 /** The manual, on the website, for the version released last. */
 export const MANUAL_PAGE = `${DOWNLOAD_PAGE}manual/`;
 const TIMEOUT_MS = 5000;
@@ -106,6 +113,7 @@ export async function checkNow(): Promise<CheckResult> {
 export async function checkQuietly(): Promise<string | null> {
   // Running from the project is not an installed copy; there is nothing to update.
   if (!app.isPackaged && !process.env.DJMASTER_UPDATE_FEED) return null;
+  if (UPDATES_FROM_STORE) return null;
   if (!settings.automatic) return null;
   if (Date.now() - settings.lastChecked > DAY_MS) {
     const newest = await readFeed();

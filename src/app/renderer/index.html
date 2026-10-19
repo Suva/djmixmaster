@@ -344,9 +344,13 @@
     </section>
     <section class="setting-block">
       <h4>Updates</h4>
-      <label class="check-row"><input type="checkbox" id="settings-updates"> Look for a newer version when the app starts</label>
-      <p class="explain">A few seconds after the app opens, at most once a day, it asks GitHub for the number of the newest version, and tells you if there is a newer one. Nothing about you or your recordings is sent. <span id="settings-version"></span></p>
-      <button id="settings-check-now">Check now</button>
+      <div id="settings-updates-own">
+        <label class="check-row"><input type="checkbox" id="settings-updates"> Look for a newer version when the app starts</label>
+        <p class="explain">A few seconds after the app opens, at most once a day, it asks GitHub for the number of the newest version, and tells you if there is a newer one. Nothing about you or your recordings is sent.</p>
+        <button id="settings-check-now">Check now</button>
+      </div>
+      <p class="explain" id="settings-updates-store" hidden>This copy came from the Microsoft Store, which keeps it up to date.</p>
+      <p class="explain" id="settings-version"></p>
     </section>
     <div class="dialog-buttons">
       <button id="settings-close" class="primary">Done</button>

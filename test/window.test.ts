@@ -2067,6 +2067,16 @@ test('the Settings dialog shows the folders and the update check, and changes th
   assert.equal(updates.automatic, false);
 });
 
+test('a copy from the Microsoft Store leaves its updates to the Store', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), env: { DJMASTER_STORE: '1' } }, async (page) => {
+    page.click('open-settings');
+    await page.until(() => page.element<HTMLDialogElement>('settings-dialog').open, 'the dialog to open');
+    await page.wait(100);
+    return { own: !page.element('settings-updates-own').hidden, store: page.text('settings-updates-store'), shown: !page.element('settings-updates-store').hidden };
+  });
+  assert.deepEqual(seen, { own: false, store: 'This copy came from the Microsoft Store, which keeps it up to date.', shown: true });
+});
+
 test('a template file opened with the app is added, shown, and exported again from the editor', { skip }, async () => {
   const file = join(work, 'Opened.djmtemplate');
   await writeFile(file, JSON.stringify({ format: 1, name: 'Opened', fields: [], layers: [{ type: 'gradient', params: { colour1: '#ff0000', colour2: '#ff0000' } }] }));

@@ -22,7 +22,7 @@ import { VIDEO_EXTENSIONS } from './video-files.ts';
 import { PING_PONG_MOST_SECONDS } from '../visuals/clip.ts';
 import { extractZipEntry, isZip, readZip, readZipEntry, writeZip } from './zip.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
-import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, MANUAL_PAGE, setAutomatic, skipVersion } from './updates.ts';
+import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, MANUAL_PAGE, setAutomatic, skipVersion, UPDATES_FROM_STORE } from './updates.ts';
 
 // The same name, and so the same data folder, whether run from the project or as the packaged app.
 app.setName('DJ Mix Master');
@@ -1104,6 +1104,7 @@ const settingsNow = (): AppSettings => ({
   lutFolder: lutFolder(),
   lutFolderChosen: preferences.lutFolder !== undefined,
   checkUpdates: checksAutomatically,
+  updatesFromStore: UPDATES_FROM_STORE,
   version: app.getVersion(),
 });
 ipcMain.handle('settings', () => settingsNow());
@@ -1553,8 +1554,8 @@ function buildMenu() {
         { label: 'User Manual', click: () => shell.openExternal(MANUAL_PAGE) },
         { label: 'Gestures and Shortcuts', accelerator: 'F1', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
         { type: 'separator' },
-        { label: 'Check for Updates…', click: checkForUpdatesNow },
-        { type: 'separator' },
+        // From the Store, updates come from the Store.
+        ...(UPDATES_FROM_STORE ? [] : [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { type: 'separator' } as MenuItemConstructorOptions]),
         { label: 'DJ Mix Master Website', click: () => shell.openExternal(DOWNLOAD_PAGE) },
       ],
     },

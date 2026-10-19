@@ -139,6 +139,19 @@
         }
       ]
     },
+    "appx": {
+      "displayName": "DJ Mix Master",
+      "applicationId": "DJMixMaster",
+      "identityName": "DJMixMaster.Placeholder",
+      "publisher": "CN=Placeholder",
+      "publisherDisplayName": "Jaan Pullerits",
+      "backgroundColor": "#101216",
+      "languages": [
+        "en-US"
+      ],
+      "showNameOnTiles": true,
+      "artifactName": "${productName}-${version}-Microsoft-Store.${ext}"
+    },
     "linux": {
       "target": [
         "AppImage"

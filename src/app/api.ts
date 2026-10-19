@@ -147,6 +147,8 @@ export interface AppSettings {
   lutFolderChosen: boolean;
   /** Whether a newer version is looked for a few seconds after start. */
   checkUpdates: boolean;
+  /** Whether this copy came from the Microsoft Store, which brings its updates itself. */
+  updatesFromStore: boolean;
   version: string;
 }
 

@@ -26,6 +26,8 @@ export function settingsDialog(api: Api): { open(): void; readonly element: HTML
       $<HTMLButtonElement>(`${prefix}-default`).disabled = !chosen;
     }
     updates.checked = settings.checkUpdates;
+    $('settings-updates-own').hidden = settings.updatesFromStore;
+    $('settings-updates-store').hidden = !settings.updatesFromStore;
     $('settings-version').textContent = `You have version ${settings.version}.`;
   };
 

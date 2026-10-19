@@ -150,6 +150,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_TEMPLATE=<file>` | Answer the dialog for a template to import with this file. A template exported is saved into `DJMASTER_SHOT_FOLDER`, and one deleted is removed rather than moved to the Trash |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
 | `DJMASTER_PROFILE=stages` | A video export prints where each frame's time went: the clips' frames, drawing, encoding, sending to ffmpeg. Works outside check mode too |
+| `DJMASTER_STORE=1` | Act as a copy from the Microsoft Store: no update check of its own, and Settings says the Store keeps it up to date |
 | `DJMASTER_PROFILE=layers` | As `stages`, and the time of each layer. Each layer is waited for on the graphics card, so drawing is slower while it is on |
 
 ```bash
@@ -326,7 +327,18 @@ Do not write test data there.
 - **Releases are built by GitHub.** Pushing a tag such as `v0.2.0` runs
   `.github/workflows/release.yml`, which tests and packages on macOS,
   Windows and Linux and publishes the three installers. The version comes
-  from the tag. None is signed for distribution. The Windows app has been
+  from the tag. None is signed for distribution.
+- **A package for the Microsoft Store** (`.appx`) is built beside the Windows
+  installer and kept with the workflow run, under its downloads, not put on
+  the release: it is uploaded to Partner Center by hand, and the Store signs
+  it. Its settings are `build.appx` in `package.json`; its identity comes from
+  the repository's variables `STORE_IDENTITY_NAME` and `STORE_PUBLISHER`,
+  and without them a stand-in is used that builds but would be refused. Its
+  tiles are in `build/appx/`, made from the icon by
+  `node scripts/make-store-tiles.mjs`. A copy from the Store
+  (`process.windowsStore`, `UPDATES_FROM_STORE` in `updates.ts`) leaves its
+  updates to the Store, as the Store's rules ask: no check of its own, no
+  pointer to the download page. Nobody has installed such a package yet. The Windows app has been
   used on a real machine; the Linux AppImage is only started once by the
   workflow, on a short recording, before it is published. Changes are
   developed and checked on macOS.

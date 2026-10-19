@@ -119,6 +119,8 @@ export interface Run<Given> {
   /** Handed to the function as its second argument; must survive JSON. */
   given?: Given;
   timeoutMs?: number;
+  /** More of the app's environment, such as DJMASTER_STORE. */
+  env?: Record<string, string>;
 }
 
 /**
@@ -152,6 +154,7 @@ export function runApp<Result, Given = undefined>(
         ...(run.template ? { DJMASTER_SHOT_TEMPLATE: run.template } : {}),
         ...(run.video ? { DJMASTER_SHOT_VIDEO: run.video } : {}),
         ...(run.lut ? { DJMASTER_SHOT_LUT: run.lut } : {}),
+        ...run.env,
       },
     });
     let output = '';
