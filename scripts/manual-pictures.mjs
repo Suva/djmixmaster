@@ -60,6 +60,8 @@ const LAYERS = {
   text: [dark, { type: 'text', params: { text: '%artist%\nLive at Saturday night', size: 9, weight: 700, colour: '#ffffff' } }],
   spectrum: [dark, { type: 'spectrum', params: { colourLow: '#3ddc97', colourHigh: '#ff4fa0' } }],
   waveform: [dark, { type: 'waveform', params: { colour: '#8fd3ff' } }],
+  // Smoky clouds, bent by a second noise, in three colours over the dark background.
+  noise: [dark, { type: 'noise', params: { kind: 'clouds', warp: 0.6, size: 45, seed: 4, colour1: '', colour2: '#7a4fd0', colour3: '#ffd27a', coverage: 0.8, softness: 0.8, blend: 'screen' } }],
   // A few shapes, a ring that fills round and a progress bar that fills across.
   shape: [
     dark,

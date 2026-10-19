@@ -30,6 +30,7 @@ import { compile, type Compiled, type Kind, type Problem, type Value } from './e
 import { PLAYBACKS, RESTARTS } from './clip.ts';
 import { unpackLut, type PackedLut } from './lut.ts';
 import { motionExpression, parseMotion } from './motion.ts';
+import { NOISE_KINDS } from './noise.ts';
 
 /**
  * 2: amounts (opacities, a tint's amount, brightness and the like) are
@@ -318,6 +319,27 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
       reveal: choice('Drawn from', 'left', [...REVEALS]),
       startAngle: number('Going round, starts at', 0, 0, 360, '°'),
       restColour: colour('Colour of the part not drawn', ''),
+    },
+  },
+  noise: {
+    label: 'Noise',
+    description: 'Patterns that evolve and drift: clouds, smoke, ridges, cells, cracks, marble and plasma, in two or three colours. A colour left empty is see-through, so white clouds can float over what is beneath.',
+    params: {
+      kind: choice('Kind', 'clouds', [...NOISE_KINDS]),
+      size: number('Size', 30, 1, 200, '%'),
+      detail: number('Detail', 5, 1, 8),
+      roughness: number('Roughness', 0.5, 0, 1),
+      warp: number('Warp', 0, 0, 1),
+      // Speeds are added up over the mix, so they cannot follow the music: the pattern would jump.
+      evolve: fixed(number('Changes', 0.15, 0, 2, '/s')),
+      drift: fixed(number('Drift', 0, 0, 50, '%/s')),
+      direction: fixed(number('Drift direction', 0, 0, 360, '°')),
+      seed: number('Seed', 0, 0, 1000),
+      coverage: number('Coverage', 1, 0, 1),
+      softness: number('Softness of the edges', 1, 0, 1),
+      colour1: colour('Low colour', ''),
+      colour2: colour('High colour', '#ffffff'),
+      colour3: colour('Highest colour, for three', ''),
     },
   },
   glow: {

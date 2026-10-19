@@ -6,6 +6,11 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A Noise layer.** Patterns that slowly change and drift: clouds,
+  turbulence, ridges, cells, cell edges, marble and plasma, in two or three
+  colours. Warp bends them into smoke and liquid; Coverage cuts them down to
+  patches, such as scattered clouds; and a colour left empty is see-through,
+  so clouds can float over a video.
 - **A White balance layer.** Warms or cools the colours beneath it and moves
   them towards green or magenta, to correct a photo or video taken under the
   wrong light. Put it in a group with a picture to change only that picture.

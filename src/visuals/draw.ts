@@ -15,6 +15,7 @@ import { hexOf, LAYER_TYPES, type PreparedLayer, type ResolvedParams, type TextV
 import type { ClipTiming, Playback } from './clip.ts';
 import { applyLut, scalingLut, type Lut } from './lut.ts';
 import { lengthOf, shapeOutline } from './outline.ts';
+import { covered, kindNumber, NOISE_SHADER, noiseValue, seedBits, type NoiseOptions } from './noise.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -303,6 +304,7 @@ export class FrameDrawer {
       case 'spectrum': this.#spectrum(params, frame, memory); break;
       case 'waveform': this.#waveform(params, frame); break;
       case 'shape': this.#shape(params); break;
+      case 'noise': this.#noise(params, frame); break;
       case 'glow': this.#glow(params, opacity); break;
       case 'split': this.#split(params); break;
       case 'glitch': this.#glitch(params, frame); break;
@@ -1210,6 +1212,80 @@ export class FrameDrawer {
     ctx.setLineDash([]);
   }
 
+  #noiseGl: NoiseGl | null | undefined;
+
+  /**
+   * A pattern of noise.ts over the whole picture: its middle at the layer's
+   * position, its features `size` of the short side across, turned with the
+   * layer; drawn on the graphics card, or else on the processor.
+   */
+  #noise(params: ResolvedParams, frame: Frame) {
+    const ctx = this.#ctx;
+    const { width, height } = this.#canvas;
+    const size = Math.max(1e-3, (num(params, 'size') / 100) * this.#unit * (num(params, 'scale') / 100));
+    const turn = (num(params, 'rotation') * Math.PI) / 180;
+    const [cos, sin] = [Math.cos(turn) / size, Math.sin(turn) / size];
+    // Drifting moves its middle across the picture, so the pattern goes the way the direction says, at its speed.
+    const way = (num(params, 'direction') * Math.PI) / 180;
+    const travelled = (num(params, 'drift') / 100) * this.#unit * frame.seconds;
+    const colourOf = (key: string): [number, number, number, number] => {
+      const c = col(params, key);
+      return c ? [c.r, c.g, c.b, c.a] : [0, 0, 0, 0];
+    };
+    const look: NoiseLook = {
+      origin: [(num(params, 'x') / 100) * width + Math.cos(way) * travelled, (num(params, 'y') / 100) * height + Math.sin(way) * travelled],
+      axes: [cos, -sin, sin, cos],
+      time: num(params, 'evolve') * frame.seconds,
+      options: { kind: str(params, 'kind'), detail: num(params, 'detail'), roughness: num(params, 'roughness'), warp: num(params, 'warp'), seed: num(params, 'seed') },
+      coverage: num(params, 'coverage'),
+      softness: num(params, 'softness'),
+      colours: [colourOf('colour1'), colourOf('colour2'), colourOf('colour3')],
+    };
+    if (this.#noiseGl === undefined) this.#noiseGl = NoiseGl.make();
+    const picture = this.#noiseGl?.draw(width, height, look) ?? this.#noiseOnProcessor(look);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(picture, 0, 0, width, height);
+    ctx.restore();
+  }
+
+  /**
+   * The same pattern without a graphics card: worked out at a quarter of the
+   * size each way, and enlarged, as every pixel would take far too long.
+   */
+  #noiseOnProcessor(look: NoiseLook): OffscreenCanvas {
+    const { width, height } = this.#canvas;
+    const step = 4;
+    const [w, h] = [Math.max(1, Math.ceil(width / step)), Math.max(1, Math.ceil(height / step))];
+    const out = this.#extraCanvas(0, w, h);
+    const o = out.getContext('2d')!;
+    const image = o.createImageData(w, h);
+    const [a, b, c, d] = look.axes;
+    const [low, high, highest] = look.colours;
+    const premultiplied = (colour: number[]) => [colour[0] * colour[3], colour[1] * colour[3], colour[2] * colour[3], colour[3]];
+    const [pa, pb, pc] = [premultiplied(low), premultiplied(high), premultiplied(highest)];
+    const mix = (from: number[], to: number[], t: number) => from.map((v, i) => v + (to[i] - v) * t);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        // The middle of the block of pixels this one stands for, as the card takes the middle of each.
+        const vx = (x + 0.5) * step - look.origin[0];
+        const vy = (y + 0.5) * step - look.origin[1];
+        const value = covered(noiseValue(a * vx + c * vy, b * vx + d * vy, look.time, look.options), look.coverage, look.softness);
+        const colour = highest[3] > 0 ? (value < 0.5 ? mix(pa, pb, value * 2) : mix(pb, pc, value * 2 - 1)) : mix(pa, pb, value);
+        const i = (y * w + x) * 4;
+        // The canvas takes colours as they are, not premultiplied.
+        const alpha = colour[3];
+        image.data[i] = alpha > 0 ? (colour[0] / alpha) * 255 : 0;
+        image.data[i + 1] = alpha > 0 ? (colour[1] / alpha) * 255 : 0;
+        image.data[i + 2] = alpha > 0 ? (colour[2] / alpha) * 255 : 0;
+        image.data[i + 3] = alpha * 255;
+      }
+    }
+    o.putImageData(image, 0, 0);
+    return out;
+  }
+
   /** Glow: the picture so far, blurred and added onto itself. */
   #glow(params: ResolvedParams, opacity: number) {
     const ctx = this.#ctx;
@@ -1760,6 +1836,104 @@ function keyOut(
   ctx.putImageData(image, 0, 0);
 }
 
+/** A canvas of its own for drawing on the graphics card, as the picture's canvas keeps colours: premultiplied. */
+function glCanvas(): [OffscreenCanvas, WebGL2RenderingContext] {
+  const canvas = new OffscreenCanvas(1, 1);
+  const gl = canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false, preserveDrawingBuffer: true });
+  if (!gl) throw new Error('No WebGL 2');
+  return [canvas, gl];
+}
+
+/** A program that runs this fragment shader over every pixel: one triangle over the whole picture, made from the vertex's number alone. */
+function glProgram(gl: WebGL2RenderingContext, fragment: string): WebGLProgram {
+  const shader = (type: number, source: string) => {
+    const made = gl.createShader(type)!;
+    gl.shaderSource(made, source);
+    gl.compileShader(made);
+    if (!gl.getShaderParameter(made, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(made) ?? 'Shader');
+    return made;
+  };
+  const program = gl.createProgram()!;
+  gl.attachShader(program, shader(gl.VERTEX_SHADER, `#version 300 es
+    void main() {
+      vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+      gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+    }`));
+  gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragment));
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? 'Program');
+  return program;
+}
+
+/**
+ * Draws noise layers' patterns on the graphics card (see noise.ts), on a
+ * canvas of its own, the size of the picture.
+ */
+class NoiseGl {
+  readonly #canvas: OffscreenCanvas;
+  readonly #gl: WebGL2RenderingContext;
+  readonly #program: WebGLProgram;
+  readonly #uniforms = new Map<string, WebGLUniformLocation | null>();
+
+  static make(): NoiseGl | null {
+    try {
+      return typeof OffscreenCanvas === 'undefined' ? null : new NoiseGl();
+    } catch {
+      return null;
+    }
+  }
+
+  constructor() {
+    [this.#canvas, this.#gl] = glCanvas();
+    this.#program = glProgram(this.#gl, NOISE_SHADER);
+  }
+
+  #at(name: string): WebGLUniformLocation | null {
+    if (!this.#uniforms.has(name)) this.#uniforms.set(name, this.#gl.getUniformLocation(this.#program, name));
+    return this.#uniforms.get(name)!;
+  }
+
+  /** The pattern, on this class's canvas; null if the card could not draw it. */
+  draw(width: number, height: number, look: NoiseLook): OffscreenCanvas | null {
+    const gl = this.#gl;
+    if (gl.isContextLost()) return null;
+    if (this.#canvas.width !== width || this.#canvas.height !== height) {
+      this.#canvas.width = width;
+      this.#canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(this.#program);
+    gl.uniform1f(this.#at('height'), height);
+    gl.uniform2f(this.#at('origin'), look.origin[0], look.origin[1]);
+    gl.uniformMatrix2fv(this.#at('axes'), false, look.axes);
+    gl.uniform1f(this.#at('time'), look.time);
+    gl.uniform1i(this.#at('kind'), kindNumber(look.options.kind));
+    gl.uniform1i(this.#at('octaves'), Math.max(1, Math.min(8, Math.round(look.options.detail))));
+    gl.uniform1f(this.#at('roughness'), Math.min(1, Math.max(0, look.options.roughness)));
+    gl.uniform1f(this.#at('warp'), Math.max(0, look.options.warp));
+    gl.uniform1ui(this.#at('seed'), seedBits(look.options.seed));
+    gl.uniform1f(this.#at('coverage'), look.coverage);
+    gl.uniform1f(this.#at('softness'), look.softness);
+    look.colours.forEach((c, i) => gl.uniform4fv(this.#at(`colour${i + 1}`), c));
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
+  }
+}
+
+/** Everything a noise layer's pattern is drawn from, for the card or the processor alike. */
+interface NoiseLook {
+  /** The pattern's middle, in pixels. */
+  origin: [number, number];
+  /** From pixels to the pattern's units, sized and turned: a 2×2 matrix, column by column, as the card takes it. */
+  axes: [number, number, number, number];
+  time: number;
+  options: NoiseOptions;
+  coverage: number;
+  softness: number;
+  /** Low, high and highest, as red, green, blue and alpha from 0 to 1; alpha 0 for none. */
+  colours: [number, number, number, number][];
+}
+
 /**
  * Applies LUTs on the graphics card: the picture is a texture, the LUT a 3D
  * texture read between its points by the card itself, and the result a
@@ -1783,27 +1957,11 @@ class LutGl {
   }
 
   constructor() {
-    this.#canvas = new OffscreenCanvas(1, 1);
-    const gl = this.#canvas.getContext('webgl2', { premultipliedAlpha: true, alpha: true, antialias: false, preserveDrawingBuffer: true });
-    if (!gl) throw new Error('No WebGL 2');
-    this.#gl = gl;
-    const shader = (type: number, source: string) => {
-      const made = gl.createShader(type)!;
-      gl.shaderSource(made, source);
-      gl.compileShader(made);
-      if (!gl.getShaderParameter(made, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(made) ?? 'Shader');
-      return made;
-    };
-    const program = gl.createProgram()!;
-    // One triangle over the whole picture, made from the vertex's number alone.
-    gl.attachShader(program, shader(gl.VERTEX_SHADER, `#version 300 es
-      void main() {
-        vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-        gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
-      }`));
+    [this.#canvas, this.#gl] = glCanvas();
+    const gl = this.#gl;
     // The picture's pixels are read as they are, not premultiplied, and written back premultiplied, as the canvas keeps them.
     // A point's value is at the middle of its texel, so 0 and 1 land on the first and the last point exactly.
-    gl.attachShader(program, shader(gl.FRAGMENT_SHADER, `#version 300 es
+    const program = glProgram(gl, `#version 300 es
       precision highp float;
       precision highp sampler3D;
       uniform sampler2D picture;
@@ -1819,9 +1977,7 @@ class LutGl {
         vec3 t = clamp((c.rgb - low) / (high - low), 0.0, 1.0);
         vec3 looked = clamp(texture(table, (t * (size - 1.0) + 0.5) / size).rgb, 0.0, 1.0);
         colour = vec4(looked * c.a, c.a);
-      }`));
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) ?? 'Program');
+      }`);
     this.#program = program;
     this.#uniforms = {
       picture: gl.getUniformLocation(program, 'picture'),
