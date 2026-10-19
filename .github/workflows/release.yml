@@ -67,6 +67,15 @@ jobs:
 
       - run: npm run package -- --publish never
 
+      # ffmpeg is under the GPL, and its licence has to travel with it. electron-builder only warns when a file
+      # to bundle is missing (the Windows build went without it for a while), so this looks.
+      - name: See that ffmpeg's licence is in the app
+        shell: bash
+        run: |
+          found=$(find release -path '*bin/ffmpeg.LICENSE' | head -1)
+          if [ -z "$found" ]; then echo "::error::ffmpeg's licence is not in the app"; exit 1; fi
+          echo "Found $found"
+
       # Nobody here runs Linux, so the AppImage is started once, on a short
       # recording, to see that it opens, finds its own ffmpeg and draws.
       - name: Start the AppImage

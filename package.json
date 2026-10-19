@@ -130,11 +130,11 @@
           "to": "bin/ffmpeg.exe"
         },
         {
-          "from": "node_modules/ffmpeg-static/ffmpeg.LICENSE",
+          "from": "node_modules/ffmpeg-static/ffmpeg.exe.LICENSE",
           "to": "bin/ffmpeg.LICENSE"
         },
         {
-          "from": "node_modules/ffmpeg-static/ffmpeg.README",
+          "from": "node_modules/ffmpeg-static/ffmpeg.exe.README",
           "to": "bin/ffmpeg.README"
         }
       ]
