@@ -346,7 +346,9 @@ Do not write test data there.
   installer and kept with the workflow run, under its downloads, not put on
   the release; the Store signs it. For a version tag, the release workflow
   calls `.github/workflows/store.yml`, which hands it to Partner Center as a
-  new submission (`msstore publish`, given the folder the package is in),
+  new submission (`msstore publish`, given a checkout of the sources the
+  package was built from, which it reads to know the app is an Electron one,
+  and the folder the package is in),
   once the variable `STORE_PRODUCT_ID` and the four `PARTNER_CENTER_*`
   secrets are set: as a draft, to be submitted in Partner Center, unless
   `STORE_SUBMIT` is `true`. Partner Center accepts this only for an app

@@ -32,6 +32,7 @@ on:
 
 permissions:
   actions: read
+  contents: read
 
 jobs:
   submit:
@@ -41,10 +42,27 @@ jobs:
     # Called by a release, a failure here does not mark the release failed; run by hand, it shows.
     continue-on-error: ${{ github.event_name != 'workflow_dispatch' }}
     steps:
+      # msstore reads the app's project (package.json) to know what kind of app it is: the sources the package was
+      # built from, the commit of the Release run given.
+      - name: Find the commit the package was built from
+        id: built
+        shell: pwsh
+        run: |
+          $sha = gh api "repos/$env:REPOSITORY/actions/runs/$env:RUN_ID" --jq .head_sha
+          if (-not $sha) { Write-Output "::error::Could not find Release run $env:RUN_ID."; exit 1 }
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ inputs.run-id }}
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.built.outputs.sha }}
       - uses: actions/download-artifact@v8
         with:
           name: microsoft-store-package
-          path: store
+          # Not store/: the sources have one, with the listing's text.
+          path: package
           run-id: ${{ inputs.run-id }}
           github-token: ${{ github.token }}
       - name: Set up the Microsoft Store Developer CLI
@@ -62,20 +80,20 @@ jobs:
           SELLER: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
           CLIENT: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
           SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-      # msstore takes the folder the package is in (-i), not the package itself.
+      # msstore takes the project (the checkout), and the folder the package is in (-i), not the package itself.
       - name: Submit the package
         shell: pwsh
         run: |
-          $package = Get-ChildItem store/*.msix | Select-Object -First 1
+          $package = Get-ChildItem package/*.msix | Select-Object -First 1
           if (-not $package) {
             Write-Output "::error::Run $env:RUN_ID has no .msix in its microsoft-store-package."
             exit 1
           }
           Write-Output "Submitting $($package.Name)."
           if ($env:SUBMIT -eq 'true') {
-            msstore publish store -i store -id $env:PRODUCT_ID
+            msstore publish . -i package -id $env:PRODUCT_ID
           } else {
-            msstore publish store -i store -id $env:PRODUCT_ID --noCommit
+            msstore publish . -i package -id $env:PRODUCT_ID --noCommit
           }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($env:SUBMIT -ne 'true') {
