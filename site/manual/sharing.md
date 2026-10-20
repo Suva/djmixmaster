@@ -9,7 +9,7 @@ What a template file carries:
 
 - **Pictures** added to it, always.
 - **Videos** kept with it. A video of up to 25 MB is copied into the app's own folder when added, so it stays with the template; a larger one is used where it is, and packed in only when the template is exported.
-- **LUTs**, kept in it or from your LUT folder. One from the folder is remembered by its name while you work, and packed in when the template is exported.
+- **LUTs**, kept in it or from your LUT folder. One from the folder is remembered by its name while you work, and packed in when the template is exported. One of the looks that come with the app is not packed in: every copy of the app from version 0.12 on has them.
 
 A template's website and email, from its About page, open in your own browser and mail program when clicked. The app itself contacts nothing.
 

@@ -15,7 +15,8 @@
 //   image, font  a name
 //   video    a file's path, `media:name` for a video the template keeps, or
 //            `recording:video` for the picture of the recording itself
-//   lut      `lut:name` for a LUT the template keeps, `lutfolder:Film/Warm`
+//   lut      `lut:name` for a LUT the template keeps, `lutbuiltin:Kodak
+//            Portra 400` for one that comes with the app, `lutfolder:Film/Warm`
 //            for Film/Warm.cube in the LUT folder, or a .cube file's path
 //            (a LUT field filled in for a mix)
 // Fields are used by name in expressions (`colour1`, `amount`), and as
@@ -29,6 +30,7 @@ import { flatten, treeOf, type LayerNode } from './layer-tree.ts';
 import { compile, type Compiled, type Kind, type Problem, type Value } from './expression.ts';
 import { PLAYBACKS, RESTARTS } from './clip.ts';
 import { unpackLut, type PackedLut } from './lut.ts';
+import { BUILTIN_LUT_PREFIX, builtinLut } from './builtin-luts.ts';
 import { motionExpression, parseMotion } from './motion.ts';
 import { NOISE_KINDS } from './noise.ts';
 import { STOP_BLENDS, STOP_COUNT } from './gradient-map.ts';
@@ -588,7 +590,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
   },
   lut: {
     label: 'LUT',
-    description: 'Gives the picture beneath a look from a colour lookup table (a .cube file), as made in Resolve, Premiere and the like.',
+    description: 'Gives the picture beneath a look from a colour lookup table: one of the film and other looks that come with the app, or a .cube file as made in Resolve, Premiere and the like.',
     effect: true,
     // A look for the whole picture beneath: it has no place or size of its own. Opacity says how much of the look.
     params: {
@@ -1133,6 +1135,9 @@ function checkValue(
       if (whole) return fieldOf(whole[1])?.kind === 'lut' ? null : { message: `${whole[1]} is not a LUT field of this template` };
       if (value.startsWith(LUT_PREFIX) && !(value.slice(LUT_PREFIX.length) in luts)) {
         return { message: `This template keeps no LUT called ${value.slice(LUT_PREFIX.length)}` };
+      }
+      if (value.startsWith(BUILTIN_LUT_PREFIX) && !builtinLut(value.slice(BUILTIN_LUT_PREFIX.length))) {
+        return { message: `No LUT called ${value.slice(BUILTIN_LUT_PREFIX.length)} comes with this version of the app` };
       }
       return null;
     }

@@ -14,6 +14,7 @@ import {
   ASSET_PREFIX, checkSetting, COMMON_PARAMS, FOLDER_LUT_PREFIX, folderLutsOf, LUT_PREFIX, MEDIA_PREFIX, RECORDING_VIDEO, settingsOf, LAYER_TYPES, STYLE_PARAMS, TEXT_VARIABLES,
   type Layer, type MediaFile, type ParamSpec, type ParamValue, type ResolvedParams, type Template,
 } from '../../visuals/template.ts';
+import { BUILTIN_LUT_PREFIX, BUILTIN_LUTS } from '../../visuals/builtin-luts.ts';
 import type { PackedLut } from '../../visuals/lut.ts';
 import type { FolderLut } from '../api.ts';
 import { lutPicker, type LutChoice } from './lut-picker.ts';
@@ -50,9 +51,11 @@ export interface LayerSettingsContext {
 }
 
 /**
- * The LUTs a template can name: those it keeps, and those in the LUT folder,
+ * The LUTs a template can name: those it keeps; those in the LUT folder,
  * which it names by where they are there and does not keep (until it is
- * exported to share). A folder LUT it names that is not there now is still
+ * exported to share); and those that come with the app, last, as there are
+ * many and a collection of one's own is what is looked for first. A folder
+ * LUT it names that is not there now is still
  * listed, so that it can be seen to be chosen.
  */
 export function lutChoices(template: Template, folder: FolderLut[]): LutChoice[] {
@@ -62,6 +65,7 @@ export function lutChoices(template: Template, folder: FolderLut[]): LutChoice[]
     ...Object.keys(template.luts ?? {}).map((name) => ({ value: LUT_PREFIX + name, label: name, group: 'Kept in the template' })),
     ...folder.map((lut) => ({ value: FOLDER_LUT_PREFIX + lut.name, label: lut.name, group: 'LUT folder' })),
     ...[...named].map((name) => ({ value: FOLDER_LUT_PREFIX + name, label: `${name} (not in the folder)`, group: 'LUT folder' })),
+    ...BUILTIN_LUTS.map((lut) => ({ value: BUILTIN_LUT_PREFIX + lut.name, label: lut.name, group: lut.group })),
   ];
 }
 

@@ -591,6 +591,20 @@ values into the ones a frame gets. None draws anything yet.
   already with the same table is used rather than kept twice. The folder is
   looked in again whenever the window is brought forward, so files put there
   show up without a restart, and those changed are read again.
+- **LUTs come with the app** (`src/visuals/builtin-luts.ts`), offered in
+  every list after the template's and the folder's, under headings of their
+  own, and named as `lutbuiltin:Kodak Portra 400`: by name alone, so the
+  groups can change. The film looks are Pat David's film emulation
+  HaldCLUTs (CC BY-SA 4.0, credited in `assets/luts/LICENSE.txt`, which
+  travels with them), read off at 33 points a side; the others are made
+  from recipes in `scripts/make-luts.mjs`, which makes all of them into
+  `assets/luts`. Some fifty tables would be sixteen megabytes packed as a
+  template packs one, so each is kept as differences from the point before,
+  high bytes apart from low ones, and deflated: six megabytes in all. The
+  window fetches one when it is used (`luts/` beside the page, served by
+  `main.ts`) and inflates it with `DecompressionStream`. A template exported
+  to share does not pack them, as every copy of the app has them; a name the
+  app does not know is shown as a problem with the setting.
 - **The list of LUTs** (`lut-picker.ts`) is a button that opens a list to
   search, as the fonts' is, rather than a dropdown of the system's: there,
   the arrow keys go through the list, and each LUT is put to use as it is

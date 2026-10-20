@@ -35,6 +35,12 @@ for (const file of await readdir('assets/fonts').catch(() => [])) {
   if (/\.(ttf|txt)$/.test(file)) await copyFile(`assets/fonts/${file}`, `dist/fonts/${file}`);
 }
 
+// The LUTs that come with the app, and the licence of the film looks among them.
+await mkdir('dist/luts', { recursive: true });
+for (const file of await readdir('assets/luts').catch(() => [])) {
+  if (/\.(bin|txt)$/.test(file)) await copyFile(`assets/luts/${file}`, `dist/luts/${file}`);
+}
+
 // The manual, as it travels with the app: Help opens it without a network (scripts/build-manual.mjs).
 await import('./build-manual.mjs');
 

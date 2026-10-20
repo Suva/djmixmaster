@@ -211,6 +211,9 @@ function serve(request: Request): Promise<Response> | Response {
   // The fonts that come with the app, for a video's text.
   const font = /^fonts\/([^/\\]+\.ttf)$/.exec(decodeURIComponent(file));
   if (font && existsSync(join(__dirname, 'fonts', font[1]))) return net.fetch(pathToFileURL(join(__dirname, 'fonts', font[1])).toString());
+  // The LUTs that come with the app (src/visuals/builtin-luts.ts).
+  const lut = /^luts\/([a-z0-9-]+\.bin)$/.exec(file);
+  if (lut && existsSync(join(__dirname, 'luts', lut[1]))) return net.fetch(pathToFileURL(join(__dirname, 'luts', lut[1])).toString());
   return new Response(null, { status: 404 });
 }
 

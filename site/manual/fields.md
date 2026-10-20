@@ -15,7 +15,7 @@ Each field has a label, shown where it is filled in; a kind; a name, by which th
 | Text | A line of text | `%name%` in a text layer |
 | Picture | A logo or a photo | `%name%` as an image layer's picture |
 | Video | A clip, or the recording's own picture | `%name%` as a video layer's video |
-| LUT | A look, from a .cube file or the LUT folder | `%name%` as a LUT layer's LUT |
+| LUT | A look, from those that come with the app, the LUT folder or a .cube file | `%name%` as a LUT layer's LUT |
 | Font | A font of the computer's, or one of the app's | `%name%` as a text layer's font |
 | List | One of a few words you list | `%name%` in any setting that is a choice, such as a blend |
 

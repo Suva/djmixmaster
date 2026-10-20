@@ -6,6 +6,13 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Fifty-seven LUTs come with the app.** Every list of LUTs now offers a
+  set of looks without your having to find any: forty-three imitations of
+  real films (Kodak Portra and Tri-X, Fuji Velvia and Provia, Ilford HP5,
+  Polaroid and more), made from Pat David's free film emulation collection,
+  and fourteen looks of the app's own, such as Teal & Orange, Bleach Bypass,
+  Neon Duotone and Night Blue. Step through them with ↑ and ↓ to see each on
+  the picture. Your own LUT folder is still listed first.
 - **A colour picker with opacity.** Every colour in the template editor and
   in a template's fields now opens the app's own colour picker: hue,
   saturation, brightness and opacity together, the hex code and red, green,

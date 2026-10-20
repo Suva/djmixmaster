@@ -54,6 +54,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/outline.ts` | The outlines of a shape layer's shapes, as points: rounded corners, lengths for tracing them |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
 | `src/visuals/lut.ts` | Colour lookup tables: reading .cube files, packing them into templates, applying them without a graphics card |
+| `src/visuals/builtin-luts.ts` | The LUTs that come with the app: their names and groups, and how their files in `assets/luts` are stored (made by `scripts/make-luts.mjs`) |
 | `src/visuals/template.ts` | Templates: layer types and their settings, fields, text variables, checking |
 | `src/visuals/music.ts` | The music values a video frame gets, read from `features.ts`'s output |
 | `src/visuals/draw.ts` | Draws a frame of a template on a 2D canvas, for the preview and the export alike |

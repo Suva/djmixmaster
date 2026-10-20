@@ -12,6 +12,7 @@ import {
 import { MUSIC_NAMES } from '../../visuals/music.ts';
 import { BUILT_IN_TEMPLATES } from '../../visuals/templates.ts';
 import { parseCube, unpackLut, type Lut } from '../../visuals/lut.ts';
+import { BUILTIN_LUT_PREFIX, builtinLut, builtinLutFile, decodeBuiltinLut } from '../../visuals/builtin-luts.ts';
 import { BAND_COUNT } from '../../features.ts';
 import { fadeGain } from '../../fade.ts';
 import { splitName, trackAt } from '../../tracks.ts';
@@ -65,7 +66,17 @@ export async function lutOf(name: string, template: Template, api: Api): Promise
     return unpackLut(packed);
   }
   if (name.startsWith(FOLDER_LUT_PREFIX)) return parseCube(await api.readFolderLut(name.slice(FOLDER_LUT_PREFIX.length)));
+  if (name.startsWith(BUILTIN_LUT_PREFIX)) return builtinLutOf(name.slice(BUILTIN_LUT_PREFIX.length));
   return parseCube(await api.readLut(name));
+}
+
+/** One of the LUTs that come with the app, by its name: its file is served beside the page, compressed. */
+async function builtinLutOf(name: string): Promise<Lut> {
+  if (!builtinLut(name)) throw new Error(`No LUT called ${name} comes with the app`);
+  const response = await fetch(`luts/${builtinLutFile(name)}`);
+  if (!response.ok || !response.body) throw new Error(`The LUT ${name} is missing from the app`);
+  const inflated = response.body.pipeThrough(new DecompressionStream('deflate-raw'));
+  return decodeBuiltinLut(new Uint8Array(await new Response(inflated).arrayBuffer()));
 }
 
 export function clock(seconds: number): string {

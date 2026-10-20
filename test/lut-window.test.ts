@@ -105,7 +105,7 @@ test('a LUT kept in a template, one chosen for the mix, and one added in the edi
     await page.wait(200);
     return { inverted, halved, chosen, status, offered };
   });
-  assert.deepEqual(seen.offered, ['None', 'Field: Look', 'Kept in the template', 'Invert']);
+  assert.deepEqual(seen.offered.slice(0, 5), ['None', 'Field: Look', 'Kept in the template', 'Invert', 'Looks'], 'then those that come with the app');
   assert.equal(seen.chosen, 'Half');
   assert.match(seen.status, /^Exported 1 mix\./, seen.status);
 
@@ -170,6 +170,15 @@ test('the LUT folder\'s LUTs are offered, stepped through with the arrow keys, n
     await page.until(near([55, 205, 235]), 'the picture to be inverted again');
     const stepped = page.element('field-look').dataset.value;
 
+    // The LUTs that come with the app follow the folder's: a black and white one turns the red grey.
+    page.click('field-look');
+    [...document.querySelectorAll<HTMLButtonElement>('#video-fields .lut-item')].find((item) => item.textContent === 'Noir')!.click();
+    await page.until(() => { const [r, g, b] = middle(); return r === g && g === b && r < 150; }, 'the picture to be black and white');
+    const builtin = page.element('field-look').dataset.value;
+    page.click('field-look');
+    [...document.querySelectorAll<HTMLButtonElement>('#video-fields .lut-item')].find((item) => item.textContent === 'Film/Invert')!.click();
+    await page.until(near([55, 205, 235]), 'the picture to be inverted once more');
+
     // In the editor: chosen from the folder, it is named, not kept.
     page.click('template-edit');
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
@@ -194,7 +203,7 @@ test('the LUT folder\'s LUTs are offered, stepped through with the arrow keys, n
       page.click('field-look');
       return now.includes('Later');
     }, 'the new LUT to be offered', 30_000);
-    return { offered, afterEscape, stepped, layer };
+    return { offered, afterEscape, stepped, builtin, layer };
   });
   const later = (async () => {
     for (let tries = 0; tries < 600; tries++) {
@@ -204,7 +213,9 @@ test('the LUT folder\'s LUTs are offered, stepped through with the arrow keys, n
   })();
   const seen = await running;
   await later;
-  assert.deepEqual(seen.offered, ['None', 'LUT folder', 'Film/Invert', 'Swap']);
+  assert.deepEqual(seen.offered.slice(0, 6), ['None', 'LUT folder', 'Film/Invert', 'Swap', 'Looks', 'Teal & Orange']);
+  assert.ok(seen.offered.includes('Kodak Portra 400'));
+  assert.equal(seen.builtin, 'lutbuiltin:Noir');
   assert.equal(seen.afterEscape, '');
   assert.equal(seen.stepped, 'lutfolder:Film/Invert', 'for the mix, named by where it is in the folder');
   assert.equal(seen.layer, 'lutfolder:Swap');

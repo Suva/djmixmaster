@@ -1,0 +1,24 @@
+The LUTs that come with DJ Mix Master
+=====================================
+
+Film looks (the groups "Film: black & white", "Film: colour negative",
+"Film: slide" and "Film: instant")
+
+  Made from Pat David's film emulation HaldCLUTs
+  (https://patdavid.net/topics/film-emulation-presets/), as published in
+  https://github.com/NatronGitHub/clut. They are licensed under the Creative
+  Commons Attribution-ShareAlike 4.0 International License
+  (https://creativecommons.org/licenses/by-sa/4.0/), and so are these tables.
+
+  Changed from the originals: each HaldCLUT of 64 points a side was read off
+  at 33 points a side, between its own points, and stored in the app's own
+  format (scripts/make-luts.mjs in the app's sources).
+
+  The trademarked names of films are there only to say which film stock a
+  look is meant to approximate. Neither the app nor the authors of the looks
+  are affiliated with or endorsed by the companies that own the trademarks.
+
+Looks (the group "Looks")
+
+  Made for DJ Mix Master, from the recipes in scripts/make-luts.mjs, and
+  under the app's licence, the GNU General Public License version 3.
