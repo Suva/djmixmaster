@@ -431,6 +431,14 @@ workflow builds it from the newest release's sources (`MANUAL_ROOT`), as
 "What's new" leaves out what is not released yet. The front page links to it
 once a release has one.
 
+The app carries its own copy, for its own version: `scripts/build.mjs` runs
+`scripts/build-manual.mjs`, which writes the same pages into `dist/help/`
+(packaged with the rest of `dist/`), with the links that lead to the rest of
+the website (`{{SITE}}` in `site/manual.html`, and `../` in a page) going to
+it by its address. Help → User Manual opens that copy in the browser
+(`openManual` in `main.ts`), or the website's where there is none; in check
+mode it opens nothing, and `window.api.manualAddress()` says where it would.
+
 `site/screenshot.png` is also the picture in the README. It is taken with the
 app's check mode at twice the size, by one command, from a recording of about
 an hour (`vp-test.wav` among the local test recordings):

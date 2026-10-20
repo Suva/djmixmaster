@@ -2648,7 +2648,7 @@ function showHelp() {
 
 $('help').addEventListener('click', showHelp);
 $('help-close').addEventListener('click', () => helpDialog.close());
-$('help-manual').addEventListener('click', () => api.openLink('https://suva.github.io/djmixmaster/manual/'));
+$('help-manual').addEventListener('click', () => api.openManual());
 
 const settings = settingsDialog(api);
 $('open-settings').title = `Settings (${COMMAND},)`;

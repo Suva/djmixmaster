@@ -47,6 +47,8 @@ const values = {
   LINUX_DETAIL: linux ? `AppImage · ${megabytes(linux.size)}` : 'AppImage',
   RELEASES_URL: release?.html_url ?? releasesUrl,
   REPOSITORY_URL: `https://github.com/${repository}`,
+  // The rest of the website, as the manual's pages link to it: beside them here; by its address in the copy the app carries.
+  SITE: '../',
 };
 
 /** The little Markdown CHANGELOG.md uses: bold, code, and an escaped asterisk. */

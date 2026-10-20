@@ -1498,6 +1498,28 @@ ipcMain.on('open-link', (_event, url: string) => {
 });
 ipcMain.on('skip-version', (_event, version: string) => skipVersion(String(version)));
 
+/**
+ * The manual to open: the copy built into the app (scripts/build-manual.mjs),
+ * which describes this version and needs no network; the website's, for the
+ * newest release, should it be missing.
+ */
+function manualAddress(): string {
+  const bundled = join(__dirname, 'help', 'manual', 'index.html');
+  return existsSync(bundled) ? bundled : MANUAL_PAGE;
+}
+
+function openManual() {
+  // In check mode nothing is opened: a test asks where it would go instead.
+  if (SCREENSHOT) return;
+  const address = manualAddress();
+  if (address === MANUAL_PAGE) return void shell.openExternal(MANUAL_PAGE);
+  shell.openPath(address).then((problem) => {
+    if (problem) shell.openExternal(MANUAL_PAGE);
+  });
+}
+ipcMain.on('open-manual', () => openManual());
+ipcMain.handle('manual-address', () => manualAddress());
+
 function buildMenu() {
   const command = (label: string, accelerator: string, name: MenuCommand): MenuItemConstructorOptions => ({
     label,
@@ -1551,7 +1573,7 @@ function buildMenu() {
     {
       role: 'help',
       submenu: [
-        { label: 'User Manual', click: () => shell.openExternal(MANUAL_PAGE) },
+        { label: 'User Manual', click: () => openManual() },
         { label: 'Gestures and Shortcuts', accelerator: 'F1', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
         { type: 'separator' },
         // From the Store, updates come from the Store.

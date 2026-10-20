@@ -22,6 +22,8 @@ const api: Api = {
   onUpdateAvailable: (listener) => ipcRenderer.on('update-available', (_event, version: string) => listener(version)),
   openDownloadPage: () => ipcRenderer.send('open-download-page'),
   openLink: (url) => ipcRenderer.send('open-link', url),
+  openManual: () => ipcRenderer.send('open-manual'),
+  manualAddress: () => ipcRenderer.invoke('manual-address'),
   skipVersion: (version) => ipcRenderer.send('skip-version', version),
   checkPicture: (name, area) => ipcRenderer.invoke('check-picture', name, area),
   settings: () => ipcRenderer.invoke('settings'),

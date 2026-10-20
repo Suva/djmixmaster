@@ -35,6 +35,9 @@ for (const file of await readdir('assets/fonts').catch(() => [])) {
   if (/\.(ttf|txt)$/.test(file)) await copyFile(`assets/fonts/${file}`, `dist/fonts/${file}`);
 }
 
+// The manual, as it travels with the app: Help opens it without a network (scripts/build-manual.mjs).
+await import('./build-manual.mjs');
+
 // The same for icons taken from others: the licence goes where the app goes.
 await mkdir('dist/icons', { recursive: true });
 for (const file of await readdir('assets/icons').catch(() => [])) {

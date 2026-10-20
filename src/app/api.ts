@@ -187,6 +187,10 @@ export interface Api {
   openDownloadPage(): void;
   /** Opens a web or email address in the browser or mail program; anything else is ignored. */
   openLink(url: string): void;
+  /** Opens the manual in the browser: the copy the app carries, for its own version, or else the website's. */
+  openManual(): void;
+  /** Where openManual opens the manual: a file of the copy the app carries, or the website's address. */
+  manualAddress(): Promise<string>;
   /** Stops the notice about this version from coming back. */
   skipVersion(version: string): void;
   /** Check mode only: saves a picture of the window, or of an area of it, beside the check's picture under `name`. */

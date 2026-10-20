@@ -33,7 +33,8 @@ of the app, with pictures: opening a recording and marking its mixes, the
 check-up, levelling, tracks, exporting, and the videos, down to every kind of
 layer and every function a template's formulas can use. Its pages are in
 [site/manual/](site/manual/); the published one describes the latest
-release.
+release. The app carries its own copy, for its own version, and Help → User
+Manual opens it without a network.
 
 ## Getting started
 

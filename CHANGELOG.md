@@ -6,6 +6,9 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **The manual comes with the app.** Help → User Manual opens the copy the
+  app carries, which describes exactly the version you have and works
+  without an internet connection.
 - **Templates from this version need this version.** Templates made before
   are brought over by themselves when opened. But a template saved or
   exported with this version can no longer be opened by an older one, which

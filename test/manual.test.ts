@@ -44,3 +44,27 @@ test('the manual puts the shortcuts at the foot of the pages they belong to, and
   assert.match(keys, /\{\{shortcuts: Playback\}\}/);
   assert.match(pages.find((page) => page.name === 'levelling')!.html, /<table class="keys">/);
 });
+
+test('the manual the app carries builds, and every link in it to a file leads to one it has', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { existsSync, mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { dirname, resolve } = await import('node:path');
+  const out = mkdtempSync(join(tmpdir(), 'djm-help-'));
+  try {
+    execFileSync(process.execPath, ['scripts/build-manual.mjs', out], { cwd: join(import.meta.dirname, '..') });
+    const pages = readdirSync(join(out, 'manual')).filter((file) => file.endsWith('.html'));
+    assert.ok(pages.includes('index.html') && pages.length > 10, `its pages: ${pages.length}`);
+    for (const page of pages) {
+      const html = readFileSync(join(out, 'manual', page), 'utf8');
+      for (const [, link] of html.matchAll(/(?:href|src)="([^"#]*)(?:#[^"]*)?"/g)) {
+        if (!link) continue;
+        // Out to the web, as the pages' own links are, and the header's to the rest of the website; anything else is a file it has.
+        if (/^(https?|mailto):/.test(link)) continue;
+        assert.ok(existsSync(resolve(dirname(join(out, 'manual', page)), link)), `${page} links to ${link}, which the copy has`);
+      }
+    }
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+});

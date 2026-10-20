@@ -20,7 +20,7 @@ export const DOWNLOAD_PAGE = 'https://suva.github.io/djmixmaster/';
  * download page, as the Store asks. DJMASTER_STORE=1 acts as such a copy.
  */
 export const UPDATES_FROM_STORE = process.windowsStore === true || process.env.DJMASTER_STORE === '1';
-/** The manual, on the website, for the version released last. */
+/** The manual, on the website, for the version released last; the app opens its own copy where it has one (openManual in main.ts). */
 export const MANUAL_PAGE = `${DOWNLOAD_PAGE}manual/`;
 const TIMEOUT_MS = 5000;
 const DAY_MS = 24 * 60 * 60 * 1000;

@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFile, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ffmpeg, probe } from '../src/audio-io.ts';
@@ -2667,4 +2667,10 @@ test('keys typed into the layer search are letters, not the window\'s shortcuts'
     };
   });
   assert.deepEqual(seen, { searching: 'search', bypassed: false, playing: false });
+});
+
+test('Help opens the manual the app carries, for its own version, rather than the website\'s', { skip }, async () => {
+  const address = await runApp({ recording: mix, data: await fresh(), timeoutMs: 30_000 }, () => window.api.manualAddress());
+  assert.match(address, /[\\/]dist[\\/]help[\\/]manual[\\/]index\.html$/, address);
+  assert.ok(existsSync(address), `${address} is there`);
 });
