@@ -1336,7 +1336,8 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     // An expression shows as ƒ and what it comes to.
     box().click();
     document.querySelector<HTMLButtonElement>('#editor-layer-top .setting[data-key="opacity"] .fx:not(.motion-button)')!.click();
-    await page.wait(200);
+    // The box shows it with the next frame drawn, later on a busy computer.
+    await page.until(() => box().textContent!.startsWith('ƒ'), 'the box to show the expression', 5000).catch(() => {});
     const expression = box().textContent;
     // The box keeps its size whatever it shows, so nothing beside it moves.
     const widths = new Set<number>();
@@ -1347,6 +1348,7 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
       await page.wait(120);
       widths.add(Math.round(box().getBoundingClientRect().width * 10));
     }
+    await page.until(() => box().textContent === 'ƒ 1.00', 'the box to show what the last expression comes to', 5000).catch(() => {});
     const atMost = box().textContent;
     const below = document.querySelectorAll('#editor-layer .setting[data-key="opacity"], #editor-layer .setting[data-key="blend"]').length;
     // With every layer gone, nothing is selected: the bar is there, greyed.

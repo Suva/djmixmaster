@@ -6,6 +6,11 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Templates from this version need this version.** Templates made before
+  are brought over by themselves when opened. But a template saved or
+  exported with this version can no longer be opened by an older one, which
+  says it was made for a newer version: whoever you share one with needs
+  this version too.
 - **Groups move.** A group can be moved, turned and sized as one, in its
   settings or by dragging its outline on the picture, and its place can
   follow the music. Layers in a turned group are still dragged the way the

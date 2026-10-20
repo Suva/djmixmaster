@@ -1,6 +1,14 @@
 # Visuals for video exports — layer types
 
-A design sketch, not built. The idea: export a mix as a video for YouTube and
+This began as a design sketch, written before anything was built, and is
+kept as one: its sections plan the layers, and those titled "as built" say
+what was made and why, where it differs. Most of it is built now. What a
+template can do today is what `LAYER_TYPES` in `src/visuals/template.ts`
+lists, and the manual (`site/manual/`) describes for people using the app;
+ideas here that are not there (copies of a shape for tunnels, level bars,
+4K) are not built.
+
+The idea: export a mix as a video for YouTube and
 the like, drawn from a template of layers. A template exposes a few fields
 ("Artist name", "Colour 1", "Logo") for the DJ to fill in, and any number
 parameter can follow the music, through knobs (base value plus modulation
@@ -588,3 +596,33 @@ values into the ones a frame gets. None draws anything yet.
 - The values are applied to the picture as it is, in sRGB, as a LUT made for
   Rec. 709 video expects. A LUT made for log footage will look wrong on
   anything else, as it would in an editor.
+
+## Layers, gradients and masks added later, as built
+
+- **Drawn on the graphics card where a pixel at a time is needed.** Noise,
+  displace, the gradient map and LUTs are WebGL 2 shaders on a canvas of
+  their own (`NoiseGl`, `DisplaceGl`, `GradientMapGl`, `LutGl` in
+  `draw.ts`), each with the same steps in TypeScript for a computer without
+  one. Noise and displace are written twice, as a shader and as functions,
+  in `noise.ts` and `displace.ts`; randomness comes from an integer hash
+  both work out alike, and window tests check the card draws what the
+  functions say.
+- **Drawn with the canvas where shapes will do.** Shapes (`outline.ts`:
+  outlines as points, so rounding, partial drawing and tracing along them
+  work for all), grids and the mosaic's cells (`cells.ts`).
+- **Gradients are stops** (`gradient-map.ts`): up to five, each an ordinary
+  colour and position setting, so that each can follow the music; the
+  editor's bar (`stop-bar.ts`) only sets them. They blend evenly in OKLab
+  or round the colour wheel in OKLCH, as each gradient chooses; spectrums
+  blended round the wheel before stops, and are brought over that way.
+- **Amounts are fractions, sizes percent.** Template format 2 made opacities
+  and the like 0 to 1; format 3 made two or three colours into stops.
+  `upgradeTemplate` brings older templates up, step by step.
+- **A mask is a layer** (`MASK_PARAMS`), not a path drawn in a setting: it
+  masks the layers above it in its group, which are drawn onto a copy of the
+  picture so far and laid back through it (`#drawMasked`), so effects among
+  them change only what it shows.
+- **A group is laid down moved** (`#layGroup`): its layers are drawn where
+  they are, then their picture is moved, turned and sized as one. The
+  editor's outlines of its layers move with it, and `frames` says how groups
+  turn each layer, so that a drag moves it the way the pointer goes.
