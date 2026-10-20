@@ -121,6 +121,8 @@ export interface Run<Given> {
   timeoutMs?: number;
   /** More of the app's environment, such as DJMASTER_STORE. */
   env?: Record<string, string>;
+  /** Given, it is filled with what the app printed, line by line, once it has finished. */
+  output?: string[];
 }
 
 /**
@@ -167,6 +169,7 @@ export function runApp<Result, Given = undefined>(
     child.on('error', fail);
     child.on('close', () => {
       clearTimeout(timer);
+      run.output?.push(...output.split('\n'));
       const line = output.split('\n').find((text) => text.startsWith('[script] '));
       if (!line) return fail(new Error(`The app gave no result. Its output:\n${output}`));
       const answer = JSON.parse(line.slice('[script] '.length)) as { result: Result } | { error: string };

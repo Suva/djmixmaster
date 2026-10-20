@@ -9,7 +9,7 @@ import { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { deserialize, serialize } from 'node:v8';
 import {
-  CHANNELS, decode, ffmpeg, inputArgs, isJoined, JOINED_EXTENSION, joinedFiles, joinedList, joinedListHasLengths, joinedName, probe, probeVideo,
+  CHANNELS, decode, ffmpeg, inputArgs, isJoined, JOINED_EXTENSION, joinedFiles, joinedLengths, joinedList, joinedListHasLengths, joinedName, probe, probeVideo,
 } from '../audio-io.ts';
 import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
@@ -18,7 +18,7 @@ import type { Examination } from '../master.ts';
 import type { AppSettings, AppView, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
-import { VIDEO_EXTENSIONS } from './video-files.ts';
+import { clipStreamArgs, VIDEO_EXTENSIONS } from './video-files.ts';
 import { PING_PONG_MOST_SECONDS } from '../visuals/clip.ts';
 import { extractZipEntry, isZip, readZip, readZipEntry, writeZip } from './zip.ts';
 import { needsStreaming, streamingWavHeader } from './playback.ts';
@@ -149,13 +149,63 @@ function serveFrames(request: Request): Response {
   return new Response(Readable.toWeb(frames) as ReadableStream, { headers: { 'Content-Type': 'application/octet-stream' } });
 }
 
+/**
+ * Where each file of a video starts in it: one file at 0, or the parts of a
+ * recording that came in several where its sound places them, which is by
+ * the lengths the analysis writes into its list (or else each file's own).
+ */
+async function clipPartsOf(path: string): Promise<{ path: string; start: number }[]> {
+  if (!isJoined(path)) return [{ path, start: 0 }];
+  const files = joinedFiles(path);
+  const lengths = joinedLengths(path) ?? (await Promise.all(files.map(async (file) => (await probeVideo(file)).duration)));
+  let start = 0;
+  return files.map((file, index) => {
+    const placed = { path: file, start };
+    start += lengths[index];
+    return placed;
+  });
+}
+
+/**
+ * Serves a video's picture as it is stored, not decoded, for a video export
+ * to decode with the browser's decoder: from the keyframe at or before
+ * `from` seconds into it, as a fragmented MP4 (see `clipStreamArgs`). ffmpeg
+ * cannot start a copy part way into a recording joined from several files,
+ * so such a recording is served one file after another, each as an MP4 of
+ * its own with its times moved on to where it starts. The copying stops when
+ * the export stops reading.
+ */
+async function serveClip(request: Request): Promise<Response> {
+  const query = new URL(request.url).searchParams;
+  const path = query.get('path') ?? '';
+  const from = Math.max(0, Number(query.get('from')) || 0);
+  if (!servableVideo(path) && !(isJoined(path) && existsSync(path))) return new Response(null, { status: 404 });
+  const parts = await clipPartsOf(path);
+  const first = Math.max(0, parts.findLastIndex((part) => part.start <= from));
+  const copied = Readable.from(
+    (async function* () {
+      for (let i = first; i < parts.length; i++) {
+        const { path: file, start } = parts[i];
+        const copier = spawn(ffmpeg(), clipStreamArgs(file, i === first ? from - start : 0, start), { stdio: ['ignore', 'pipe', 'ignore'] });
+        try {
+          yield* copier.stdout;
+        } finally {
+          copier.kill();
+        }
+      }
+    })(),
+  );
+  return new Response(Readable.toWeb(copied) as ReadableStream, { headers: { 'Content-Type': 'video/mp4' } });
+}
+
 function serve(request: Request): Promise<Response> | Response {
   const { pathname, searchParams } = new URL(request.url);
   if (pathname === `/media/${media.id}` && media.path) return serveMedia(request);
   if (pathname === `/stream/${media.id}` && media.path) return serveStream(request);
-  // A template's video, for the Video view to play, and its frames, for an export to draw.
+  // A template's video, for the Video view to play, and its frames or its picture as stored, for an export to draw.
   if (pathname === '/video' && servableVideo(searchParams.get('path') ?? '')) return serveMedia(request, searchParams.get('path')!);
   if (pathname === '/frames') return serveFrames(request);
+  if (pathname === '/clip') return serveClip(request);
   const file = pathname.slice(1);
   if (APP_FILES.includes(file)) return net.fetch(pathToFileURL(join(__dirname, file)).toString());
   // The fonts that come with the app, for a video's text.
@@ -756,8 +806,12 @@ async function renderVideo(request: RenderRequest): Promise<unknown> {
       });
       drawer.webContents.once('did-finish-load', () => drawer.webContents.send('video-job', video));
       // DJMASTER_PROFILE: the exporter says where each frame's time went, for finding what is slow; =layers, also each layer's.
+      // DJMASTER_DECODER=ffmpeg: ffmpeg decodes every clip, as it does those the browser's decoder cannot.
+      const options = new URLSearchParams();
       const profile = process.env.DJMASTER_PROFILE;
-      drawer.loadURL(`${ORIGIN}/exporter.html${profile ? `?profile=${profile === 'layers' ? 'layers' : 'stages'}` : ''}`);
+      if (profile) options.set('profile', profile === 'layers' ? 'layers' : 'stages');
+      if (process.env.DJMASTER_DECODER === 'ffmpeg') options.set('decoder', 'ffmpeg');
+      drawer.loadURL(`${ORIGIN}/exporter.html${options.size ? `?${options}` : ''}`);
     });
     return result;
   } catch (error) {

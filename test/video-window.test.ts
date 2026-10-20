@@ -277,6 +277,128 @@ test('a template shows the recording\'s own picture in step with the mix, as lat
   }
 });
 
+/** The number of frames in a video's picture. */
+const frameCount = (file: string) =>
+  execFileSync(ffmpeg(), ['-v', 'error', '-i', file, '-map', '0:v:0', '-c', 'copy', '-f', 'framecrc', '-']).toString().split('\n').filter((line) => /^0,/.test(line)).length;
+
+/** What an export said about each clip it decoded, by which decoder: "the browser (h264)", "ffmpeg (prores)". */
+function decodedBy(output: string[]): Record<string, string> {
+  const by: Record<string, string> = {};
+  for (const line of output) {
+    const said = /^\[exporter\] clip (.+) decoded by (.+)$/.exec(line);
+    if (said) by[said[1]] = said[2];
+  }
+  return by;
+}
+
+test('the recording\'s picture is exported across the files of a recording in several, by the browser\'s decoder and by ffmpeg alike', { skip }, async () => {
+  // The filmed set as a recorder would split it: half a minute in each file.
+  const parts = [join(work, 'Split set 1.mp4'), join(work, 'Split set 2.mp4')];
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', filmed, '-t', '30', '-c', 'copy', parts[0]]);
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-ss', '30', '-i', filmed, '-c', 'copy', parts[1]]);
+  const data = await dataFolder(work);
+  // Each decoder in turn: ffmpeg's is what is done for a clip the browser's cannot decode.
+  for (const decoder of ['browser', 'ffmpeg']) {
+    const folder = join(work, `split by ${decoder}`);
+    await mkdir(folder);
+    const output: string[] = [];
+    const env: Record<string, string> = decoder === 'ffmpeg' ? { DJMASTER_DECODER: 'ffmpeg' } : {};
+    const seen = await runApp({ recording: parts, data, exportFolder: folder, env, output, timeoutMs: 150_000 }, async (page) => {
+      await page.until(() => page.text('stat-out') !== '–', 'the levelling to be worked out', 60_000);
+      // A mix from 25 s to 35 s, across where the second file starts.
+      page.key('Enter');
+      page.key('ArrowRight', { shift: true });
+      page.key('ArrowLeft');
+      page.key('KeyI');
+      for (let i = 0; i < 2; i++) page.key('ArrowRight');
+      await page.wait(100);
+      page.key('KeyO');
+      await page.settle();
+      page.click('export-all');
+      await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+      document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+      page.click('export-go');
+      await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 120_000);
+      return { status: page.text('export-status'), region: page.region() };
+    });
+    assert.match(seen.status, /^Exported 1 mix\./, seen.status);
+    const start = seen.region.start.split(':').reduce((total, part) => total * 60 + Number(part), 0);
+    assert.ok(Math.abs(start - 25) < 0.01 && seen.region.length === '0:00:10', `the mix is ${seen.region.length} from ${seen.region.start}`);
+    assert.match(Object.values(decodedBy(output)).join(), decoder === 'browser' ? /^the browser \(h264\)$/ : /^ffmpeg \(h264: The browser cannot decode/);
+    const [exported] = await readdir(folder);
+    const video = join(folder, exported);
+    assert.equal(frameCount(video), 300, 'ten seconds of picture at 30 frames a second, as long as the sound');
+    // Each moment shows the recording at that moment, on either side of where the files meet:
+    // it matches the recording there better than five frames either side. (Not by as much as
+    // the delay's test asks: this picture does not say what colours it is in, and ffmpeg takes them
+    // otherwise than the browser and the recording's own decoding do, which counts against every moment alike.)
+    for (const seconds of [2, 4.9, 5.3, 8]) {
+      const made = thumbnail(video, seconds);
+      const right = difference(made, thumbnail(filmed, 25 + seconds));
+      for (const other of [-0.2, 0.2]) {
+        const wrong = difference(made, thumbnail(filmed, 25 + seconds + other));
+        assert.ok(right < wrong, `by ${decoder}, ${seconds} s in matches the recording at ${25 + seconds} s (${right.toFixed(1)}) better than ${other} s off (${wrong.toFixed(1)})`);
+      }
+    }
+  }
+});
+
+test('a clip filmed upright on a phone is shown upright, by the browser\'s decoder and by ffmpeg alike', { skip }, async () => {
+  // Stored on its side, red on the left and blue on the right, and turned a quarter when shown, as a phone does.
+  const stored = join(work, 'Halves.mp4');
+  execFileSync(ffmpeg(), [
+    '-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=red:s=160x180:r=25:d=2', '-f', 'lavfi', '-i', 'color=c=blue:s=160x180:r=25:d=2',
+    '-filter_complex', '[0][1]hstack', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', stored,
+  ]);
+  const upright = join(work, 'Upright.mp4');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-display_rotation', '90', '-i', stored, '-c', 'copy', upright]);
+  // As ffmpeg shows it, turned: 180 × 320, one colour above the other.
+  const shown = execFileSync(ffmpeg(), ['-v', 'error', '-i', upright, '-frames:v', '1', '-vf', 'scale=1:2:flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
+  const expected = thirds([...shown, 0, 0, 0]).slice(0, 2);
+  assert.notEqual(expected[0], expected[1]);
+  const file = join(work, 'Upright.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 1, name: 'Upright', fields: [],
+    layers: [{ type: 'video', params: { video: upright, fit: 'contain', width: 100, height: 100 } }],
+  }));
+  for (const decoder of ['browser', 'ffmpeg']) {
+    const folder = join(work, `upright by ${decoder}`);
+    await mkdir(folder);
+    const output: string[] = [];
+    const env: Record<string, string> = decoder === 'ffmpeg' ? { DJMASTER_DECODER: 'ffmpeg' } : {};
+    const status = await runApp({ recording: filmed, data: await fresh(), template: file, exportFolder: folder, env, output, timeoutMs: 120_000 }, async (page) => {
+      // A mix of the first five seconds.
+      page.key('Enter');
+      page.key('ArrowRight');
+      await page.wait(100);
+      page.key('KeyO');
+      await page.settle();
+      page.click('view-video');
+      page.click('template-import');
+      await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Upright', 'the template to be added');
+      await page.settle();
+      page.click('export-all');
+      await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+      document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+      page.click('export-go');
+      await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 100_000);
+      return page.text('export-status');
+    });
+    assert.match(status, /^Exported 1 mix\./, status);
+    assert.match(decodedBy(output)['Upright.mp4'] ?? '', decoder === 'browser' ? /^the browser/ : /^ffmpeg/);
+    const [exported] = await readdir(folder);
+    const video = join(folder, exported);
+    // Fitted into the picture upright: as tall as it, 1080 × 180 / 320 = 608 wide, in the middle.
+    const row = execFileSync(ffmpeg(), ['-v', 'error', '-ss', '1', '-i', video, '-frames:v', '1', '-vf', 'crop=1920:2:0:540', '-f', 'rawvideo', '-pix_fmt', 'gray', '-']);
+    const lit = [...row.subarray(0, 1920)].flatMap((value, x) => (value > 40 ? [x] : []));
+    const width = lit[lit.length - 1] - lit[0] + 1;
+    assert.ok(Math.abs(width - 608) <= 4 && Math.abs(lit[0] - 656) <= 4, `by ${decoder}, the clip is ${width} wide from ${lit[0]}`);
+    // And the same way up as ffmpeg shows it.
+    const column = execFileSync(ffmpeg(), ['-v', 'error', '-ss', '1', '-i', video, '-frames:v', '1', '-vf', 'crop=600:1080:660:0,scale=1:2:flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-']);
+    assert.deepEqual(thirds([...column, 0, 0, 0]).slice(0, 2), expected, `by ${decoder}, the right way up`);
+  }
+});
+
 test('a ping-pong clip plays there and back, and a clip in a codec the window cannot play is shown from a copy', { skip }, async () => {
   const prores = join(work, 'Colours.mov');
   execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', clip, '-c:v', 'prores_ks', prores]);

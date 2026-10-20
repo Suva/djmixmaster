@@ -16,6 +16,15 @@ are under "Not released yet" and appear there once they are.
   costs about what it does without one. The key now looks at the clip's
   own colours, before its brightness and saturation are changed, and its
   edges are smoother on a clip shown larger than it was filmed.
+- **Videos with clips export faster.** A template's video clips, and a
+  filmed set's own picture, are now decoded by the computer's video
+  decoder, on the graphics card where there is one, rather than frame by
+  frame by ffmpeg. On an M1, an export showing a 1080p video takes less
+  than half as long as before, and one showing a 4K video, which took
+  longer than the mix itself, is about seven times faster. Clips in H.264,
+  HEVC, VP9 and AV1 are decoded this way; others, such as ProRes, as
+  before. A clip that does not say which colours it is in now keeps the
+  colours other players show it in.
 - **Grids and mosaics are fast at any cell size.** A grid of checks, a
   honeycomb, hex cells or dots, and the mosaic effect, are now drawn by the
   graphics card, and a perspective floor no longer draws its far distance

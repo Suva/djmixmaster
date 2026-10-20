@@ -69,7 +69,9 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/fields-editor.ts` | The editor's Fields tab: what a template asks to be filled in |
 | `src/app/renderer/stop-bar.ts` | A gradient's stops as a bar in the editor, to drag, add and take out; each stop's own settings fold away under it |
 | `src/app/renderer/picture-handles.ts` | Picking, moving and resizing layers on the picture while editing, from where the drawer says each was drawn |
-| `src/app/renderer/video-sources.ts` | The frames of a template's videos: video elements in the view, ffmpeg in the export |
+| `src/app/renderer/video-sources.ts` | The frames of a template's videos: video elements in the view, decoders in the export |
+| `src/app/renderer/clip-decoder.ts` | A clip of a video export decoded by the browser's video decoder, each frame picked by its time |
+| `src/app/renderer/mp4-packets.ts` | Reads the compressed frames out of the MP4 that ffmpeg copies a clip into for an export |
 | `src/app/renderer/video-frame.ts` | A frame of a mix's video, drawn the same for the view and the export |
 | `src/app/renderer/exporter.ts` | The hidden page that draws and encodes a video export |
 | `src/diagnostics.ts` | Gathers channel, clipping, silence and spectrum data during analysis |
@@ -164,6 +166,7 @@ environment variables switch on:
 | `DJMASTER_SHOT_TEMPLATE=<file>` | Answer the dialog for a template to import with this file. A template exported is saved into `DJMASTER_SHOT_FOLDER`, and one deleted is removed rather than moved to the Trash |
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
 | `DJMASTER_PROFILE=stages` | A video export prints where each frame's time went: the clips' frames, drawing, encoding, sending to ffmpeg. Works outside check mode too |
+| `DJMASTER_DECODER=ffmpeg` | A video export has ffmpeg decode every clip, as it does those the browser's decoder cannot take: to compare the two, and to test that. Works outside check mode too |
 | `DJMASTER_STORE=1` | Act as a copy from the Microsoft Store: no update check of its own, and Settings says the Store keeps it up to date |
 | `DJMASTER_PROFILE=layers` | As `stages`, and the time of each layer. Each layer is waited for on the graphics card, so drawing is slower while it is on |
 
@@ -259,7 +262,22 @@ Do not write test data there.
   with WebCodecs, hardware first; the encoded picture is piped into ffmpeg,
   which packs it with the sound without encoding either again. Cancelling
   stops all three and removes the files. The hidden window must keep drawing
-  unseen, so it is made with `backgroundThrottling: false`.
+  unseen, so it is made with `backgroundThrottling: false`. While a frame is
+  encoded, the next frame's clips are got ready.
+- **An export's clips are decoded by the browser** where it can
+  (`clip-decoder.ts`): ffmpeg copies the clip's picture as it is stored,
+  from the keyframe before where it is wanted, into a fragmented MP4 that
+  keeps each frame's own time (`/clip` in `main.ts`, `clipStreamArgs` in
+  `video-files.ts`); the window reads its frames out (`mp4-packets.ts`),
+  decodes them with WebCodecs, hardware first, and shows for each moment the
+  last frame at or before it. The decoder turns a phone's upright video
+  itself. A recording in several files is copied one file after another,
+  each moved on to where the sound places it, as ffmpeg cannot start a copy
+  part way into a joined one. Codecs other than H.264, HEVC, VP9 and AV1,
+  and any clip the decoder refuses or fails on, are decoded by ffmpeg
+  instead (`/frames`, `RawClip` in `video-sources.ts`): raw frames, scaled
+  and in BT.709, several times slower. `DJMASTER_DECODER=ffmpeg` makes it
+  decode them all, for comparing.
 - **The window has two views,** Mastering and Video, switched by the bar at
   the bottom or Tab. The Video view (`video-view.ts`) replaces the curves with
   the picture and the levelling settings with the template's fields; the
@@ -292,7 +310,7 @@ Do not write test data there.
   good value (`#lastGood` in `video-view.ts`).
 - **Video layers are drawn from frames handed in.** The drawer asks
   `frame.video` for a clip's frame; the view answers from video elements,
-  the export from ffmpeg (`video-sources.ts`). Drawing is synchronous, so
+  the export from decoded frames (`video-sources.ts`). Drawing is synchronous, so
   the export gets each frame's clips ready first (`clipRequests`). Where a
   clip is comes from `clipTime` in `visuals/clip.ts` for both; anything
   about a clip's timing has to go through it. Videos are never packed into

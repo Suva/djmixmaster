@@ -1,6 +1,6 @@
 // Where in a video clip a frame of a mix is: worked out the same way for the
 // Video view, which plays the clip in a video element, and for the export,
-// which reads its frames from ffmpeg. Both ask this module, so the two cannot
+// which decodes it frame by frame. Both ask this module, so the two cannot
 // disagree about which frame of the clip goes with which moment of the mix.
 //
 // Kept free of Node imports: the window and the export page use it.

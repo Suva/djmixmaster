@@ -1,11 +1,13 @@
 // The frames of the videos a template shows, for the drawer: in the Video view
-// from video elements that play along with the music, and in an export from
-// ffmpeg, frame by exact frame. Both work out where each clip is with the
-// same function (clipTime in visuals/clip.ts).
+// from video elements that play along with the music, and in an export frame
+// by exact frame, decoded by the browser's decoder or by ffmpeg. Both work
+// out where each clip is with the same function (clipTime in visuals/clip.ts).
 
 import { clipTime, PING_PONG_MOST_SECONDS, usedPart, type ClipTiming } from '../../visuals/clip.ts';
 import type { VideoPicture } from '../../visuals/draw.ts';
 import type { Api, VideoInfo } from '../api.ts';
+import { DECODER_CODECS } from '../video-files.ts';
+import { ClipDecoder } from './clip-decoder.ts';
 
 /** Where the window gets a video file from, to play it. */
 export const videoUrl = (path: string) => `djm://app/video?path=${encodeURIComponent(path)}`;
@@ -261,21 +263,90 @@ class ByteReader {
   }
 }
 
-/** One clip being read for one layer: decoded from some point onwards, a frame at a time. */
+/**
+ * A clip of an export decoded by ffmpeg, for one layer: frames on an even
+ * grid of the clip's frame rate, scaled to fit the video being made, passed
+ * over as raw pixels. For clips the browser's decoder will not take (see
+ * ClipDecoder): ffmpeg decodes anything, but slowly.
+ */
+class RawClip {
+  readonly #path: string;
+  readonly #width: number;
+  readonly #height: number;
+  readonly #fps: number;
+  #reader: ByteReader | null = null;
+  /** Where in the clip the decoding started, in its seconds. */
+  #from = 0;
+  /** The frame on hand, as its number counted from `from`; -1 for none. */
+  #index = -1;
+  #frame: VideoFrame | null = null;
+  /** The decoder has reached the end of the clip: the last frame stays. */
+  #ended = false;
+
+  constructor(path: string, size: { width: number; height: number }, fps: number) {
+    this.#path = path;
+    this.#width = size.width;
+    this.#height = size.height;
+    this.#fps = fps;
+  }
+
+  async seek(at: number) {
+    // Frame k of a decoding covers from + k / fps up to the next; a little leeway for rounding.
+    let wanted = Math.floor((at - this.#from) * this.#fps + 1e-6);
+    const behind = wanted < this.#index;
+    const farAhead = wanted > this.#index + 2 * this.#fps;
+    if (!this.#reader || behind || farAhead) {
+      this.#reader?.cancel();
+      this.#from = at;
+      this.#index = -1;
+      this.#ended = false;
+      wanted = 0;
+      const query = new URLSearchParams({
+        path: this.#path, from: String(at), fps: String(this.#fps), w: String(this.#width), h: String(this.#height),
+      });
+      const response = await fetch(`djm://app/frames?${query}`);
+      if (!response.ok || !response.body) throw new Error(`Could not read the video ${this.#path.split(/[\\/]/).pop()}`);
+      this.#reader = new ByteReader(response.body);
+    }
+    const bytes = (this.#width * this.#height * 3) / 2;
+    while (this.#index < wanted && !this.#ended) {
+      const data = await this.#reader!.read(bytes);
+      if (!data) {
+        // Past the clip's last frame: the one on hand stays.
+        this.#ended = true;
+        break;
+      }
+      this.#frame?.close();
+      this.#frame = new VideoFrame(data, {
+        format: 'I420',
+        codedWidth: this.#width,
+        codedHeight: this.#height,
+        timestamp: Math.round((this.#from + (this.#index + 1) / this.#fps) * 1e6),
+        colorSpace: { matrix: 'bt709', primaries: 'bt709', transfer: 'bt709', fullRange: false },
+      });
+      this.#index++;
+    }
+  }
+
+  picture(): VideoPicture | null {
+    return this.#frame && { image: this.#frame, width: this.#width, height: this.#height };
+  }
+
+  close() {
+    this.#reader?.cancel();
+    this.#frame?.close();
+  }
+}
+
+/** One clip being read for one layer. */
 interface Reading {
   path: string;
-  width: number;
-  height: number;
+  video: VideoInfo;
   fps: number;
   duration: number;
-  reader: ByteReader | null;
-  /** Where in the clip the decoding started, in its seconds. */
-  from: number;
-  /** The frame on hand, as its number counted from `from`; -1 for none. */
-  index: number;
-  frame: VideoFrame | null;
-  /** The decoder has reached the end of the clip: the last frame stays. */
-  ended: boolean;
+  /** Decoded by the browser, while it can; else by ffmpeg. */
+  decoder: ClipDecoder | null;
+  raw: RawClip | null;
 }
 
 /** A request the drawer will make for a frame: which layer, which file, where in its clip. */
@@ -286,11 +357,12 @@ export interface ClipRequest {
 }
 
 /**
- * Reads the frames of an export's videos from ffmpeg. Before each frame of
- * the export is drawn, `prepare` is given what the drawer will ask for and
- * gets those frames ready; `picture` then hands them over as it asks. A clip
- * is decoded forwards from where it is first wanted; a jump back (a loop
- * starting over) or far ahead starts the decoding again from there.
+ * Reads the frames of an export's videos. Before each frame of the export is
+ * drawn, `prepare` is given what the drawer will ask for and gets those
+ * frames ready; `picture` then hands them over as it asks. A clip is decoded
+ * forwards from where it is first wanted; a jump back (a loop starting over)
+ * or far ahead starts the decoding again from there. The browser's decoder
+ * decodes it where it can, and ffmpeg where it cannot (`RawClip`).
  */
 export class ExportVideos {
   readonly #api: Api;
@@ -298,8 +370,10 @@ export class ExportVideos {
   readonly #readings = new Map<string, Reading>();
   readonly #infos = new Map<string, Promise<{ duration: number; video: VideoInfo }>>();
   readonly #pingPongs: PingPongs;
+  /** How each clip was decoded, by its file's name: for the profile, and the tests. */
+  readonly decodedBy = new Map<string, string>();
 
-  /** `most` is the size of the video being made: no clip is decoded larger. */
+  /** `most` is the size of the video being made: no clip is decoded larger by ffmpeg. */
   constructor(api: Api, most: { width: number; height: number }) {
     this.#api = api;
     this.#most = most;
@@ -322,54 +396,35 @@ export class ExportVideos {
       let reading = this.#readings.get(key);
       if (!reading) {
         const { duration, video } = await this.#info(path);
-        const size = decodeSize(video, this.#most);
         reading = {
-          path, ...size, duration, fps: Math.min(60, video.fps || FALLBACK_FPS),
-          reader: null, from: 0, index: -1, frame: null, ended: false,
+          path, video, duration, fps: Math.min(60, video.fps || FALLBACK_FPS),
+          decoder: DECODER_CODECS.includes(video.codec) ? new ClipDecoder(path, video.rotation) : null, raw: null,
         };
         this.#readings.set(key, reading);
       }
       const at = clipTime(timing, reading.duration, 1 / reading.fps);
-      if (at !== null) await this.#seekTo(reading, at);
+      if (at !== null) await this.#seek(reading, at);
     }
   }
 
-  async #seekTo(reading: Reading, at: number) {
-    // Frame k of a decoding covers from + k / fps up to the next; a little leeway for rounding.
-    let wanted = Math.floor((at - reading.from) * reading.fps + 1e-6);
-    const behind = wanted < reading.index;
-    const farAhead = wanted > reading.index + 2 * reading.fps;
-    if (!reading.reader || behind || farAhead) {
-      reading.reader?.cancel();
-      reading.from = at;
-      reading.index = -1;
-      reading.ended = false;
-      wanted = 0;
-      const query = new URLSearchParams({
-        path: reading.path, from: String(at), fps: String(reading.fps), w: String(reading.width), h: String(reading.height),
-      });
-      const response = await fetch(`djm://app/frames?${query}`);
-      if (!response.ok || !response.body) throw new Error(`Could not read the video ${reading.path.split(/[\\/]/).pop()}`);
-      reading.reader = new ByteReader(response.body);
-    }
-    const bytes = (reading.width * reading.height * 3) / 2;
-    while (reading.index < wanted && !reading.ended) {
-      const data = await reading.reader!.read(bytes);
-      if (!data) {
-        // Past the clip's last frame: the one on hand stays.
-        reading.ended = true;
-        break;
+  async #seek(reading: Reading, at: number) {
+    const name = reading.path.split(/[\\/]/).pop()!;
+    if (reading.decoder) {
+      try {
+        await reading.decoder.seek(at);
+        if (!this.decodedBy.has(name)) this.decodedBy.set(name, `the browser (${reading.video.codec})`);
+        return;
+      } catch (error) {
+        // From here on ffmpeg decodes it, starting where it is wanted now.
+        reading.decoder.close();
+        reading.decoder = null;
+        this.decodedBy.set(name, `ffmpeg (${reading.video.codec}: ${error instanceof Error ? error.message : String(error)})`);
       }
-      reading.frame?.close();
-      reading.frame = new VideoFrame(data, {
-        format: 'I420',
-        codedWidth: reading.width,
-        codedHeight: reading.height,
-        timestamp: Math.round((reading.from + (reading.index + 1) / reading.fps) * 1e6),
-        colorSpace: { matrix: 'bt709', primaries: 'bt709', transfer: 'bt709', fullRange: false },
-      });
-      reading.index++;
+    } else if (!this.decodedBy.has(name)) {
+      this.decodedBy.set(name, `ffmpeg (${reading.video.codec})`);
     }
+    reading.raw ??= new RawClip(reading.path, decodeSize(reading.video, this.#most), reading.fps);
+    await reading.raw.seek(at);
   }
 
   /** What is played for a request: the clip, or for a ping-pong, its copy there and back as a loop. */
@@ -387,14 +442,14 @@ export class ExportVideos {
     const copy = timing.playback === 'ping-pong' ? this.#copyOf.get(`${layer}|${path}`) : undefined;
     if (copy) return this.picture(copy, layer, { ...timing, playback: 'loop', inPoint: 0, outPoint: 0 });
     const reading = this.#readings.get(`${layer}|${path}`);
-    if (!reading?.frame || clipTime(timing, reading.duration, 1 / reading.fps) === null) return null;
-    return { image: reading.frame, width: reading.width, height: reading.height };
+    if (!reading || clipTime(timing, reading.duration, 1 / reading.fps) === null) return null;
+    return (reading.decoder ?? reading.raw)?.picture() ?? null;
   }
 
   close() {
     for (const reading of this.#readings.values()) {
-      reading.reader?.cancel();
-      reading.frame?.close();
+      reading.decoder?.close();
+      reading.raw?.close();
     }
     this.#readings.clear();
   }

@@ -13,6 +13,7 @@ import { fontsOf, imagesOf, lutsOf, prepare } from '../../visuals/template.ts';
 import type { Lut } from '../../visuals/lut.ts';
 import { clipRequests, drawVideoFrame, lutOf, pictureOf } from './video-frame.ts';
 import { ExportVideos } from './video-sources.ts';
+import { refuseEveryClip } from './clip-decoder.ts';
 
 declare global {
   interface Window {
@@ -20,6 +21,8 @@ declare global {
   }
 }
 const api = window.api;
+const options = new URLSearchParams(location.search);
+if (options.get('decoder') === 'ffmpeg') refuseEveryClip();
 
 /** Encoded frames are sent on in batches of about this size, so as not to send each one alone. */
 const BATCH_BYTES = 1_000_000;
@@ -104,9 +107,9 @@ async function draw(
   const keyframeEvery = Math.round(KEYFRAME_SECONDS * job.fps);
   // Asked for (DJMASTER_PROFILE), where the time goes: each stage of a frame, and with =layers each layer,
   // which waits for each and so slows the drawing; the stages alone are as fast as an export.
-  const profiling = location.search.includes('profile');
+  const profiling = options.has('profile');
   const stages = new Map<string, number>();
-  if (location.search.includes('profile=layers')) drawer.profile = new Map();
+  if (options.get('profile') === 'layers') drawer.profile = new Map();
   let mark = performance.now();
   const stage = (name: string) => {
     if (!profiling) return;
@@ -115,16 +118,25 @@ async function draw(
     mark = now;
   };
   const began = performance.now();
+  // The videos' frames for a moment, got ready before it is drawn: those of the next frame while this one is
+  // encoded. Its rejection is kept for when it is waited for, so that it is not reported as unhandled before.
+  const prepared = (i: number) => {
+    const ready = videos.prepare(clipRequests(mix, layers, reader, i / job.fps));
+    ready.catch(() => {});
+    return ready;
+  };
+  let next = frames > 0 ? prepared(0) : null;
   for (let i = 0; i < frames; i++) {
     if (failure) throw new Error(failure);
-    // The videos' frames for this moment, decoded before the frame is drawn.
-    await videos.prepare(clipRequests(mix, layers, reader, i / job.fps));
+    await next;
     stage('clip frames');
     drawVideoFrame(drawer, layers, reader, mix, i / job.fps, dt, images, videos, dt, luts);
     stage('drawing');
     const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / job.fps), duration: Math.round(1e6 / job.fps) });
     encoder.encode(frame, { keyFrame: i % keyframeEvery === 0 });
     frame.close();
+    // The picture is taken, and this frame's clips are done with; the next frame's are asked for from here on.
+    next = i + 1 < frames ? prepared(i + 1) : null;
     stage('handing to the encoder');
     // Wait for the encoder rather than queue up frames: memory stays flat however long the mix.
     while (encoder.encodeQueueSize > 4) await new Promise((done) => encoder.addEventListener('dequeue', done, { once: true }));
@@ -143,6 +155,8 @@ async function draw(
     }
     console.log(`profile\n${lines.join('\n')}`);
   }
+  // Which decoder each clip went to, for the profile and the tests (the main process shows what is said here only to them).
+  for (const [name, by] of videos.decodedBy) console.log(`clip ${name} decoded by ${by}`);
   await encoder.flush();
   if (failure) throw new Error(failure);
   await send();

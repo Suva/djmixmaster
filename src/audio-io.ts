@@ -115,6 +115,12 @@ export function joinedFiles(list: string): string[] {
     .map((line) => line.slice(5).trim().replace(/^'|'$/g, '').replace(/'\\''/g, "'"));
 }
 
+/** How long each file a list joins is, in seconds, once the analysis has written it into the list; null before. */
+export function joinedLengths(list: string): number[] | null {
+  const lengths = readFileSync(list, 'utf8').split('\n').filter((line) => line.startsWith('duration ')).map((line) => Number(line.slice(9)));
+  return lengths.length === joinedFiles(list).length && lengths.every((length) => length >= 0) ? lengths : null;
+}
+
 /** The name a list was given for its files, if any. */
 export function joinedName(list: string): string | null {
   return /^# name: (.*)$/m.exec(readFileSync(list, 'utf8'))?.[1] ?? null;

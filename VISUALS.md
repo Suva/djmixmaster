@@ -475,13 +475,22 @@ values into the ones a frame gets. None draws anything yet.
   clip's speed and is put back only when it drifts more than 0.15 s from
   where `clipTime` says; paused, it is put on the exact frame, and the
   picture is drawn again when the frame comes in.
-- **In the export**, the main process decodes each clip with ffmpeg
-  (`/frames`): frames on an even grid at the clip's own rate, scaled to fit
-  the video being made, as raw I420 in BT.709. `ExportVideos` reads them as
-  `VideoFrame`s. Since drawing a frame is synchronous, the frames it will ask
-  for are got ready first (`clipRequests` in `video-frame.ts`), from the
-  layers' settings. A clip is decoded forwards; a jump back (a loop starting
-  over) or far ahead starts ffmpeg again from there.
+- **In the export**, each clip is decoded by the browser's video decoder
+  (`ClipDecoder` in `clip-decoder.ts`), on the graphics card where it can:
+  the main process has ffmpeg copy the clip's picture, not decoded, from the
+  keyframe before where it is wanted (`/clip`), as a fragmented MP4 with each
+  frame at its own time; `mp4-packets.ts` reads the frames out, and each
+  moment shows the last frame decoded at or before it. A few frames are
+  decoded ahead and the rest let go, so memory stays flat. A clip the
+  decoder will not take (ProRes, DNxHD, or a codec this computer cannot
+  decode) is decoded by ffmpeg instead (`/frames`, `RawClip` in
+  `video-sources.ts`): frames on an even grid at the clip's own rate, scaled
+  to fit the video being made, as raw I420 in BT.709, which is several times
+  slower. Since drawing a frame is synchronous, the frames it will ask for
+  are got ready first (`clipRequests` in `video-frame.ts`), from the layers'
+  settings; the next frame's while this one is encoded. A clip is decoded
+  forwards; a jump back (a loop starting over) or far ahead starts the
+  reading again from there.
 - **Videos are not packed into the template.** A template's `media` lists
   each by name with its path, size and fingerprint, and a setting names one
   as `media:name`. A video up to 25 MB is copied into the app's media folder
