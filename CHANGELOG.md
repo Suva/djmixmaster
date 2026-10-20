@@ -4,7 +4,7 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
-## Not released yet
+## 0.11.0 — 20 October 2026
 
 - **The manual comes with the app.** Help → User Manual opens the copy the
   app carries, which describes exactly the version you have and works
