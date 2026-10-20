@@ -14,6 +14,7 @@ import { freeName, keptLutName, lutChoices } from './layer-settings.ts';
 import { lutPicker } from './lut-picker.ts';
 import { fontPicker } from './font-picker.ts';
 import { scrubbableInput } from './scrub.ts';
+import { colourInput } from './colour-input.ts';
 
 export interface FieldsEditorContext {
   /** The template as it is now. */
@@ -259,11 +260,8 @@ function defaults(field: Field, set: (kind: string, apply: (field: Field) => voi
 
   switch (field.kind) {
     case 'colour': {
-      const input = document.createElement('input');
-      input.type = 'color';
-      input.value = String(field.default).slice(0, 7) || '#ffffff';
-      input.addEventListener('input', () => set('default', (f) => (f.default = input.value)));
-      box.append(row('Default', input));
+      const input = colourInput(String(field.default), (hex) => set('default', (f) => (f.default = hex)), 'Default colour');
+      box.append(row('Default', input.element));
       break;
     }
     case 'number': {

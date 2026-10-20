@@ -1,7 +1,8 @@
 // A gradient's stops as a bar in the template editor, as a photo editor shows
-// them: the gradient, with a marker under it for each stop. Drag a marker to
-// move its stop, click it to choose its colour, click the bar to add a stop
-// there, drag a marker away from the bar to take it out.
+// them: the gradient, with a marker under it for each stop, and under those
+// the colour and opacity of the stop chosen. Drag a marker to move its stop,
+// click it to choose it and its colour, click the bar to add a stop there,
+// drag a marker away from the bar to take it out.
 //
 // The stops are ordinary settings (colour1…colour5, position1…position5; see
 // gradient-map.ts), shown below the bar as well; the bar only sets them, so
@@ -12,6 +13,7 @@
 import { parseHex, toHex, type Colour } from '../../visuals/colour.ts';
 import { gradientAt, STOP_COUNT, stopsOf } from '../../visuals/gradient-map.ts';
 import type { Layer, ParamValue, ResolvedParams } from '../../visuals/template.ts';
+import { colourInput } from './colour-input.ts';
 
 /** Pointer movement under this many pixels is a click, not a drag. */
 const DRAG_START_PX = 4;
@@ -31,6 +33,9 @@ export interface StopBarContext {
 
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 
+/** The stop chosen on each layer's bar, kept while other layers are selected. */
+const chosenOf = new WeakMap<Layer, number>();
+
 export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLElement; tick(): void } {
   const element = document.createElement('div');
   element.className = 'stop-bar';
@@ -42,12 +47,23 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
   track.append(gradient);
   const markers = document.createElement('div');
   markers.className = 'stop-markers';
-  // The colour well that a click on a marker opens; one, reused.
-  const well = document.createElement('input');
-  well.type = 'color';
-  well.className = 'stop-well';
-  well.tabIndex = -1;
-  element.append(track, markers, well);
+  // The chosen stop's colour and opacity, under the markers.
+  const chosenRow = document.createElement('div');
+  chosenRow.className = 'stop-chosen';
+  const chosenName = document.createElement('span');
+  chosenName.className = 'stop-name';
+  const picker = colourInput('', (hex) => {
+    const n = chosen();
+    if (n === null || plainColour(n) === null) return;
+    context.set({ [`colour${n}`]: hex });
+    context.refresh(`colour${n}`);
+    draw();
+  }, 'Stop colour');
+  const chosenNote = document.createElement('span');
+  chosenNote.className = 'stop-note';
+  chosenNote.textContent = 'Its colour follows an expression, set under Each stop.';
+  chosenRow.append(chosenName, picker.element, chosenNote);
+  element.append(track, markers, chosenRow);
 
   const given = (key: string) => layer.params[key] ?? context.defaults[key];
   const plainColour = (n: number) => {
@@ -82,10 +98,12 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
   }
   markers.append(...items);
 
-  /** Moves a marker, or on a click without moving, opens its colour. */
+  /** Chooses a marker's stop, and moves it, or on a click without moving, opens its colour. */
   function grab(event: PointerEvent, n: number, marker: HTMLElement) {
     event.preventDefault();
     event.stopPropagation();
+    chosenOf.set(layer, n);
+    draw();
     const [startX, startY] = [event.clientX, event.clientY];
     const movable = plainPosition(n) !== null;
     let dragging = false;
@@ -109,25 +127,19 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
       if (removing) {
         context.set({ [`colour${n}`]: '' });
         context.refresh(`colour${n}`);
-      } else if (!dragging) pickColour(n);
+      } else if (!dragging && plainColour(n) !== null) picker.well.click();
       draw();
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
   }
 
-  function pickColour(n: number) {
-    const plain = plainColour(n);
-    if (plain === null) return;
-    well.value = (plain || '#ffffff').slice(0, 7);
-    well.oninput = () => {
-      // The well knows no transparency: what there was is kept.
-      const alpha = HEX.test(String(given(`colour${n}`))) ? String(given(`colour${n}`)).slice(7) : '';
-      context.set({ [`colour${n}`]: well.value + alpha });
-      context.refresh(`colour${n}`);
-      draw();
-    };
-    well.click();
+  /** The stop chosen: the one last pressed, while it has a colour, or else the first along the bar. */
+  function chosen(): number | null {
+    const n = chosenOf.get(layer);
+    if (n !== undefined && given(`colour${n}`) !== '') return n;
+    const inBar = items.map((_, i) => i + 1).filter((m) => now(m).colour !== null);
+    return inBar.sort((a, b) => now(a).position - now(b).position || a - b)[0] ?? null;
   }
 
   // A click on the bar adds a stop there, in the colour the gradient has there, so that nothing changes until it is moved.
@@ -141,6 +153,7 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
     const shown = stops();
     const colour = shown.length ? gradientAt(shown, at, wheel()) : firstDefault();
     context.set({ [`colour${n}`]: toHex(colour), [`position${n}`]: at });
+    chosenOf.set(layer, n);
     context.refresh(`colour${n}`);
     context.refresh(`position${n}`);
     draw();
@@ -169,10 +182,19 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
     const free = items.some((_, i) => plainColour(i + 1) === '');
     track.classList.toggle('full', !free);
     track.title = free ? 'Click to add a stop here' : 'Five stops at most: drag one away from the bar to take it out';
-    const state = css + items.map((_, i) => JSON.stringify(now(i + 1))).join();
+    const pick = chosen();
+    const state = css + items.map((_, i) => JSON.stringify(now(i + 1))).join() + pick + (pick === null ? '' : plainColour(pick));
     if (state === last) return;
     last = state;
     gradient.style.background = css;
+    chosenRow.hidden = pick === null;
+    if (pick !== null) {
+      const plain = plainColour(pick);
+      chosenName.textContent = `Stop ${pick}`;
+      picker.element.hidden = plain === null;
+      chosenNote.hidden = plain !== null;
+      if (plain !== null) picker.show(plain);
+    }
     items.forEach((marker, i) => {
       const n = i + 1;
       const { colour, position } = now(n);
@@ -183,10 +205,11 @@ export function stopBar(layer: Layer, context: StopBarContext): { element: HTMLE
       const fixedPlace = plainPosition(n) === null;
       const fixedColour = plainColour(n) === null;
       marker.classList.toggle('fixed', fixedPlace);
+      marker.classList.toggle('chosen', n === pick);
       marker.title = `Stop ${n} at ${position.toFixed(2)}: `
         + (fixedPlace ? 'its place follows an expression, so it is set below, not by dragging. '
           : inUse() > 1 ? 'drag to move it, or away from the bar to take it out. ' : 'drag to move it. The last stop stays: a gradient needs one. ')
-        + (fixedColour ? 'Its colour follows an expression.' : 'Click to choose its colour.');
+        + (fixedColour ? 'Its colour follows an expression.' : 'Click to choose its colour and opacity.');
     });
   }
   draw();

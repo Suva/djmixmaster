@@ -369,6 +369,12 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     drag(marker(1), at(0.25)[0], at(0.25)[1]);
     await page.wait(50);
     const dragged = number('position1');
+    // The stop pressed is the one chosen, and its opacity is set under the bar.
+    const alpha = document.querySelector<HTMLInputElement>('.stop-chosen .colour-alpha')!;
+    alpha.value = '0.5';
+    alpha.dispatchEvent(new Event('input', { bubbles: true }));
+    await page.wait(50);
+    const faded = { chosen: document.querySelector<HTMLElement>('.stop-marker.chosen')?.dataset.stop, colour: colour('colour1') };
 
     // A click on the bar adds the first stop not in use, there, in the colour the gradient has there.
     const [cx, cy] = at(0.6);
@@ -414,17 +420,18 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     await page.until(() => document.querySelector('#editor-layer-title')?.textContent === 'Moving', 'the moving gradient to be selected');
     const unfolded = document.querySelector<HTMLDetailsElement>('#editor-layer details.stop-settings')!.open;
     page.click('editor-done');
-    return { first, folded, dragged, added, removed, back, last, mended, unfolded };
+    return { first, folded, dragged, faded, added, removed, back, last, mended, unfolded };
   });
   assert.deepEqual(seen.first, [1, 5]);
   assert.ok(seen.folded, 'each stop folded away for a gradient that holds still');
   assert.ok(seen.unfolded, 'and open where a stop follows the music');
   assert.ok(Math.abs(seen.dragged - 0.25) < 0.02, `dragged to ${seen.dragged}`);
+  assert.deepEqual(seen.faded, { chosen: '1', colour: '#ff000080' });
   assert.deepEqual(seen.added.shown, [1, 2, 5]);
   assert.ok(Math.abs(seen.added.at - 0.6) < 0.02, `added at ${seen.added.at}`);
-  assert.match(seen.added.colour ?? '', /^#[0-9a-f]{6}$/, `added in ${seen.added.colour}`);
+  assert.match(seen.added.colour ?? '', /^#[0-9a-f]{6}([0-9a-f]{2})?$/, `added in ${seen.added.colour}`);
   assert.deepEqual(seen.removed, { shown: [1, 5], colour: 'None' });
   assert.deepEqual(seen.back, [1, 2, 5]);
-  assert.deepEqual(seen.last, { shown: [1], colour: '#ff0000' }, 'the last stop stays');
+  assert.deepEqual(seen.last, { shown: [1], colour: '#ff000080' }, 'the last stop stays');
   assert.deepEqual(seen.mended, { shown: [1], colour: '#140a33' }, 'an empty gradient mended with its first colour');
 });

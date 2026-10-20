@@ -20,6 +20,7 @@ import { lutPicker, type LutChoice } from './lut-picker.ts';
 import { fontPicker } from './font-picker.ts';
 import { scrubbableInput } from './scrub.ts';
 import { stopBar } from './stop-bar.ts';
+import { colourInput } from './colour-input.ts';
 import { STOP_COUNT } from '../../visuals/gradient-map.ts';
 import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
 
@@ -447,22 +448,16 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
         case 'colour': {
           const box = document.createElement('div');
           box.className = 'colour-setting';
-          const input = document.createElement('input');
-          input.type = 'color';
           const hex = String(current);
-          input.value = hex ? hex.slice(0, 7) : '#ffffff';
           const code = document.createElement('span');
           code.className = 'colour-code';
           code.textContent = hex || 'None';
-          input.addEventListener('input', () => {
-            // The colour well knows no transparency: what there was is kept.
-            const alpha = HEX.test(String(value())) ? String(value()).slice(7) : '';
-            const next = input.value + alpha;
+          const input = colourInput(hex, (next) => {
             code.textContent = next;
             box.classList.remove('none');
             change(next);
-          });
-          box.append(input, code);
+          }, param.label);
+          box.append(input.element, code);
           if (param.default === '') {
             // A colour that may be left out: a second or third colour, a box behind text.
             const none = document.createElement('button');

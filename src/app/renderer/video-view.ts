@@ -19,6 +19,7 @@ import { TemplateEditor } from './template-editor.ts';
 import { PictureHandles } from './picture-handles.ts';
 import { PreviewVideos } from './video-sources.ts';
 import { lutPicker } from './lut-picker.ts';
+import { colourInput } from './colour-input.ts';
 import { lutChoices } from './layer-settings.ts';
 import { packLut, parseCube, unpackLut, type Lut, type PackedLut } from '../../visuals/lut.ts';
 import {
@@ -847,18 +848,15 @@ export class VideoView {
     label.htmlFor = id;
 
     if (field.kind === 'colour') {
-      const input = document.createElement('input');
-      input.type = 'color';
-      input.id = id;
-      input.value = String(value).slice(0, 7);
       const shown = document.createElement('output');
-      shown.textContent = input.value;
-      input.addEventListener('input', () => {
-        shown.textContent = input.value;
-        this.#setField(field.key, input.value);
-      });
+      shown.textContent = String(value);
+      const input = colourInput(String(value), (hex) => {
+        shown.textContent = hex;
+        this.#setField(field.key, hex);
+      }, field.label);
+      input.well.id = id;
       head.append(shown);
-      control.append(input);
+      control.append(input.element);
     } else if (field.kind === 'number') {
       const input = document.createElement('input');
       input.type = 'range';
