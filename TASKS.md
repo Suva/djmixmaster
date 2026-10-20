@@ -114,6 +114,25 @@ The packaged app does not run on Intel Macs.
 - The bundled ffmpeg has to match: `ffmpeg-static` installs one binary for
   the machine it is installed on, so the other has to be fetched as well.
 
+### A native ARM64 build for Windows — medium, needs an ARM machine to test
+
+The Windows installer and the Microsoft Store package are x64 only, and the
+Store says so when a version is submitted. Windows 11 on ARM (the Snapdragon
+laptops) runs them through its emulation, so they work there, but slower:
+levelling and video exports take longer.
+
+- electron-builder can build ARM64 as well (`--arm64`), for the installer
+  and the Store package alike.
+- The bundled ffmpeg is the hard part: `ffmpeg-static` has no ARM64 Windows
+  build. Fetch a native one in the release workflow from a well-known build
+  (BtbN's FFmpeg builds on GitHub have one), checked against a known
+  checksum, with its licence beside it. Shipping the x64 ffmpeg in the ARM64
+  app would work, emulated, but give up most of the gain.
+- GitHub's Windows machines are x64, so nobody can try it there: done when it
+  has been installed and used on an ARM laptop, a recording levelled and a
+  video exported.
+- Worth doing once someone with an ARM laptop asks, or one is at hand.
+
 ### Signing and notarization for macOS — small, needs an account
 
 Other Macs block the app until the user approves it in System Settings.
