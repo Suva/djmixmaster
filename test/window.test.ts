@@ -1662,7 +1662,9 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     eye('Grid');
     eye('Fine');
     await page.drawn();
+    // The editor's panel has made the picture smaller since: read it at the size it is now.
     const shares = () => {
+      const { width, height } = picture;
       const pixels = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
       const totals = [0, 0, 0];
       for (let i = 0; i < pixels.length; i += 4) for (let c = 0; c < 3; c++) totals[c] += pixels[i + c];
@@ -1682,14 +1684,15 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     eye('Mosaic');
     await page.drawn();
     pictures.mosaic = picture.toDataURL();
-    const m = 0.1 * height;
+    const [w, h] = [picture.width, picture.height];
+    const m = 0.1 * h;
     const mosaic = {
-      white: at(width / 2 - m / 2, height / 2),
-      across: at(width / 2 + m / 2, height / 2),
-      black: at(width / 2 + m * 1.5, height / 2),
+      white: at(w / 2 - m / 2, h / 2),
+      across: at(w / 2 + m / 2, h / 2),
+      black: at(w / 2 + m * 1.5, h / 2),
       corner: at(1, 1),
     };
-    return { hexagons, fine, mosaic, pictures, drawnBy, size: `${width}×${height} at ${window.devicePixelRatio}` };
+    return { hexagons, fine, mosaic, pictures, drawnBy, size: `a picture ${width}×${height} in a page ${window.innerWidth}×${window.innerHeight} at ${window.devicePixelRatio}` };
   });
   const { hexagons, fine, mosaic } = seen;
   for (const [name, picture] of Object.entries(seen.pictures)) await keepPicture(`cells-${name}`, picture);
