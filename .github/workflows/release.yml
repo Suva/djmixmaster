@@ -130,46 +130,19 @@ jobs:
   # PARTNER_CENTER_CLIENT_SECRET. The submission is left as a draft, to be looked at and submitted in Partner
   # Center, unless the variable STORE_SUBMIT is "true". Microsoft certifies it either way. A failure here does
   # not hold up the release: the package is still in the run's downloads, for uploading by hand.
+  # The Store package to Partner Center (store.yml), which can also be run again by hand for this run's package.
+  # A failure there leaves the release alone: it is a job of its own, and does not mark this run failed.
   store:
-    name: Submit to the Microsoft Store
-    if: startsWith(github.ref, 'refs/tags/v') && vars.STORE_PRODUCT_ID != ''
+    name: Microsoft Store
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
-    runs-on: windows-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: microsoft-store-package
-          path: store
-      - name: Set up the Microsoft Store Developer CLI
-        uses: microsoft/microsoft-store-apppublisher@v1.1
-      - name: Sign in to Partner Center
-        shell: pwsh
-        run: |
-          if (-not $env:TENANT -or -not $env:SELLER -or -not $env:CLIENT -or -not $env:SECRET) {
-            Write-Output "::error::The Partner Center secrets are not all set (PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_SELLER_ID, PARTNER_CENTER_CLIENT_ID, PARTNER_CENTER_CLIENT_SECRET)."
-            exit 1
-          }
-          msstore reconfigure --tenantId $env:TENANT --sellerId $env:SELLER --clientId $env:CLIENT --clientSecret $env:SECRET
-        env:
-          TENANT: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
-          SELLER: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
-          CLIENT: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
-          SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-      - name: Submit the package
-        shell: pwsh
-        run: |
-          $package = (Get-ChildItem store/*.msix | Select-Object -First 1).FullName
-          if ($env:SUBMIT -eq 'true') {
-            msstore publish store -i $package -id $env:PRODUCT_ID
-          } else {
-            msstore publish store -i $package -id $env:PRODUCT_ID --noCommit
-            Write-Output "::notice::The submission is a draft in Partner Center: look it over and submit it there."
-          }
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-        env:
-          PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
-          SUBMIT: ${{ vars.STORE_SUBMIT }}
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/store.yml
+    with:
+      run-id: ${{ github.run_id }}
+    secrets: inherit
 
   release:
     name: Publish the release

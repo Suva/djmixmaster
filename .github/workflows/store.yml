@@ -1,0 +1,87 @@
+# Hands the Microsoft Store package a Release run built to Partner Center, as
+# a new submission: as a draft, to be looked over and submitted there, unless
+# the repository's variable STORE_SUBMIT is `true`. The Release workflow calls
+# it for each version tag. It can also be started by hand from the Actions
+# tab, with the number of a Release run, to submit what that run built again
+# (the package is kept with the run as long as the repository keeps a run's
+# downloads: 90 days unless its settings say otherwise).
+#
+# Partner Center takes this only for an app already live in the Store: the
+# first version goes up by hand. Needs the variable STORE_PRODUCT_ID and the
+# four PARTNER_CENTER_* secrets.
+name: Microsoft Store
+
+on:
+  workflow_call:
+    inputs:
+      run-id:
+        description: The Release run whose package to submit
+        type: string
+        required: true
+    secrets:
+      PARTNER_CENTER_TENANT_ID:
+      PARTNER_CENTER_SELLER_ID:
+      PARTNER_CENTER_CLIENT_ID:
+      PARTNER_CENTER_CLIENT_SECRET:
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: The number of the Release run whose package to submit (in its address, after /runs/)
+        type: string
+        required: true
+
+permissions:
+  actions: read
+
+jobs:
+  submit:
+    name: Submit to the Microsoft Store
+    if: vars.STORE_PRODUCT_ID != ''
+    runs-on: windows-latest
+    # Called by a release, a failure here does not mark the release failed; run by hand, it shows.
+    continue-on-error: ${{ github.event_name != 'workflow_dispatch' }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: microsoft-store-package
+          path: store
+          run-id: ${{ inputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: Set up the Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+      - name: Sign in to Partner Center
+        shell: pwsh
+        run: |
+          if (-not $env:TENANT -or -not $env:SELLER -or -not $env:CLIENT -or -not $env:SECRET) {
+            Write-Output "::error::The Partner Center secrets are not all set (PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_SELLER_ID, PARTNER_CENTER_CLIENT_ID, PARTNER_CENTER_CLIENT_SECRET)."
+            exit 1
+          }
+          msstore reconfigure --tenantId $env:TENANT --sellerId $env:SELLER --clientId $env:CLIENT --clientSecret $env:SECRET
+        env:
+          TENANT: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          SELLER: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          CLIENT: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+      # msstore takes the folder the package is in (-i), not the package itself.
+      - name: Submit the package
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem store/*.msix | Select-Object -First 1
+          if (-not $package) {
+            Write-Output "::error::Run $env:RUN_ID has no .msix in its microsoft-store-package."
+            exit 1
+          }
+          Write-Output "Submitting $($package.Name)."
+          if ($env:SUBMIT -eq 'true') {
+            msstore publish store -i store -id $env:PRODUCT_ID
+          } else {
+            msstore publish store -i store -id $env:PRODUCT_ID --noCommit
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:SUBMIT -ne 'true') {
+            Write-Output "::notice::The submission is a draft in Partner Center: look it over and submit it there."
+          }
+        env:
+          PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
+          SUBMIT: ${{ vars.STORE_SUBMIT }}
+          RUN_ID: ${{ inputs.run-id }}
