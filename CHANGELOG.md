@@ -16,6 +16,15 @@ are under "Not released yet" and appear there once they are.
   costs about what it does without one. The key now looks at the clip's
   own colours, before its brightness and saturation are changed, and its
   edges are smoother on a clip shown larger than it was filmed.
+- **Grids and mosaics are fast at any cell size.** A grid of checks, a
+  honeycomb, hex cells or dots, and the mosaic effect, are now drawn by the
+  graphics card, and a perspective floor no longer draws its far distance
+  line by line. Small hex cells took seconds a frame and now take a few
+  milliseconds, the same as large ones; on an M1 every grid and mosaic
+  draws a 1080p frame in a few milliseconds. The smallest dots and
+  honeycombs, which could fail to show at all, now show. A mosaic's cells
+  each take the exact average of the picture under them, which can change
+  the shade of a cell beside a sharp edge a little.
 
 ## 0.11.0 — 20 October 2026
 

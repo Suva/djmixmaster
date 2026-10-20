@@ -3,6 +3,9 @@
 // mosaic effect's cells. Positions are in whatever units the caller draws in;
 // a cell size `s` is the distance from one cell to the next across.
 //
+// The graphics card lays out the same cells for itself (cell-shaders.ts): a
+// change to how they are laid out or coloured must be made there too.
+//
 // Kept free of Node imports: the window draws with it.
 
 export interface Cell {

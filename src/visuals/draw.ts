@@ -19,6 +19,7 @@ import { covered, kindNumber, NOISE_SHADER, noiseValue, seedBits, type NoiseOpti
 import { DISPLACE_SHADER, displacementAt, modeNumber, type Displacement } from './displace.ts';
 import { KEY_SHADER, keyAmount, keyNumber, keyRange, type Key } from './key.ts';
 import { fewer, hexagonAt, hexCells, hexColour, hexRadius, squareCells, triangleAt, triangleCells, type Cell, type Region } from './cells.ts';
+import { AVERAGE_SHADER, GRID_PATTERNS, GRID_SHADER, MOSAIC_SHADER, MOSAIC_SHAPES } from './cell-shaders.ts';
 import { brightnessOf, canvasStops, gradientAt, gradientMapTable, stopsOf, turnStops, type Stop } from './gradient-map.ts';
 
 type Canvas = HTMLCanvasElement | OffscreenCanvas;
@@ -1494,9 +1495,41 @@ export class FrameDrawer {
     if (kind === 'floor') return this.#floor(params, s, line, lineColour, travelled, scale);
     const way = (num(params, 'direction') * Math.PI) / 180;
     const [ox, oy] = [Math.cos(way) * travelled, Math.sin(way) * travelled];
-    // Enough to cover the picture however the grid is turned.
-    const reach = Math.hypot(width, height) / scale + 2 * s;
-    const region: Region = [-reach, -reach, reach, reach];
+    const lined = kind === 'lines' || kind === 'hex grid';
+    if (lined ? !lineColour || line <= 0 : !fills.some(Boolean)) return;
+    const inset = Math.min(s / 2 - 0.5, line / 2);
+    const rounding = (num(params, 'rounding') / 100) * (s - 2 * inset);
+    const used = fills[2] ? 3 : 2;
+    const hexSize = hexRadius(s) * Math.max(0, 1 - line / s);
+    const dotRadius = (Math.max(0, num(params, 'dotSize')) * s) / 2;
+
+    // Patterns of cells one by one, on the graphics card, where each pixel finds its own: as quick for the smallest
+    // cells as for the largest.
+    const onCard = (GRID_PATTERNS as readonly string[]).includes(kind);
+    if (onCard && this.#cellsGl === undefined) this.#cellsGl = CellsGl.make();
+    const forward = ctx.getTransform();
+    // Sized to nothing, there is nothing to draw, and no way back from the picture to the grid.
+    const area = Math.abs(forward.a * forward.d - forward.b * forward.c);
+    if (!(area > 1e-12)) return;
+    const back = forward.inverse();
+    const picture = onCard && this.#cellsGl?.grid(width, height, {
+      toLayer: [back.a, back.b, 0, back.c, back.d, 0, back.e, back.f, 1],
+      px: 1 / Math.sqrt(area),
+      kind, cell: s, origin: [ox, oy], line, inset, radius: rounding, dotRadius,
+      apothem: (hexSize * Math.sqrt(3)) / 2, used,
+      fills: fills.map(premultiplied), lineColour: premultiplied(lineColour),
+    });
+    if (picture) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(picture, 0, 0);
+      ctx.restore();
+      return;
+    }
+
+    // Otherwise as paths, of the cells on the picture alone.
+    const region = this.#visibleRegion(2 * s + line);
+    const [left, top, right, bottom] = region;
     /** One path a colour, filled at once: far quicker than a fill for each cell. */
     const fillBy = (cells: Cell[], colourOf: (cell: Cell) => number, shape: (path: Path2D, cell: Cell) => void) => {
       const paths = fills.map(() => new Path2D());
@@ -1512,24 +1545,19 @@ export class FrameDrawer {
     };
     switch (kind) {
       case 'checkerboard': {
-        const inset = Math.min(s / 2 - 0.5, line / 2);
-        const radius = (num(params, 'rounding') / 100) * (s - 2 * inset);
         fillBy(squareCells(s, ox, oy, region), (cell) => (((cell.i + cell.j) % 2) + 2) % 2, (path, cell) => {
-          path.roundRect(cell.x - s / 2 + inset, cell.y - s / 2 + inset, s - 2 * inset, s - 2 * inset, radius);
+          path.roundRect(cell.x - s / 2 + inset, cell.y - s / 2 + inset, s - 2 * inset, s - 2 * inset, rounding);
         });
         return;
       }
       case 'hex cells': {
-        const used = fills[2] ? 3 : 2;
-        const radius = hexRadius(s) * Math.max(0, 1 - line / s);
-        fillBy(hexCells(s, ox, oy, region), (cell) => hexColour(cell) % used, (path, cell) => addPolygon(path, hexagonAt(cell.x, cell.y, radius)));
+        fillBy(hexCells(s, ox, oy, region), (cell) => hexColour(cell) % used, (path, cell) => addPolygon(path, hexagonAt(cell.x, cell.y, hexSize)));
         return;
       }
       case 'dots': {
-        const radius = (Math.max(0, num(params, 'dotSize')) * s) / 2;
         fillBy(squareCells(s, ox, oy, region), () => 0, (path, cell) => {
-          path.moveTo(cell.x + radius, cell.y);
-          path.arc(cell.x, cell.y, radius, 0, Math.PI * 2);
+          path.moveTo(cell.x + dotRadius, cell.y);
+          path.arc(cell.x, cell.y, dotRadius, 0, Math.PI * 2);
         });
         return;
       }
@@ -1537,12 +1565,11 @@ export class FrameDrawer {
         // Bands half a cell wide, the first colour and the second by turns, across the grid's width.
         const band = s / 2;
         const bands: Cell[] = [];
-        for (let i = Math.floor((-reach - ox) / band); i * band + ox < reach; i++) bands.push({ x: ox + i * band, y: 0, i, j: 0 });
-        fillBy(bands, (cell) => ((cell.i % 2) + 2) % 2, (path, cell) => path.rect(cell.x, -reach, band, reach * 2));
+        for (let i = Math.floor((left - ox) / band); i * band + ox < right; i++) bands.push({ x: ox + i * band, y: 0, i, j: 0 });
+        fillBy(bands, (cell) => ((cell.i % 2) + 2) % 2, (path, cell) => path.rect(cell.x, top, band, bottom - top));
         return;
       }
     }
-    if (!lineColour || line <= 0) return;
     const path = new Path2D();
     if (kind === 'hex grid') {
       // Three edges of each hexagon: the other three are its neighbours'.
@@ -1553,18 +1580,31 @@ export class FrameDrawer {
         for (let k = 0; k < 3; k++) path.lineTo(corners[k * 2], corners[k * 2 + 1]);
       }
     } else {
-      for (let i = Math.floor((-reach - ox) / s); i * s + ox < reach; i++) {
-        path.moveTo(i * s + ox, -reach);
-        path.lineTo(i * s + ox, reach);
+      for (let i = Math.floor((left - ox) / s); i * s + ox < right; i++) {
+        path.moveTo(i * s + ox, top);
+        path.lineTo(i * s + ox, bottom);
       }
-      for (let j = Math.floor((-reach - oy) / s); j * s + oy < reach; j++) {
-        path.moveTo(-reach, j * s + oy);
-        path.lineTo(reach, j * s + oy);
+      for (let j = Math.floor((top - oy) / s); j * s + oy < bottom; j++) {
+        path.moveTo(left, j * s + oy);
+        path.lineTo(right, j * s + oy);
       }
     }
     ctx.strokeStyle = hexOf(lineColour);
     ctx.lineWidth = line;
     ctx.stroke(path);
+  }
+
+  #cellsGl: CellsGl | null | undefined;
+
+  /** The part of the layer's own plane that lands on the picture, as the drawing is moved now, and a margin round it. */
+  #visibleRegion(margin: number): Region {
+    const { width, height } = this.#canvas;
+    const back = this.#ctx.getTransform().inverse();
+    const corners = [[0, 0], [width, 0], [0, height], [width, height]].map(([x, y]) => back.transformPoint({ x, y }));
+    return [
+      Math.min(...corners.map((c) => c.x)) - margin, Math.min(...corners.map((c) => c.y)) - margin,
+      Math.max(...corners.map((c) => c.x)) + margin, Math.max(...corners.map((c) => c.y)) + margin,
+    ];
   }
 
   /**
@@ -1591,6 +1631,11 @@ export class FrameDrawer {
     // Its width shrinks with the distance; under a pixel wide, it fades instead.
     const phase = ((travelled % s) + s) % s;
     const alpha = ctx.globalAlpha;
+    // Further off, where the lines come closer than a pixel, thousands of them would each be stroked over the last;
+    // there the distance is a band instead, each row of it as much covered as the lines crossing it would cover it.
+    // A canvas keeps 255 levels, so a line too faint to add half of one adds nothing: so that the distance looks as it
+    // did when each was stroked, darkening into the horizon rather than adding up to a glow, each row goes by levels too.
+    let band: Float64Array | null = null;
     for (let k = -1; k < 4000; k++) {
       const z = f + k * s - phase;
       if (z <= 0) continue;
@@ -1598,7 +1643,20 @@ export class FrameDrawer {
       if (y > h + line) continue;
       if (y < 0.5) break;
       const width = (line * y) / h;
-      ctx.lineWidth = Math.max(1, width);
+      const lineWidth = Math.max(1, width);
+      if (!band && y - (f * h) / (z + s) < 1) band = new Float64Array(Math.ceil(y + lineWidth / 2) + 2);
+      if (band) {
+        // How covered each row is, in levels, row r of the picture at band[r + 1]: a line covers so much of it, at its
+        // colour's opacity, as the canvas would have stroked it.
+        const shown = alpha * Math.min(1, width) * (Math.round(Math.min(1, Math.max(0, colour.a * (1 - fade * (1 - Math.min(1, y / h))))) * 255) / 255);
+        const [from, to] = [y - lineWidth / 2, y + lineWidth / 2];
+        for (let r = Math.floor(from); r < to; r++) {
+          const amount = shown * (Math.min(r + 1, to) - Math.max(r, from));
+          band[r + 1] = Math.round(255 * amount + band[r + 1] * (1 - amount));
+        }
+        continue;
+      }
+      ctx.lineWidth = lineWidth;
       ctx.globalAlpha = alpha * Math.min(1, width);
       ctx.strokeStyle = seen(y);
       ctx.beginPath();
@@ -1607,6 +1665,17 @@ export class FrameDrawer {
       ctx.stroke();
     }
     ctx.globalAlpha = alpha;
+    if (band) {
+      // The rows as one gradient, from the row above the horizon down, each row's value at its middle: exact there
+      // when the floor is upright, and smooth between rows when it is turned.
+      const rows = ctx.createLinearGradient(0, -1, 0, band.length - 1);
+      const rgb = [colour.r, colour.g, colour.b].map((v) => Math.round(Math.min(1, Math.max(0, v)) * 255)).join(', ');
+      band.forEach((levels, r) => rows.addColorStop((r + 0.5) / band.length, `rgba(${rgb}, ${levels / 255})`));
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = rows;
+      ctx.fillRect(-reach, -1, reach * 2, band.length);
+      ctx.globalAlpha = alpha;
+    }
     // Along: wedges from past the foot of the picture to a point at the vanishing point, narrowing and fading on the way.
     const along = ctx.createLinearGradient(0, 0, 0, h);
     along.addColorStop(0, seen(0));
@@ -1631,7 +1700,9 @@ export class FrameDrawer {
    * Mosaic: the picture beneath in cells (cells.ts), each the colour under
    * it. The colours come from the picture made small, a pixel to a cell, so
    * that each is the average of its cell; squares that are not turned are
-   * that small picture made large again, a block to a pixel.
+   * that small picture made large again, a block to a pixel. On the graphics
+   * card (cell-shaders.ts) where there is one; else on the processor, which
+   * reads the small picture back and draws each cell.
    */
   #mosaic(params: ResolvedParams) {
     const { width, height } = this.#canvas;
@@ -1645,6 +1716,22 @@ export class FrameDrawer {
     // The small picture: a pixel for each cell of the grid through the layer's position.
     const [x0, y0] = [ox - Math.ceil(ox / s) * s, oy - Math.ceil(oy / s) * s];
     const [gw, gh] = [Math.ceil((width - x0) / s) + 1, Math.ceil((height - y0) / s) + 1];
+    const gapColour = col(params, 'gapColour');
+    if (this.#cellsGl === undefined) this.#cellsGl = CellsGl.make();
+    if (this.#cellsGl) {
+      // On the graphics card: the averages are made there and stay there, and each pixel finds its cell and its colour.
+      // The columns and rows whose middles lie on the picture: those past them take the average of the nearest of these.
+      const first = (start: number) => Math.max(0, Math.ceil((-s / 2 - start) / s));
+      const last = (start: number, side: number, count: number) => Math.min(count - 1, Math.floor((side - s / 2 - start) / s));
+      const result = this.#cellsGl.mosaic(this.#surface, width, height, [gw, gh], {
+        corner: [x0, y0], cell: s, origin: [ox, oy], turn,
+        shape, gap, rounding, levels, gapColour: premultiplied(gapColour),
+        on: [first(x0), first(y0), last(x0, width, gw), last(y0, height, gh)],
+        sharp: shape === 'squares' && turn === 0 && gap === 0 && rounding === 0,
+      });
+      if (result) return this.#putBack(result);
+    }
+    // On the processor: the canvas makes the picture small, a little blurred past each cell, and it is read back.
     const small = this.#extraCanvas(14, gw, gh);
     const sc = small.getContext('2d', { willReadFrequently: true })!;
     sc.setTransform(1, 0, 0, 1, 0, 0);
@@ -1692,7 +1779,6 @@ export class FrameDrawer {
       o.imageSmoothingEnabled = true;
       return this.#putBack(out);
     }
-    const gapColour = col(params, 'gapColour');
     if (gapColour) {
       o.fillStyle = hexOf(gapColour);
       o.fillRect(0, 0, width, height);
@@ -2736,6 +2822,191 @@ class DisplaceGl {
     gl.uniform1ui(this.#at('seed'), seedBits(d.noise.seed));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
+  }
+}
+
+/** A colour as the card takes it, premultiplied, each part to a 255th as the canvas would have it; none, see-through. */
+function premultiplied(colour: Colour | null): [number, number, number, number] {
+  if (!colour) return [0, 0, 0, 0];
+  const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255) / 255;
+  const a = byte(colour.a);
+  return [byte(colour.r) * a, byte(colour.g) * a, byte(colour.b) * a, a];
+}
+
+/** What a grid's pattern is drawn from on the card: the uniforms of GRID_SHADER, in cell-shaders.ts. */
+interface GridLook {
+  /** From the canvas's pixels to the layer's units, a 3×3 matrix column by column. */
+  toLayer: number[];
+  px: number;
+  kind: string;
+  cell: number;
+  origin: [number, number];
+  line: number;
+  inset: number;
+  radius: number;
+  dotRadius: number;
+  apothem: number;
+  used: number;
+  fills: [number, number, number, number][];
+  lineColour: [number, number, number, number];
+}
+
+/** What a mosaic is drawn from on the card: the uniforms of MOSAIC_SHADER, in cell-shaders.ts. */
+interface MosaicLook {
+  corner: [number, number];
+  cell: number;
+  origin: [number, number];
+  /** In radians. */
+  turn: number;
+  shape: string;
+  gap: number;
+  rounding: number;
+  levels: number;
+  gapColour: [number, number, number, number];
+  on: [number, number, number, number];
+  sharp: boolean;
+}
+
+/** Draws grids' patterns and mosaics' cells on the graphics card (see cell-shaders.ts), onto a canvas of its own. */
+class CellsGl {
+  readonly #canvas: OffscreenCanvas;
+  readonly #gl: WebGL2RenderingContext;
+  readonly #grid: WebGLProgram;
+  readonly #mosaic: WebGLProgram;
+  readonly #average: WebGLProgram;
+  readonly #picture: WebGLTexture;
+  /** A mosaic's averages: of each row of each cell, then of each cell. */
+  readonly #rows: WebGLTexture;
+  readonly #small: WebGLTexture;
+  readonly #frame: WebGLFramebuffer;
+  readonly #uniforms = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
+
+  static make(): CellsGl | null {
+    try {
+      return typeof OffscreenCanvas === 'undefined' ? null : new CellsGl();
+    } catch {
+      return null;
+    }
+  }
+
+  constructor() {
+    [this.#canvas, this.#gl] = glCanvas();
+    const gl = this.#gl;
+    this.#grid = glProgram(gl, GRID_SHADER);
+    this.#mosaic = glProgram(gl, MOSAIC_SHADER);
+    this.#average = glProgram(gl, AVERAGE_SHADER);
+    // The picture and the averages, each read a pixel at a time.
+    [this.#picture, this.#rows, this.#small] = [0, 1, 2].map(() => {
+      const texture = gl.createTexture()!;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      for (const [name, value] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) {
+        gl.texParameteri(gl.TEXTURE_2D, name, value);
+      }
+      return texture;
+    });
+    this.#frame = gl.createFramebuffer()!;
+  }
+
+  /** Averages `from` one way into `into`, a texture of this size, for the mosaic. */
+  #averageInto(from: WebGLTexture, into: WebGLTexture, [w, h]: [number, number], [width, height]: [number, number], look: MosaicLook, down: boolean) {
+    const gl = this.#gl;
+    const program = this.#average;
+    gl.bindTexture(gl.TEXTURE_2D, into);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.#frame);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, into, 0);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, from);
+    gl.uniform1i(this.#at(program, 'picture'), 0);
+    gl.uniform2f(this.#at(program, 'size'), width, height);
+    gl.uniform2f(this.#at(program, 'corner'), look.corner[0], look.corner[1]);
+    gl.uniform1f(this.#at(program, 'cell'), look.cell);
+    gl.uniform1i(this.#at(program, 'down'), down ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  #at(program: WebGLProgram, name: string): WebGLUniformLocation | null {
+    let known = this.#uniforms.get(program);
+    if (!known) this.#uniforms.set(program, (known = new Map()));
+    if (!known.has(name)) known.set(name, this.#gl.getUniformLocation(program, name));
+    return known.get(name)!;
+  }
+
+  #begin(program: WebGLProgram, width: number, height: number): WebGL2RenderingContext | null {
+    const gl = this.#gl;
+    if (gl.isContextLost()) return null;
+    if (this.#canvas.width !== width || this.#canvas.height !== height) {
+      this.#canvas.width = width;
+      this.#canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(program);
+    gl.uniform2f(this.#at(program, 'size'), width, height);
+    return gl;
+  }
+
+  #end(): OffscreenCanvas | null {
+    const gl = this.#gl;
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
+  }
+
+  /** A grid's pattern, on this class's canvas; null if the card could not draw it. */
+  grid(width: number, height: number, look: GridLook): OffscreenCanvas | null {
+    const program = this.#grid;
+    const gl = this.#begin(program, width, height);
+    if (!gl) return null;
+    const at = (name: string) => this.#at(program, name);
+    gl.uniformMatrix3fv(at('toLayer'), false, look.toLayer);
+    gl.uniform1f(at('px'), look.px);
+    gl.uniform1i(at('kind'), Math.max(0, GRID_PATTERNS.indexOf(look.kind as (typeof GRID_PATTERNS)[number])));
+    gl.uniform1f(at('cell'), look.cell);
+    gl.uniform2f(at('origin'), look.origin[0], look.origin[1]);
+    gl.uniform1f(at('line'), look.line);
+    gl.uniform1f(at('inset'), look.inset);
+    gl.uniform1f(at('radius'), look.radius);
+    gl.uniform1f(at('dotRadius'), look.dotRadius);
+    gl.uniform1f(at('apothem'), look.apothem);
+    gl.uniform1f(at('use'), look.used);
+    gl.uniform4fv(at('fills'), look.fills.flat());
+    gl.uniform4fv(at('lineColour'), look.lineColour);
+    return this.#end();
+  }
+
+  /** A mosaic of the picture, its averages `grid` cells across and down, on this class's canvas; null if the card could not draw it. */
+  mosaic(source: Canvas, width: number, height: number, grid: [number, number], look: MosaicLook): OffscreenCanvas | null {
+    const gl = this.#gl;
+    if (gl.isContextLost()) return null;
+    // Premultiplied, as the canvas keeps it and makes it small: a see-through pixel adds nothing to a cell's colour.
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#picture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    this.#averageInto(this.#picture, this.#rows, [grid[0], height], [width, height], look, false);
+    this.#averageInto(this.#rows, this.#small, grid, [width, height], look, true);
+    const program = this.#mosaic;
+    this.#begin(program, width, height);
+    const at = (name: string) => this.#at(program, name);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#small);
+    gl.uniform1i(at('small'), 0);
+    gl.uniform2f(at('corner'), look.corner[0], look.corner[1]);
+    gl.uniform1f(at('cell'), look.cell);
+    gl.uniform2f(at('origin'), look.origin[0], look.origin[1]);
+    gl.uniform2f(at('turn'), Math.cos(look.turn), Math.sin(look.turn));
+    gl.uniform1i(at('shape'), Math.max(0, MOSAIC_SHAPES.indexOf(look.shape as (typeof MOSAIC_SHAPES)[number])));
+    gl.uniform1f(at('gap'), look.gap);
+    gl.uniform1f(at('rounding'), look.rounding);
+    gl.uniform1f(at('levels'), look.levels);
+    gl.uniform4fv(at('gapColour'), look.gapColour);
+    gl.uniform4iv(at('on'), look.on);
+    gl.uniform1i(at('sharp'), look.sharp ? 1 : 0);
+    return this.#end();
   }
 }
 

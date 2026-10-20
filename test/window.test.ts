@@ -1593,6 +1593,80 @@ test('a solid colour fills the picture, and a vignette darkens its edges and not
   assert.ok(seen.corner < 15, `darkest in the corner: ${seen.corner}`);
 });
 
+test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as they were, the smallest and turned ones too', { skip }, async () => {
+  // Left of a line half way across a mosaic's cell, white; right of it, black.
+  const halves = join(work, 'Halves.png');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', "color=black:s=640x360,geq=lum='255*lt(X,338)':cb=128:cr=128", '-frames:v', '1', halves]);
+  const file = join(work, 'Cells.djmtemplate');
+  await writeFile(file, JSON.stringify({
+    format: 3,
+    name: 'Cells',
+    fields: [],
+    layers: [
+      { type: 'image', name: 'Halves', params: { image: 'asset:halves', fit: 'stretch', width: 100, height: 100, visible: false } },
+      { type: 'mosaic', name: 'Mosaic', params: { cells: 'squares', size: 10, visible: false } },
+      { type: 'grid', name: 'Fine', params: { kind: 'hex cells', cell: 1, lineWidth: 0, rotation: 30, fill1: '#ff0000', fill2: '#00ff00', fill3: '#0000ff', visible: false } },
+      { type: 'grid', name: 'Grid', params: { kind: 'hex cells', cell: 20, lineWidth: 3, fill1: '#ff0000', fill2: '#00ff00', fill3: '#0000ff' } },
+    ],
+    assets: { halves: `data:image/png;base64,${readFileSync(halves).toString('base64')}` },
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Cells', 'the template to be added');
+    await page.wait(500);
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const { width, height } = picture;
+    const at = (x: number, y: number) => [...picture.getContext('2d')!.getImageData(Math.floor(x), Math.floor(y), 1, 1).data].slice(0, 3);
+    // Hexagons a fifth of the height apart, the first at the middle; rows of them s·√3/2 apart, every other half a cell along.
+    const s = 0.2 * height;
+    const row = (s * Math.sqrt(3)) / 2;
+    const hexagons = {
+      middle: at(width / 2, height / 2),
+      right: at(width / 2 + s, height / 2),
+      below: at(width / 2 + s / 2, height / 2 + row),
+      above: at(width / 2 - s / 2, height / 2 - row),
+      between: at(width / 2 + s / 2, height / 2),
+    };
+    const eye = (name: string) => [...document.querySelectorAll<HTMLElement>('.layer-row')]
+      .find((r) => r.querySelector('.layer-name')!.textContent === name)!.querySelector<HTMLButtonElement>('.layer-eye')!.click();
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    // Cells a hundredth of the height across, turned: each of the three colours on a third of the picture.
+    eye('Grid');
+    eye('Fine');
+    await page.wait(500);
+    const pixels = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
+    const totals = [0, 0, 0];
+    for (let i = 0; i < pixels.length; i += 4) for (let c = 0; c < 3; c++) totals[c] += pixels[i + c];
+    const fine = totals.map((total) => total / (255 * width * height));
+    // A mosaic of the halves: each cell the average under it, the cells over the edges whole.
+    eye('Fine');
+    eye('Halves');
+    eye('Mosaic');
+    await page.wait(500);
+    const m = 0.1 * height;
+    const mosaic = {
+      white: at(width / 2 - m / 2, height / 2),
+      across: at(width / 2 + m / 2, height / 2),
+      black: at(width / 2 + m * 1.5, height / 2),
+      corner: at(1, 1),
+    };
+    return { hexagons, fine, mosaic };
+  });
+  const { hexagons, fine, mosaic } = seen;
+  assert.deepEqual(hexagons.middle, [255, 0, 0], 'the first colour on the hexagon at the middle');
+  assert.deepEqual(hexagons.right, [0, 255, 0], 'the second beside it');
+  assert.deepEqual(hexagons.below, [0, 0, 255], 'the third below between them');
+  assert.deepEqual(hexagons.above, [0, 255, 0], 'the second above, by the turns cells.ts colours them in');
+  assert.deepEqual(hexagons.between, [0, 0, 0], 'nothing in the gap between two');
+  for (const share of fine) assert.ok(share > 0.27 && share < 0.4, `a third each with the smallest cells: ${fine.map((v) => v.toFixed(3))}`);
+  assert.ok(mosaic.white.every((v) => v > 250), `a cell all white: ${mosaic.white}`);
+  assert.ok(mosaic.across.every((v) => v > 105 && v < 150), `a cell half white, grey: ${mosaic.across}`);
+  assert.ok(mosaic.black.every((v) => v < 5), `a cell all black: ${mosaic.black}`);
+  assert.ok(mosaic.corner.every((v) => v > 250), `a cell partly past the picture's corner, as white as the picture there: ${mosaic.corner}`);
+});
+
 test('a transform moves, sizes and flips the picture beneath, with nothing, repeats, mirror images or drawn-out edges past it', { skip }, async () => {
   const file = join(work, 'Transform.djmtemplate');
   // White at the left to black at the right, made half as big round the middle; what is past its edges is chosen by a field.

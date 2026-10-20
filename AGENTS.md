@@ -50,6 +50,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/key.ts` | How much of each pixel of a keyed clip stays, as a shader and the same steps in TypeScript |
 | `src/visuals/gradient-map.ts` | Gradients of stops that are settings, as every layer with a gradient has them: blending, canvas stops, and the table a gradient map and noise colour by |
 | `src/visuals/cells.ts` | Squares, hexagons and triangles laid out over a picture, for the grid layer and the mosaic effect |
+| `src/visuals/cell-shaders.ts` | The same cells drawn on the graphics card: a grid's checks, hexagons and dots, and a mosaic's cells and averages |
 | `src/visuals/outline.ts` | The outlines of a shape layer's shapes, as points: rounded corners, lengths for tracing them |
 | `src/visuals/colour.ts` | Colours: hex codes, and hue and lightness in OKLCH |
 | `src/visuals/lut.ts` | Colour lookup tables: reading .cube files, packing them into templates, applying them without a graphics card |
