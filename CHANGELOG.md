@@ -6,11 +6,12 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
-- **Colours can be see-through.** Every colour in the template editor and
-  in a template's fields now has its opacity beside it, to type or drag.
-  On a gradient's bar, the stop last clicked shows its colour and opacity
-  underneath, so the see-through end of the noise layer's gradient can
-  finally be changed.
+- **A colour picker with opacity.** Every colour in the template editor and
+  in a template's fields now opens the app's own colour picker: hue,
+  saturation, brightness and opacity together, the hex code and red, green,
+  blue and opacity as numbers, and an eyedropper. A gradient's stops open it
+  too, so the see-through end of the noise layer's gradient can finally be
+  changed.
 - **`smooth()` takes the time it is given.** In a template's settings,
   `smooth(value, rise, fall)` rose and fell twice as fast as its seconds
   said. It now takes those seconds, so a template that uses it moves more

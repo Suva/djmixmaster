@@ -369,12 +369,18 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
     drag(marker(1), at(0.25)[0], at(0.25)[1]);
     await page.wait(50);
     const dragged = number('position1');
-    // The stop pressed is the one chosen, and its opacity is set under the bar.
-    const alpha = document.querySelector<HTMLInputElement>('.stop-chosen .colour-alpha')!;
+    // A click on a stop opens the colour picker on it, where its opacity is set.
+    const [mx, my] = (({ left, top, width, height }) => [left + width / 2, top + height / 2])(marker(1).getBoundingClientRect());
+    marker(1).dispatchEvent(new PointerEvent('pointerdown', { clientX: mx, clientY: my, bubbles: true }));
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: mx, clientY: my }));
+    await page.wait(50);
+    const alpha = [...document.querySelectorAll<HTMLInputElement>('.colour-picker .picker-number input')].at(-1)!;
     alpha.value = '0.5';
     alpha.dispatchEvent(new Event('input', { bubbles: true }));
     await page.wait(50);
-    const faded = { chosen: document.querySelector<HTMLElement>('.stop-marker.chosen')?.dataset.stop, colour: colour('colour1') };
+    const chosen = document.querySelector<HTMLElement>('.stop-marker.chosen')?.dataset.stop;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const faded = { chosen, closed: document.querySelector<HTMLElement>('.colour-picker')!.hidden, colour: colour('colour1') };
 
     // A click on the bar adds the first stop not in use, there, in the colour the gradient has there.
     const [cx, cy] = at(0.6);
@@ -426,7 +432,7 @@ test('a gradient map\'s stops are dragged, added and taken out on its bar, and u
   assert.ok(seen.folded, 'each stop folded away for a gradient that holds still');
   assert.ok(seen.unfolded, 'and open where a stop follows the music');
   assert.ok(Math.abs(seen.dragged - 0.25) < 0.02, `dragged to ${seen.dragged}`);
-  assert.deepEqual(seen.faded, { chosen: '1', colour: '#ff000080' });
+  assert.deepEqual(seen.faded, { chosen: '1', closed: true, colour: '#ff000080' });
   assert.deepEqual(seen.added.shown, [1, 2, 5]);
   assert.ok(Math.abs(seen.added.at - 0.6) < 0.02, `added at ${seen.added.at}`);
   assert.match(seen.added.colour ?? '', /^#[0-9a-f]{6}([0-9a-f]{2})?$/, `added in ${seen.added.colour}`);

@@ -341,7 +341,7 @@ body.video #detail, body.video #adjust-switch, body.video #zoom-mix { display: n
 body.video #video-settings { display: block; }
 body.video #mastering-settings { display: none; }
 #video-settings .colour-input { display: flex; }
-#video-settings .colour-input input[type="color"] { flex: 1; height: 30px; border-radius: 6px; }
+#video-settings .colour-swatch { flex: 1; height: 30px; border-radius: 6px; }
 #video-settings .field-text { width: 100%; font: inherit; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; user-select: text; }
 #video-settings .field-text:focus { outline: 1px solid var(--accent); }
 #template-name-row[hidden] { display: none; }
@@ -496,8 +496,7 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
 .number-setting input[type="number"] { width: 64px; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 3px 5px; user-select: text; }
 .switch-setting { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 /* A gradient's stops: the gradient over a checkerboard, so that see-through shows, and a marker under it for each stop. */
-/* The markers hang below the bar, over the chosen stop's row's margin. */
-.stop-bar { position: relative; margin: 4px 0 12px; }
+.stop-bar { position: relative; margin: 4px 0 12px; padding-bottom: 18px; }
 .stop-track {
   position: relative; height: 22px; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; cursor: copy;
   background: repeating-conic-gradient(#3a3f4a 0% 25%, #262a33 0% 50%) 0 0 / 10px 10px;
@@ -515,18 +514,41 @@ dialog input.track-time { flex: none; width: 72px; font-variant-numeric: tabular
 .stop-marker::before { content: ''; position: absolute; left: 3px; top: -7px; border: 3px solid transparent; border-bottom: 4px solid #e8ebf0; }
 .stop-marker.fixed { cursor: pointer; border-style: dashed; }
 .stop-marker.removing { opacity: 0.3; }
+/* The stop the colour picker is open on. */
 .stop-marker.chosen { border-color: var(--accent); }
 .stop-marker.chosen::before { border-bottom-color: var(--accent); }
-/* The chosen stop's colour and opacity. */
-.stop-chosen { display: flex; align-items: center; gap: 8px; margin-top: 22px; font-size: 12px; color: var(--muted); }
-.stop-chosen[hidden], .stop-chosen [hidden] { display: none; }
-.stop-name { width: 44px; flex: none; }
-/* A colour and its opacity; the well's swatch as see-through as the colour, over a checkerboard. */
-.colour-input { display: inline-flex; align-items: center; gap: 6px; }
-.colour-input input[type="color"] { width: 44px; height: 24px; padding: 0 2px; border: 1px solid var(--border); border-radius: 5px; background: #262a33; }
-.colour-input input[type="color"]::-webkit-color-swatch-wrapper { background: repeating-conic-gradient(#8a8f99 0% 25%, #d8dbe0 0% 50%) 0 0 / 8px 8px; background-clip: content-box; }
-.colour-input input[type="color"]::-webkit-color-swatch { opacity: var(--alpha, 1); }
-.colour-alpha { width: 46px; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 3px 5px; user-select: text; }
+/* A colour's swatch: the colour over a checkerboard, so that see-through shows. */
+.colour-input { display: inline-flex; align-items: center; }
+.colour-swatch { position: relative; width: 44px; height: 24px; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 5px; background: repeating-conic-gradient(#8a8f99 0% 25%, #d8dbe0 0% 50%) 0 0 / 8px 8px; }
+.colour-swatch-fill { position: absolute; inset: 0; }
+.colour-swatch:hover:not(:disabled) { border-color: var(--muted); background: repeating-conic-gradient(#8a8f99 0% 25%, #d8dbe0 0% 50%) 0 0 / 8px 8px; }
+
+/* The colour picker a swatch opens. */
+.colour-picker {
+  position: fixed; z-index: 50; width: 236px; padding: 10px; display: flex; flex-direction: column; gap: 9px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+.colour-picker[hidden] { display: none; }
+.picker-field {
+  position: relative; height: 150px; border-radius: 5px; cursor: crosshair; touch-action: none;
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--hue, red));
+}
+.picker-thumb { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); pointer-events: none; }
+.picker-strip { position: relative; height: 12px; border-radius: 6px; cursor: pointer; touch-action: none; }
+.picker-hue { background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.picker-alpha { background: repeating-conic-gradient(#8a8f99 0% 25%, #d8dbe0 0% 50%) 0 0 / 8px 8px; }
+.picker-alpha-fill { position: absolute; inset: 0; border-radius: 6px; }
+.picker-knob { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6); pointer-events: none; }
+.picker-row { display: flex; align-items: center; gap: 6px; }
+.picker-preview { position: relative; flex: none; width: 26px; height: 24px; overflow: hidden; border: 1px solid var(--border); border-radius: 5px; background: repeating-conic-gradient(#8a8f99 0% 25%, #d8dbe0 0% 50%) 0 0 / 8px 8px; }
+.picker-preview-fill { position: absolute; inset: 0; }
+.colour-picker input { min-width: 0; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); background: var(--lane); border: 1px solid var(--border); border-radius: 5px; padding: 3px 5px; user-select: text; }
+.picker-hex { flex: 1; font-family: ui-monospace, Menlo, monospace !important; }
+.picker-dropper { flex: none; width: 28px; height: 24px; padding: 0; font-size: 15px; }
+.picker-dropper[hidden] { display: none; }
+.picker-numbers { gap: 5px; }
+.picker-number { flex: 1; min-width: 0; display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); }
+.picker-number input { flex: 1; width: 0; padding: 3px 3px; }
 .colour-setting { display: flex; align-items: center; gap: 8px; }
 .colour-setting.none .colour-input { opacity: 0.35; }
 .colour-code { flex: 1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -679,3 +701,4 @@ textarea.about-input { resize: vertical; line-height: 1.45; }
 #template-about .about-name { margin: 2px 0 2px; font-size: 13px; font-weight: 600; color: var(--text); }
 
 .editor-head-buttons { display: flex; gap: 6px; }
+.colour-picker input::-webkit-inner-spin-button, .colour-picker input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

@@ -854,7 +854,7 @@ export class VideoView {
         shown.textContent = hex;
         this.#setField(field.key, hex);
       }, field.label);
-      input.well.id = id;
+      input.swatch.id = id;
       head.append(shown);
       control.append(input.element);
     } else if (field.kind === 'number') {

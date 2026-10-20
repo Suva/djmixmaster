@@ -745,7 +745,13 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     await page.wait(1100);
 
     select('Artist');
-    type(setting('colour').querySelector<HTMLInputElement>('input[type="color"]')!, '#ff0000');
+    // Chosen in the picker the swatch opens, by its hex code; a second click on the swatch closes it.
+    const swatch = () => setting('colour').querySelector<HTMLButtonElement>('.colour-swatch')!;
+    swatch().click();
+    const pickerOpened = !document.querySelector<HTMLElement>('.colour-picker')!.hidden;
+    type(document.querySelector<HTMLInputElement>('.colour-picker .picker-hex')!, '#ff0000');
+    swatch().click();
+    const pickerClosed = document.querySelector<HTMLElement>('.colour-picker')!.hidden;
     await page.wait(1100);
     // A colour as an expression, and back: plain #ff0000 is an expression too, so the button decides.
     setting('colour').querySelector<HTMLButtonElement>('.fx')!.click();
@@ -754,7 +760,7 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     await page.wait(300);
     const colourLive = setting('colour').querySelector('.live .swatch') !== null;
     setting('colour').querySelector<HTMLButtonElement>('.fx')!.click();
-    const colourBack = setting('colour').querySelector<HTMLInputElement>('input[type="color"]')?.value;
+    const colourBack = setting('colour').querySelector<HTMLElement>('.colour-swatch')?.dataset.colour;
     await page.wait(1100);
 
     // A picture, packed into the template.
@@ -775,10 +781,11 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     select('Ring');
     type(setting('radius').querySelector<HTMLInputElement>('.expr-input')!, '20 + 0 * (bass');
     await page.wait(700);
-    return { title, wrong, right, afterUndo, colourExpression, colourLive, colourBack };
+    return { title, wrong, right, afterUndo, colourExpression, colourLive, colourBack, pickerOpened, pickerClosed };
   });
   assert.equal(seen.title, 'Ring');
   assert.deepEqual([seen.colourExpression, seen.colourLive, seen.colourBack], ['#ff0000', true, '#ff0000']);
+  assert.ok(seen.pickerOpened && seen.pickerClosed, 'the swatch opens the colour picker and closes it');
   assert.deepEqual(seen.wrong, { problem: 'Unknown name bas; did you mean bass?', marked: 'bas', live: '' });
   assert.deepEqual(seen.right, { problem: '', live: '= 20.0' });
   assert.equal(seen.afterUndo, '%logo%');
@@ -811,9 +818,12 @@ test('a template\'s fields in the editor: renamed everywhere, added, changed, dr
     page.click('view-video');
     await page.wait(200);
     // What the mix filled in, under the field's old name.
-    const colour = page.element<HTMLInputElement>('field-colour1');
-    colour.value = '#ff0000';
-    colour.dispatchEvent(new Event('input', { bubbles: true }));
+    // Chosen in the picker its swatch opens, by its hex code; a second click on the swatch closes it.
+    page.click('field-colour1');
+    const hex = document.querySelector<HTMLInputElement>('.colour-picker .picker-hex')!;
+    hex.value = '#ff0000';
+    hex.dispatchEvent(new Event('input', { bubbles: true }));
+    page.click('field-colour1');
     await page.settle();
     page.click('template-edit');
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
@@ -866,7 +876,7 @@ test('a template\'s fields in the editor: renamed everywhere, added, changed, dr
     page.click('editor-done');
     await page.wait(100);
     const panel = [...page.element('video-fields').querySelectorAll('label')].map((label) => label.textContent);
-    return { refused, kept, usage, order, marked, focused, layers, layersLeft, panel, accent: page.element<HTMLInputElement>('field-accent').value };
+    return { refused, kept, usage, order, marked, focused, layers, layersLeft, panel, accent: page.element('field-accent').dataset.colour };
   });
   assert.equal(seen.refused, 'The name bass is already taken');
   assert.ok(seen.kept);

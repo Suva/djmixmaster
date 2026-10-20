@@ -67,6 +67,8 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/template-editor.ts` | The template editor in the Video view's panel, with its own undo |
 | `src/app/renderer/layer-settings.ts` | The selected layer's settings in the editor, made from its kind's list of settings |
 | `src/app/renderer/fields-editor.ts` | The editor's Fields tab: what a template asks to be filled in |
+| `src/app/renderer/colour-picker.ts` | The app's own colour picker, with opacity, as the system's has none in the browser |
+| `src/app/renderer/colour-input.ts` | A colour's swatch, which opens the colour picker; used wherever a colour is set |
 | `src/app/renderer/stop-bar.ts` | A gradient's stops as a bar in the editor, to drag, add and take out; each stop's own settings fold away under it |
 | `src/app/renderer/picture-handles.ts` | Picking, moving and resizing layers on the picture while editing, from where the drawer says each was drawn |
 | `src/app/renderer/video-sources.ts` | The frames of a template's videos: video elements in the view, decoders in the export |
