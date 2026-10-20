@@ -17,6 +17,7 @@ import { applyLut, scalingLut, type Lut } from './lut.ts';
 import { lengthOf, shapeOutline } from './outline.ts';
 import { covered, kindNumber, NOISE_SHADER, noiseValue, seedBits, type NoiseOptions } from './noise.ts';
 import { DISPLACE_SHADER, displacementAt, modeNumber, type Displacement } from './displace.ts';
+import { KEY_SHADER, keyAmount, keyNumber, keyRange, type Key } from './key.ts';
 import { fewer, hexagonAt, hexCells, hexColour, hexRadius, squareCells, triangleAt, triangleCells, type Cell, type Region } from './cells.ts';
 import { brightnessOf, canvasStops, gradientAt, gradientMapTable, stopsOf, turnStops, type Stop } from './gradient-map.ts';
 
@@ -971,7 +972,7 @@ export class FrameDrawer {
     this.#picture(params, picture.image, picture.width, picture.height);
   }
 
-  /** Draws a picture or a video frame as an image or video layer's settings say: fitted, rounded, tinted. */
+  /** Draws a picture or a video frame as an image or video layer's settings say: keyed, fitted, rounded, tinted. */
   #picture(params: ResolvedParams, picture: CanvasImageSource, pictureWidth: number, pictureHeight: number) {
     const ctx = this.#ctx;
     const { width, height } = this.#canvas;
@@ -986,7 +987,39 @@ export class FrameDrawer {
     const [left, top] = anchored(str(params, 'anchor'), 0, 0, w, h);
     this.#record(params, left, top, w, h);
 
-    // Drawn on its own first, so that tint and rounding touch the picture only.
+    // Keyed first, at the clip's own size, against its own colours: before it is scaled, so that the
+    // edges the key leaves are smoothed by the scaling, and before brightness and saturation change them.
+    const kind = str(params, 'key');
+    if (kind === 'colour' || kind === 'dark') {
+      const colour = col(params, 'keyColour') ?? parseHex('#00ff00')!;
+      const key: Key = { kind, colour: [colour.r, colour.g, colour.b], tolerance: num(params, 'keyTolerance'), softness: num(params, 'keySoftness') };
+      picture = this.#keyed(picture, Math.max(1, Math.round(pictureWidth)), Math.max(1, Math.round(pictureHeight)), key);
+    }
+    const brightness = Math.max(0, num(params, 'brightness'));
+    const saturation = Math.max(0, num(params, 'saturation'));
+    const filter = brightness === 1 && saturation === 1 ? 'none' : `brightness(${brightness}) saturate(${saturation})`;
+    const shadow = col(params, 'shadowColour');
+    const blur = (num(params, 'shadowBlur') / 100) * this.#unit;
+    const tint = col(params, 'tint');
+    const tintAmount = tint ? num(params, 'tintAmount') : 0;
+    const rounding = num(params, 'rounding');
+    const shade = () => {
+      if (shadow && blur > 0) {
+        ctx.shadowColor = hexOf(shadow);
+        ctx.shadowBlur = blur;
+      }
+    };
+
+    // Neither rounded nor tinted, it is drawn straight onto the picture: there is nothing to keep to the picture alone.
+    if (rounding <= 0 && tintAmount <= 0) {
+      shade();
+      ctx.filter = filter;
+      ctx.drawImage(picture, left, top, w, h);
+      ctx.filter = 'none';
+      return;
+    }
+
+    // Otherwise drawn on its own first, so that tint and rounding touch the picture only.
     const scratch = this.#scratchCanvas();
     const s = scratch.getContext('2d')!;
     s.setTransform(1, 0, 0, 1, 0, 0);
@@ -994,21 +1027,17 @@ export class FrameDrawer {
     s.clearRect(0, 0, scratch.width, scratch.height);
     const pw = Math.min(scratch.width, Math.ceil(w));
     const ph = Math.min(scratch.height, Math.ceil(h));
-    s.filter = `brightness(${Math.max(0, num(params, 'brightness'))}) saturate(${Math.max(0, num(params, 'saturation'))})`;
+    s.filter = filter;
     s.save();
-    const rounding = (num(params, 'rounding') / 100) * Math.min(pw, ph);
-    if (rounding > 0) {
+    const corner = (rounding / 100) * Math.min(pw, ph);
+    if (corner > 0) {
       s.beginPath();
-      s.roundRect(0, 0, pw, ph, rounding);
+      s.roundRect(0, 0, pw, ph, corner);
       s.clip();
     }
     s.drawImage(picture, 0, 0, pw, ph);
     s.restore();
     s.filter = 'none';
-    const key = str(params, 'key');
-    if (key === 'colour' || key === 'dark') keyOut(s, pw, ph, key, col(params, 'keyColour'), num(params, 'keyTolerance'), num(params, 'keySoftness'));
-    const tint = col(params, 'tint');
-    const tintAmount = num(params, 'tintAmount');
     if (tint && tintAmount > 0) {
       s.globalCompositeOperation = 'source-atop';
       s.globalAlpha = tintAmount;
@@ -1016,13 +1045,39 @@ export class FrameDrawer {
       s.fillRect(0, 0, pw, ph);
       s.globalAlpha = 1;
     }
-    const shadow = col(params, 'shadowColour');
-    const blur = (num(params, 'shadowBlur') / 100) * this.#unit;
-    if (shadow && blur > 0) {
-      ctx.shadowColor = hexOf(shadow);
-      ctx.shadowBlur = blur;
-    }
+    shade();
     ctx.drawImage(scratch, 0, 0, pw, ph, left, top, w, h);
+  }
+
+  #keyGl: KeyGl | null | undefined;
+
+  /**
+   * A picture with what is near the key colour, or dark, made see-through
+   * (key.ts), at the size given: on the graphics card, or else on the
+   * processor. The canvas it comes back on is shared: draw it before keying
+   * another.
+   */
+  #keyed(picture: CanvasImageSource, width: number, height: number, key: Key): OffscreenCanvas {
+    if (this.#keyGl === undefined) this.#keyGl = KeyGl.make();
+    const result = this.#keyGl?.apply(picture, width, height, key);
+    if (result) return result;
+    // On the processor: slower, the same colours.
+    const out = this.#extraCanvas(16, width, height);
+    const o = out.getContext('2d', { willReadFrequently: true })!;
+    o.setTransform(1, 0, 0, 1, 0, 0);
+    o.globalCompositeOperation = 'copy';
+    o.globalAlpha = 1;
+    o.filter = 'none';
+    o.drawImage(picture, 0, 0, width, height);
+    const pixels = o.getImageData(0, 0, width, height);
+    const data = pixels.data;
+    const range = keyRange(key);
+    for (let i = 0; i < data.length; i += 4) {
+      const stays = keyAmount(data[i] / 255, data[i + 1] / 255, data[i + 2] / 255, key, range);
+      if (stays < 1) data[i + 3] = Math.round(data[i + 3] * stays);
+    }
+    o.putImageData(pixels, 0, 0);
+    return out;
   }
 
   #text(params: ResolvedParams, frame: Frame, memory: Memory) {
@@ -2438,34 +2493,6 @@ export class FrameDrawer {
     ctx.restore();
   }
 }
-/**
- * Makes part of a picture transparent: what is near the key colour (a green
- * screen), or what is dark (a clip made on black). Within `tolerance` (a
- * fraction) of the way to the furthest colour it goes entirely; over the
- * next `softness` it fades back in, so edges stay smooth.
- */
-function keyOut(
-  ctx: OffscreenCanvasRenderingContext2D, width: number, height: number, kind: 'colour' | 'dark', colour: Colour | null, tolerance: number, softness: number,
-) {
-  if (width <= 0 || height <= 0) return;
-  const image = ctx.getImageData(0, 0, width, height);
-  const data = image.data;
-  const key = colour ?? parseHex('#00ff00')!;
-  const [kr, kg, kb] = [key.r * 255, key.g * 255, key.b * 255];
-  const low = Math.max(0, tolerance);
-  const high = low + Math.max(1e-3, softness);
-  // The furthest a colour can be from another: corner to corner of the colour cube.
-  const furthest = Math.sqrt(3) * 255;
-  for (let i = 0; i < data.length; i += 4) {
-    const distance = kind === 'dark'
-      ? (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255
-      : Math.hypot(data[i] - kr, data[i + 1] - kg, data[i + 2] - kb) / furthest;
-    if (distance >= high) continue;
-    data[i + 3] = distance <= low ? 0 : Math.round(data[i + 3] * ((distance - low) / (high - low)));
-  }
-  ctx.putImageData(image, 0, 0);
-}
-
 /** Adds a closed polygon, as x, y pairs, to a path or a context's path. */
 function addPolygon(path: Path2D | Context, points: number[]) {
   path.moveTo(points[0], points[1]);
@@ -2824,6 +2851,75 @@ class LutGl {
     gl.uniform1f(this.#uniforms.size, lut.size);
     gl.uniform3fv(this.#uniforms.low, lut.min);
     gl.uniform3fv(this.#uniforms.high, lut.max);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
+  }
+}
+
+/** Keys a picture on the graphics card, as key.ts says, onto a canvas of its own the size asked for. */
+class KeyGl {
+  readonly #canvas: OffscreenCanvas;
+  readonly #gl: WebGL2RenderingContext;
+  readonly #program: WebGLProgram;
+  readonly #picture: WebGLTexture;
+  readonly #uniforms: Record<'picture' | 'size' | 'kind' | 'key' | 'low' | 'high', WebGLUniformLocation | null>;
+
+  static make(): KeyGl | null {
+    try {
+      return typeof OffscreenCanvas === 'undefined' ? null : new KeyGl();
+    } catch {
+      return null;
+    }
+  }
+
+  constructor() {
+    [this.#canvas, this.#gl] = glCanvas();
+    const gl = this.#gl;
+    const program = this.#program = glProgram(gl, KEY_SHADER);
+    this.#uniforms = {
+      picture: gl.getUniformLocation(program, 'picture'),
+      size: gl.getUniformLocation(program, 'size'),
+      kind: gl.getUniformLocation(program, 'kind'),
+      key: gl.getUniformLocation(program, 'key'),
+      low: gl.getUniformLocation(program, 'low'),
+      high: gl.getUniformLocation(program, 'high'),
+    };
+    // Read between pixels, should the picture's own size differ from the one asked for; at the same size, each pixel exactly.
+    this.#picture = gl.createTexture()!;
+    gl.bindTexture(gl.TEXTURE_2D, this.#picture);
+    for (const [name, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) {
+      gl.texParameteri(gl.TEXTURE_2D, name, value);
+    }
+  }
+
+  /** The picture keyed, on this class's canvas; null if the card could not do it, or cannot read this kind of picture. */
+  apply(source: CanvasImageSource, width: number, height: number, key: Key): OffscreenCanvas | null {
+    const gl = this.#gl;
+    if (gl.isContextLost()) return null;
+    if (this.#canvas.width !== width || this.#canvas.height !== height) {
+      this.#canvas.width = width;
+      this.#canvas.height = height;
+    }
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(this.#program);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.#picture);
+    // Read as it is, not premultiplied, as the processor reads it; written back premultiplied, as the canvas keeps it.
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    try {
+      // A video element, a VideoFrame, a picture or a canvas; an SVG image cannot be, and is keyed on the processor.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source as TexImageSource);
+    } catch {
+      return null;
+    }
+    const [low, high] = keyRange(key);
+    gl.uniform1i(this.#uniforms.picture, 0);
+    gl.uniform2f(this.#uniforms.size, width, height);
+    gl.uniform1i(this.#uniforms.kind, keyNumber(key.kind));
+    gl.uniform3f(this.#uniforms.key, key.colour[0], key.colour[1], key.colour[2]);
+    gl.uniform1f(this.#uniforms.low, low);
+    gl.uniform1f(this.#uniforms.high, high);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     return gl.getError() === gl.NO_ERROR ? this.#canvas : null;
   }

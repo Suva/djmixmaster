@@ -47,6 +47,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/visuals/expression.ts` | The expression language of templates' settings, for numbers and colours |
 | `src/visuals/noise.ts` | A noise layer's patterns, as a shader for the graphics card and the same steps in TypeScript |
 | `src/visuals/displace.ts` | Where a displace layer reads each pixel from, as a shader and the same steps in TypeScript |
+| `src/visuals/key.ts` | How much of each pixel of a keyed clip stays, as a shader and the same steps in TypeScript |
 | `src/visuals/gradient-map.ts` | Gradients of stops that are settings, as every layer with a gradient has them: blending, canvas stops, and the table a gradient map and noise colour by |
 | `src/visuals/cells.ts` | Squares, hexagons and triangles laid out over a picture, for the grid layer and the mosaic effect |
 | `src/visuals/outline.ts` | The outlines of a shape layer's shapes, as points: rounded corners, lengths for tracing them |

@@ -1,15 +1,20 @@
 // Tests of the layers drawn on the graphics card (noise, displace, gradient
-// map): that the window draws what the processor works out. And the gradient
-// map's stop bar in the editor. See window.test.ts for how these run.
+// map, a clip's key): that the window draws what the processor works out.
+// And the gradient map's stop bar in the editor. See window.test.ts for how
+// these run.
 
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { crc32, deflateSync } from 'node:zlib';
 import { after, before, test } from 'node:test';
 import { NOISE_KINDS, noiseValue } from '../src/visuals/noise.ts';
 import { DISPLACE_MODES, displacementAt } from '../src/visuals/displace.ts';
 import { gradientMapTable } from '../src/visuals/gradient-map.ts';
+import { keyAmount, type Key } from '../src/visuals/key.ts';
 import { parseHex } from '../src/visuals/colour.ts';
+import { ffmpeg } from '../src/audio-io.ts';
 import { writeSyntheticMix } from './synthetic-mix.ts';
 import { dataFolder, electronPath, runApp, workFolder } from './window-app.ts';
 
@@ -183,6 +188,101 @@ test('every mode of displace, and the edges held, move the picture as the proces
       assert.ok(Math.abs(found - (x + dx)) <= 6, `${name} at ${px}, ${py}: read from column ${found.toFixed(1)}, worked out ${(x + dx).toFixed(1)}`);
     });
   });
+});
+
+/** A PNG of blocks of colour side by side, each `block` pixels square: [r, g, b, a], 0 to 255. */
+function stripes(colours: number[][], block: number): Buffer {
+  const width = colours.length * block;
+  const row = Buffer.alloc(1 + width * 4);
+  colours.forEach((c, i) => { for (let x = 0; x < block; x++) row.set(c, 1 + (i * block + x) * 4); });
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type), data])));
+    return Buffer.concat([length, Buffer.from(type), data, crc]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(block, 4);
+  header.set([8, 6, 0, 0, 0], 8);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.concat(Array.from({ length: block }, () => row)))), chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+test('keying a clip by colour or by darkness leaves what the processor works out', { skip }, async () => {
+  // From the key colour itself, through colours that fade, to ones far off.
+  const colours = [
+    [0, 255, 0], [40, 220, 40], [100, 200, 100], [120, 190, 120], [60, 240, 200], [150, 180, 150],
+    [255, 0, 0], [255, 255, 255], [30, 30, 60], [90, 90, 90], [200, 100, 50], [70, 70, 70],
+  ];
+  const still = join(work, 'stripes.png');
+  await writeFile(still, stripes(colours.map((c) => [...c, 255]), 16));
+  const clip = join(work, 'Stripes.mp4');
+  execFileSync(ffmpeg(), ['-v', 'error', '-y', '-loop', '1', '-i', still, '-t', '2', '-r', '25', '-c:v', 'libx264', '-crf', '4', '-pix_fmt', 'yuv420p', clip]);
+  const keys: Key[] = [
+    { kind: 'colour', colour: [0, 1, 0], tolerance: 0.3, softness: 0.2 },
+    { kind: 'colour', colour: [1, 1, 1], tolerance: 0.1, softness: 0 },
+    { kind: 'dark', colour: [0, 1, 0], tolerance: 0.15, softness: 0.3 },
+  ];
+  const hex = (c: number[]) => `#${c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')}`;
+  const file = join(work, 'Key.djmtemplate');
+  // Shown unkeyed first, for the colours as the clip decodes, then by each key.
+  await writeFile(file, JSON.stringify({
+    format: 3, name: 'Key', fields: [{ key: 'n', label: 'Which', kind: 'number', default: 0, min: 0, max: 10 }],
+    layers: [{ key: 'none' }, ...keys.map((key) => ({ key: key.kind, keyColour: hex(key.colour), keyTolerance: key.tolerance, keySoftness: key.softness }))].map((params, i) => ({
+      type: 'video', params: { visible: `n == ${i}`, video: clip, fit: 'stretch', width: 100, height: 100, ...params },
+    })),
+  }));
+  const data = await dataFolder(work, analysed);
+  const seen = await runApp({ recording: mix, data, template: file, timeoutMs: 60_000, given: [colours.length, keys.length] }, async (page, [count, cases]) => {
+    page.click('view-video');
+    page.click('template-import');
+    const select = page.element<HTMLSelectElement>('template');
+    await page.until(() => select.selectedOptions[0]?.text === 'Key', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    const field = page.element<HTMLInputElement>('field-n');
+    // The middle of each block, over the black the picture starts from.
+    const read = () => {
+      const pixels = picture.getContext('2d')!.getImageData(0, Math.floor(picture.height / 2), picture.width, 1).data;
+      return Array.from({ length: count }, (_, i) => [...pixels.slice(Math.floor(((i + 0.5) / count) * picture.width) * 4, Math.floor(((i + 0.5) / count) * picture.width) * 4 + 3)]);
+    };
+    // Each reading once it holds still and differs from the one before; the first once the clip is drawn, its white block white.
+    const settle = async (before: string, what: string) => {
+      let last = '';
+      await page.until(() => {
+        const now = read();
+        const settled = now.join() === last && now.join() !== before && (before !== '' || now[7][0] > 200);
+        last = now.join();
+        return settled;
+      }, what, 20_000);
+      return last;
+    };
+    let before = await settle('', 'the clip to be drawn');
+    const shown: number[][][] = [read()];
+    for (let i = 1; i <= cases; i++) {
+      field.value = String(i);
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      before = await settle(before, `key ${i} to be drawn`);
+      shown.push(read());
+    }
+    return shown;
+  });
+  const [decoded, ...keyed] = seen;
+  keys.forEach((key, k) => {
+    decoded.forEach(([r, g, b], i) => {
+      // Laid over black: each channel as much as stays of it.
+      const stays = keyAmount(r / 255, g / 255, b / 255, key);
+      const want = [r, g, b].map((v) => v * stays);
+      const drawn = keyed[k][i];
+      drawn.forEach((v, c) => assert.ok(Math.abs(v - want[c]) <= 3, `${key.kind} key ${k + 1}, colour ${decoded[i]}: drawn ${drawn}, worked out ${want.map(Math.round)}`));
+    });
+  });
+  // And the keys did key: some colours gone, some partly, some kept.
+  const amounts = keys.flatMap((key) => decoded.map(([r, g, b]) => keyAmount(r / 255, g / 255, b / 255, key)));
+  assert.ok(amounts.includes(0) && amounts.includes(1) && amounts.some((a) => a > 0.1 && a < 0.9), `amounts ${amounts.map((a) => a.toFixed(2))}`);
 });
 
 test('a gradient map recolours each pixel by its brightness, as its table says', { skip }, async () => {

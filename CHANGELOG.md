@@ -10,6 +10,12 @@ are under "Not released yet" and appear there once they are.
   `smooth(value, rise, fall)` rose and fell twice as fast as its seconds
   said. It now takes those seconds, so a template that uses it moves more
   slowly than before; halve its rise and fall to get the old feel back.
+- **Keyed clips are fast.** A video clip with its green or black keyed out
+  made a video export several times slower and could make the preview
+  stutter. The key is now worked out by the graphics card, and such a clip
+  costs about what it does without one. The key now looks at the clip's
+  own colours, before its brightness and saturation are changed, and its
+  edges are smoother on a clip shown larger than it was filmed.
 
 ## 0.11.0 — 20 October 2026
 
