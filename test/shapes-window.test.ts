@@ -50,14 +50,14 @@ test('the shape of a mix\'s video is chosen, undone and redone, and exported', {
     const picture = page.element<HTMLCanvasElement>('picture');
     const landscape = picture.width > picture.height;
     document.querySelector<HTMLButtonElement>('#video-shape [data-shape=square]')!.click();
-    await page.wait(100);
+    await page.drawn();
     const square = picture.width === picture.height;
-    await page.settle();
+    await page.saved();
     page.click('undo');
-    await page.wait(100);
+    await page.drawn();
     const undone = picture.width > picture.height;
     page.click('redo');
-    await page.wait(100);
+    await page.drawn();
     page.click('export');
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
     document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();

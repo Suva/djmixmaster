@@ -48,7 +48,7 @@ test('a shape drawn as far as trackProgress says fills across each track', { ski
     for (let i = 0; i < 6; i++) page.key('ArrowRight');
     page.key('KeyM');
     for (let i = 0; i < 3; i++) page.key('ArrowLeft');
-    await page.settle();
+    await page.saved();
     page.click('view-video');
     page.click('template-import');
     const select = page.element<HTMLSelectElement>('template');

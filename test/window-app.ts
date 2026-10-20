@@ -3,6 +3,7 @@
 // function returned. Each run is one start of the app, as a user would have it.
 
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { cp, mkdir, mkdtemp } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -25,8 +26,22 @@ export interface Page {
   wait(ms: number): Promise<void>;
   /** Waits until the check holds; fails with `what` if it never does. */
   until(check: () => boolean, what: string, ms?: number): Promise<void>;
-  /** Waits out the pause after which a change is saved and becomes an undo step. */
-  settle(): Promise<void>;
+  /**
+   * Waits until the changes made so far are saved and have become undo steps
+   * (they are, 400 ms after the last one), and what saves a template has
+   * been written. The session itself is written by the main process, which
+   * finishes before the app quits.
+   */
+  saved(): Promise<void>;
+  /**
+   * Waits until the Video view's picture shows every change made so far,
+   * with nothing it needs still loading: its pictures, fonts, LUTs and the
+   * music's analysis. Use it rather than a fixed wait before reading the
+   * picture's pixels, or anything the editor updates as a frame is drawn,
+   * such as the opacity box and the live values of settings. Only while the
+   * Video view is shown.
+   */
+  drawn(ms?: number): Promise<void>;
   element<T extends HTMLElement = HTMLElement>(id: string): T;
   text(id: string): string;
   click(id: string): void;
@@ -64,7 +79,17 @@ const PAGE_SOURCE = `(() => {
         await wait(50);
       }
     },
-    settle: () => wait(650),
+    async saved() {
+      // A change's own handlers may take a moment to ask for the save.
+      await new Promise((done) => requestAnimationFrame(done));
+      await wait(0);
+      await this.until(() => (document.documentElement.dataset.saving ?? '0') === '0', 'the changes to be saved');
+    },
+    async drawn(ms = 30000) {
+      const picture = element('picture');
+      const from = Number(picture.dataset.ticks ?? 0);
+      await this.until(() => Number(picture.dataset.ticks ?? 0) > from && picture.dataset.idle === 'true', 'the picture to be drawn', ms);
+    },
     text: (id) => element(id).textContent.trim(),
     click: (id) => element(id).click(),
     key(code, options = {}) {
@@ -181,11 +206,16 @@ export function runApp<Result, Given = undefined>(
 
 /**
  * A new, empty data folder under `root`. Given `analysesFrom`, it starts with
- * that folder's stored analyses, so the run need not measure the recording again.
+ * that folder's stored analyses, and what the visuals move to where it has
+ * that, so the run need not measure or listen to the recording again.
  */
 export async function dataFolder(root: string, analysesFrom?: string): Promise<string> {
   const folder = await mkdtemp(join(root, 'data-'));
-  if (analysesFrom) await cp(join(analysesFrom, 'analyses'), join(folder, 'analyses'), { recursive: true });
+  if (analysesFrom) {
+    await cp(join(analysesFrom, 'analyses'), join(folder, 'analyses'), { recursive: true });
+    const features = join(analysesFrom, 'visual-features');
+    if (existsSync(features)) await cp(features, join(folder, 'visual-features'), { recursive: true });
+  }
   return folder;
 }
 

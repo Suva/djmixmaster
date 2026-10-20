@@ -67,7 +67,7 @@ test('a LUT kept in a template, one chosen for the mix, and one added in the edi
     await page.wait(100);
     page.key('KeyO');
     page.key('Enter');
-    await page.settle();
+    await page.saved();
     page.click('view-video');
     page.click('template-import');
     const select = page.element<HTMLSelectElement>('template');
@@ -100,7 +100,7 @@ test('a LUT kept in a template, one chosen for the mix, and one added in the edi
     const offered = [...document.querySelectorAll('#editor-layer .lut-menu .lut-group, #editor-layer .lut-menu .lut-item')].map((item) => item.textContent);
     document.querySelector<HTMLButtonElement>('#editor-layer .lut-add')!.click();
     await page.until(() => page.element('setting-lut')?.dataset.value === 'lut:Half', 'the LUT to be kept');
-    await page.wait(600);
+    await page.saved();
     page.click('editor-done');
     await page.wait(200);
     return { inverted, halved, chosen, status, offered };
@@ -189,7 +189,7 @@ test('the LUT folder\'s LUTs are offered, stepped through with the arrow keys, n
     [...document.querySelectorAll<HTMLButtonElement>('#editor-layer .lut-item')].find((item) => item.textContent === 'Swap')!.click();
     await page.until(near([235, 205, 55]), 'the picture to be inverted and swapped');
     const layer = page.element('setting-lut').dataset.value;
-    await page.wait(600);
+    await page.saved();
     page.click('editor-done');
     await page.wait(200);
     // Its message can be replaced at once by how far listening to the recording has got; the test waits for the file instead.

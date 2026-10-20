@@ -29,6 +29,12 @@ let night: string;
 let analysed: string;
 
 const fresh = () => dataFolder(work, analysed);
+/** As `fresh`, without what the visuals move to: the Video view listens to the recording again. */
+async function unheard(): Promise<string> {
+  const data = await fresh();
+  await rm(join(data, 'visual-features'), { recursive: true, force: true });
+  return data;
+}
 
 /** The template in a template file to share: a ZIP, with the JSON as template.json. */
 async function sharedTemplate(file: string): Promise<{ name: string }> {
@@ -48,7 +54,12 @@ before(async () => {
     '-filter_complex', '[0:a][1:a][2:a]concat=n=3:v=0:a=1', '-c:a', 'pcm_s16le', night,
   ]);
   analysed = await dataFolder(work);
-  await runApp({ recording: mix, data: analysed }, () => null);
+  // The Video view listens to the first for what its pictures move to: done once here, it is kept for every run.
+  await runApp({ recording: mix, data: analysed, timeoutMs: 120_000 }, async (page) => {
+    page.click('view-video');
+    await page.drawn(100_000);
+    page.click('view-mastering');
+  });
   await runApp({ recording: night, data: analysed }, () => null);
 });
 
@@ -117,7 +128,7 @@ test('a fixed gain in place of levelling, set by hand and carried back', { skip 
     const byHand = { gain: page.text('stat-gain'), shown: page.text('target-value') };
     page.click('level-tracks');
     await page.until(() => page.text('stat-gain') !== byHand.gain, 'the levelling to come back');
-    await page.settle();
+    await page.saved();
     return { levelled, fits, hidden, byHand, back: page.text('stat-gain'), choice: (document.getElementById('loudness') as HTMLSelectElement).value };
   });
   const [low, high] = seen.fits.split(' to ');
@@ -130,7 +141,7 @@ test('a fixed gain in place of levelling, set by hand and carried back', { skip 
 
 test('a mix can be split, deleted with Backspace, and both undone', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
-    await page.settle();
+    await page.saved();
     // Deleting the only mix takes away what was marked: it covers everything again.
     page.key('Enter');
     for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
@@ -147,7 +158,7 @@ test('a mix can be split, deleted with Backspace, and both undone', { skip }, as
     await page.wait(100);
     // Control+E, as on Windows; the app takes Command the same way.
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE', key: 'e', ctrlKey: true, bubbles: true }));
-    await page.settle();
+    await page.saved();
     const afterSplit = page.tabs();
     // The piece before the cut stays selected, with the playhead resting at its end.
     const selected = document.querySelector('.mix-tab.on')!.textContent!.trim();
@@ -175,18 +186,18 @@ test('a mix can be split, deleted with Backspace, and both undone', { skip }, as
     await page.wait(100);
 
     page.key('Backspace');
-    await page.settle();
+    await page.saved();
     const afterDelete = page.tabs();
     const message = page.text('export-status');
 
     page.click('undo');
-    await page.settle();
+    await page.saved();
     const afterUndo = page.tabs();
     page.click('undo');
-    await page.settle();
+    await page.saved();
     const afterSecondUndo = page.tabs();
     page.click('redo');
-    await page.settle();
+    await page.saved();
     return { afterDeletingTheOnlyMix, afterSplit, selected, playheadAfterSplit, playedFrom, restedAt, startedOverAt, afterDelete, message, afterUndo, afterSecondUndo, afterRedo: page.tabs() };
   });
   assert.deepEqual(seen.afterDeletingTheOnlyMix, { tabs: 1, length: '0:09:00', trimmed: '0:08:00' });
@@ -209,7 +220,7 @@ test('Split at gaps cuts a night into its sets', { skip }, async () => {
   const seen = await runApp({ recording: night, data: await fresh() }, async (page) => {
     await page.until(() => !page.element<HTMLButtonElement>('split-gaps').disabled, 'Split at gaps to be offered');
     page.click('split-gaps');
-    await page.settle();
+    await page.saved();
     return { tabs: page.tabs(), exportAll: !page.element('export-all-group').hidden, label: page.text('export-all') };
   });
   assert.equal(seen.tabs.length, 2);
@@ -228,7 +239,7 @@ test('work is remembered, and the last recording comes back by itself', { skip }
     for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
     page.click('split-here');
-    await page.settle();
+    await page.saved();
     // The last change, and the app quits straight after: saved as the window closes, and written before it is gone.
     page.type('mix-artist', 'Suva');
   });
@@ -264,7 +275,7 @@ test('a recording that has been moved and renamed keeps its mixes and its analys
     for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
     page.click('split-here');
-    await page.settle();
+    await page.saved();
   });
   const analyses = (await readdir(join(data, 'analyses'))).length;
 
@@ -331,7 +342,7 @@ test('a recording in several files opens, plays and is remembered as one', { ski
 });
 
 test('what the visuals move to is worked out on request, and kept', { skip }, async () => {
-  const data = await fresh();
+  const data = await unheard();
   const seen = await runApp({ recording: mix, data, given: mix }, async (page, path) => {
     const fractions: number[] = [];
     window.api.onListening((_path, fraction) => fractions.push(fraction));
@@ -378,8 +389,8 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
     template.dispatchEvent(new Event('change'));
     await page.wait(100);
     page.type('mix-artist', 'Suva');
-    await page.settle();
-    await page.wait(300);
+    await page.saved();
+    await page.drawn();
     const pixels = picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
     let lit = 0;
     for (let i = 0; i < pixels.length; i += 4 * 97) if (pixels[i] + pixels[i + 1] + pixels[i + 2] > 60) lit++;
@@ -405,7 +416,7 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
 test('while the music is listened to, the picture says so, and the count goes on in the Mastering view', { skip }, async () => {
   const file = join(work, 'Said.djmtemplate');
   await writeFile(file, JSON.stringify({ format: 1, name: 'Said', fields: [], layers: [{ type: 'solid', params: {} }] }));
-  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 90_000 }, async (page) => {
+  const seen = await runApp({ recording: mix, data: await unheard(), template: file, timeoutMs: 90_000 }, async (page) => {
     const notice = page.element('picture-notice');
     page.click('view-video');
     const shown = !notice.hidden && notice.offsetWidth > 0 ? notice.textContent : null;
@@ -467,7 +478,7 @@ test('the picture fades in from black with the mix', { skip }, async () => {
       const s = strip.getBoundingClientRect();
       strip.dispatchEvent(new MouseEvent('mousedown', { clientX: s.left + share * s.width, clientY: s.top + 10, bubbles: true }));
       window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-      await page.wait(300);
+      await page.drawn();
       const pixels = picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
       let sum = 0;
       let count = 0;
@@ -515,18 +526,18 @@ test('tracks are marked with M, named, moved and removed on the mix, undone, and
     window.dispatchEvent(new MouseEvent('mousemove', { clientX: x + (30 / length) * (box.width - 48), clientY: y, bubbles: true }));
     window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     detail.dispatchEvent(new MouseEvent('click', { clientX: x, clientY: y, bubbles: true }));
-    await page.settle();
+    await page.saved();
     const moved = tracks()[1][0];
 
     // The marker last clicked goes with Backspace, and comes back with undo.
     page.key('Backspace');
-    await page.settle();
+    await page.saved();
     const removed = tracks().length;
     page.click('undo');
     await page.wait(200);
     const back = tracks().length;
     const mixes = page.tabs().length;
-    await page.settle();
+    await page.saved();
     return { marked, named, moved, removed, back, mixes };
   });
   assert.deepEqual(seen.marked, { tracks: [[30, '', false], [60, '', false]], button: '2 tracks' });
@@ -583,7 +594,7 @@ test('a template of your own: duplicated, renamed, kept, shared and deleted', { 
     name.value = 'My glitter';
     name.dispatchEvent(new Event('input', { bubbles: true }));
     name.dispatchEvent(new Event('change', { bubbles: true }));
-    await page.wait(600);
+    await page.saved();
     page.click('editor-done');
     const shownName = document.querySelector('#template-about .about-name')!.textContent;
     page.click('template-export');
@@ -689,7 +700,7 @@ test('the template editor: layers shown and hidden, added, reordered, renamed, d
     page.click('undo');
     await page.wait(50);
     const undone = names().includes('Badge');
-    await page.wait(600);
+    await page.saved();
     page.click('editor-done');
     return { opened, added, dragged, renamed, deleted, mixes, undone, closed: !document.body.classList.contains('editing'), narrowAgain: panel.offsetWidth === narrow };
   });
@@ -737,10 +748,10 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     setting('radius').querySelector<HTMLButtonElement>('.fx')!.click();
     const expression = () => setting('radius').querySelector<HTMLInputElement>('.expr-input')!;
     type(expression(), '20 + 0 * bas');
-    await page.wait(200);
+    await page.drawn();
     const wrong = { problem: setting('radius').querySelector('.setting-problem')!.textContent, marked: setting('radius').querySelector('mark')?.textContent, live: setting('radius').querySelector('.live')!.textContent };
     type(expression(), '20 + 0 * bass');
-    await page.wait(300);
+    await page.drawn();
     const right = { problem: setting('radius').querySelector('.setting-problem')!.textContent, live: setting('radius').querySelector('.live')!.textContent };
     await page.wait(1100);
 
@@ -757,7 +768,7 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     setting('colour').querySelector<HTMLButtonElement>('.fx')!.click();
     const colourExpression = setting('colour').querySelector<HTMLInputElement>('.expr-input')?.value;
     type(setting('colour').querySelector<HTMLInputElement>('.expr-input')!, 'mix(#ff0000, #0000ff, 0)');
-    await page.wait(300);
+    await page.drawn();
     const colourLive = setting('colour').querySelector('.live .swatch') !== null;
     setting('colour').querySelector<HTMLButtonElement>('.fx')!.click();
     const colourBack = setting('colour').querySelector<HTMLElement>('.colour-swatch')?.dataset.colour;
@@ -780,7 +791,7 @@ test('a layer\'s settings in the editor: numbers, colours, packed pictures and e
     // Left half typed, to be found again next time.
     select('Ring');
     type(setting('radius').querySelector<HTMLInputElement>('.expr-input')!, '20 + 0 * (bass');
-    await page.wait(700);
+    await page.saved();
     return { title, wrong, right, afterUndo, colourExpression, colourLive, colourBack, pickerOpened, pickerClosed };
   });
   assert.equal(seen.title, 'Ring');
@@ -824,7 +835,7 @@ test('a template\'s fields in the editor: renamed everywhere, added, changed, dr
     hex.value = '#ff0000';
     hex.dispatchEvent(new Event('input', { bubbles: true }));
     page.click('field-colour1');
-    await page.settle();
+    await page.saved();
     page.click('template-edit');
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
     page.click('editor-tab-fields');
@@ -872,7 +883,7 @@ test('a template\'s fields in the editor: renamed everywhere, added, changed, dr
     document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', code: 'Delete', bubbles: true }));
     const order = [...document.querySelectorAll<HTMLElement>('.field-card')].map((card) => card.dataset.key);
     const layersLeft = document.querySelectorAll('.layer-row').length;
-    await page.wait(600);
+    await page.saved();
     page.click('editor-done');
     await page.wait(100);
     const panel = [...page.element('video-fields').querySelectorAll('label')].map((label) => label.textContent);
@@ -941,7 +952,7 @@ test('"Moves with…" makes a setting follow the music, and is read back from wh
     page.click('undo');
     await page.wait(100);
     const undone = expression();
-    await page.wait(600);
+    await page.saved();
 
     // A formula typed with the panel open: shown in it while it is one the panel could have written; closed when not.
     const typeIn = (text: string) => {
@@ -971,7 +982,7 @@ test('layers are picked, moved and resized on the picture, each drag one undo st
     page.choose('template', 'waveform');
     page.click('template-edit');
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
-    await page.wait(200);
+    await page.drawn();
     const overlay = page.element('picture-overlay');
     const picture = page.element('picture').getBoundingClientRect();
     const selected = () => document.querySelector('.layer-row.on .layer-name')!.textContent;
@@ -1134,7 +1145,7 @@ test('effects change the picture beneath them: a colour split, shown and hidden'
       for (let i = 0; i < pixels.length; i += 4) if (pixels[i] > 200 && pixels[i + 1] < 80 && pixels[i + 2] < 80) count++;
       return count;
     };
-    await page.wait(500);
+    await page.drawn();
     const split = red();
     page.click('template-edit');
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
@@ -1143,7 +1154,7 @@ test('effects change the picture beneath them: a colour split, shown and hidden'
     page.click('editor-add');
     [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Split')!
       .querySelector<HTMLButtonElement>('.layer-eye')!.click();
-    await page.wait(300);
+    await page.drawn();
     return { split, hidden: red(), offered };
   });
   assert.ok(seen.split > 500, `${seen.split} red pixels with the split`);
@@ -1170,7 +1181,7 @@ test('a blur reaches the edges of the picture as it does the middle', { skip }, 
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Blurred', 'the template to be added');
-    await page.wait(600);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     const { width, height } = picture;
     const pixels = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
@@ -1205,7 +1216,7 @@ test('a kaleidoscope mirrors a slice all the way round, and fills the corners fr
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Kaleidoscope', 'the template to be added');
-    await page.wait(500);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     const pixels = () => picture.getContext('2d')!.getImageData(0, 0, picture.width, picture.height).data;
     // How different the picture is from its mirror image, left to right, on average over a grid of points.
@@ -1238,7 +1249,7 @@ test('a kaleidoscope mirrors a slice all the way round, and fills the corners fr
     set('segments', '8');
     set('x', '85');
     set('y', '20');
-    await page.wait(300);
+    await page.drawn();
     // The editor's wider panel has made the picture smaller since.
     const data = pixels();
     const [w, h] = [picture.width, picture.height];
@@ -1247,7 +1258,7 @@ test('a kaleidoscope mirrors a slice all the way round, and fills the corners fr
       return data[i] + data[i + 1] + data[i + 2];
     });
     row.querySelector<HTMLButtonElement>('.layer-eye')!.click();
-    await page.wait(300);
+    await page.drawn();
     return { mirrored, plain: asymmetry(picture.width, picture.height), corners };
   });
   assert.ok(seen.plain > 40, `the picture itself is lopsided: ${seen.plain}`);
@@ -1281,14 +1292,14 @@ test('blends work out as their formulas say, linear burn included', { skip }, as
     for (const blend of ['normal', 'add', 'colour dodge', 'multiply', 'colour burn', 'linear burn']) {
       document.querySelector<HTMLButtonElement>('#editor-layer-top .layer-blend .lut-current')!.click();
       document.querySelector<HTMLButtonElement>(`#editor-layer-top .layer-blend .lut-item[data-value="${blend}"]`)!.click();
-      await page.wait(150);
+      await page.drawn();
       levels[blend] = middle();
     }
     // Half as much of the layer: half way from the grey beneath to the burnt.
     const opacity = document.querySelector<HTMLInputElement>('#editor-layer-top .setting[data-key="opacity"] input[type="number"]')!;
     opacity.value = '0.5';
     opacity.dispatchEvent(new Event('input', { bubbles: true }));
-    await page.wait(150);
+    await page.drawn();
     levels['linear burn at half'] = middle();
     return levels;
   });
@@ -1317,27 +1328,27 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     const opened = !popover().hidden;
     opacity().value = '0.4';
     opacity().dispatchEvent(new Event('input', { bubbles: true }));
-    await page.wait(50);
+    await page.drawn();
     const shown = box().textContent;
     opacity().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     const closed = popover().hidden;
     // Resting the pointer on it opens it too, and leaving closes it.
     box().parentElement!.dispatchEvent(new MouseEvent('mouseenter'));
-    await page.wait(400);
+    await page.until(() => !popover().hidden, 'the control to open on resting');
     const hovered = !popover().hidden;
     box().parentElement!.dispatchEvent(new MouseEvent('mouseleave'));
-    await page.wait(500);
+    await page.until(() => popover().hidden, 'the control to close on leaving');
     const left = popover().hidden;
     // ↓ on the closed list steps to the next blend, and the picture shows it at once: normal, then add, then screen.
     const button = document.querySelector<HTMLButtonElement>('#editor-layer-top .layer-blend .lut-current')!;
     button.focus();
     const frames = () => Number(page.element('picture').dataset.frames ?? 0);
-    await page.wait(150);
+    await page.drawn();
     const before = frames();
     button.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     const stepped = [blendOf().value, document.activeElement === button];
     button.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-    await page.wait(150);
+    await page.drawn();
     const redrawn = frames() > before;
     select('Background');
     const other = [opacity().value, blendOf().value];
@@ -1346,8 +1357,8 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     // An expression shows as ƒ and what it comes to.
     box().click();
     document.querySelector<HTMLButtonElement>('#editor-layer-top .setting[data-key="opacity"] .fx:not(.motion-button)')!.click();
-    // The box shows it with the next frame drawn, later on a busy computer.
-    await page.until(() => box().textContent!.startsWith('ƒ'), 'the box to show the expression', 5000).catch(() => {});
+    // The box shows it with the next frame drawn.
+    await page.drawn();
     const expression = box().textContent;
     // The box keeps its size whatever it shows, so nothing beside it moves.
     const widths = new Set<number>();
@@ -1355,10 +1366,9 @@ test('blend and opacity sit above the layers, for the selected layer, as in an i
     for (const text of ['0.05', '0.4', '1', '2.5']) {
       expressionInput.value = text;
       expressionInput.dispatchEvent(new Event('input', { bubbles: true }));
-      await page.wait(120);
+      await page.drawn();
       widths.add(Math.round(box().getBoundingClientRect().width * 10));
     }
-    await page.until(() => box().textContent === 'ƒ 1.00', 'the box to show what the last expression comes to', 5000).catch(() => {});
     const atMost = box().textContent;
     const below = document.querySelectorAll('#editor-layer .setting[data-key="opacity"], #editor-layer .setting[data-key="blend"]').length;
     // With every layer gone, nothing is selected: the bar is there, greyed.
@@ -1399,14 +1409,14 @@ test('number boxes change when dragged sideways, and a click is still a click', 
     // Looked up each time: once a change settles, the bar above the layers is made anew.
     const box = () => document.querySelector<HTMLButtonElement>('#editor-layer-top .opacity-value')!;
     const popover = () => document.querySelector<HTMLElement>('#editor-layer-top .opacity-popover')!;
-    // The box shows the value on the next frame drawn, which on a machine without a graphics card takes a while.
+    // The box shows the value on the next frame drawn.
     drag(box(), -40);
-    await page.until(() => box().textContent === '0.80', 'the opacity to show 0.80', 3000).catch(() => {});
+    await page.drawn();
     // The full control under the box follows, slider and all.
     const slider = popover().querySelector<HTMLInputElement>('input[type="range"]')!.value;
     const lowered = { shown: box().textContent, opened: !popover().hidden, slider };
     drag(box(), 400);
-    await page.until(() => box().textContent === '1.00', 'the opacity to show 1.00', 3000).catch(() => {});
+    await page.drawn();
     const raised = box().textContent;
     drag(box(), 0);
     const clicked = !popover().hidden;
@@ -1455,7 +1465,7 @@ test('a group draws its layers as one: faded together, effects kept inside it, h
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Grouped', 'the template to be added');
-    await page.wait(500);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     const at = (x: number, y: number) => [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), Math.floor(picture.height * y), 1, 1).data].slice(0, 3);
     // The corner: blue beneath, white at half over it. The middle: the text, red turned green inside its group.
@@ -1466,7 +1476,7 @@ test('a group draws its layers as one: faded together, effects kept inside it, h
     const row = (name: string) => [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === name)!;
     const list = [...document.querySelectorAll<HTMLElement>('.layer-row')].map((r) => `${r.style.paddingLeft} ${r.querySelector('.layer-name')!.textContent}`);
     row('Half').querySelector<HTMLButtonElement>('.layer-eye')!.click();
-    await page.wait(200);
+    await page.drawn();
     const hidden = at(0.02, 0.02);
     return { corner, middle, list, hidden };
   });
@@ -1516,7 +1526,7 @@ test('layers grouped with ⌘G, moved into groups, duplicated with ⌘J, ungroup
     page.click('undo');
     await page.wait(100);
     const undone = list();
-    await page.wait(600);
+    await page.saved();
     return { grouped, moved, duplicated, ungrouped, deleted, undone, mixes: page.tabs().length };
   });
   assert.deepEqual(seen.grouped, ['Glow', 'Now playing', 'Mix and time', 'Artist', 'Group 1', '  Logo', 'Ring', 'Background']);
@@ -1593,7 +1603,7 @@ test('a solid colour fills the picture, and a vignette darkens its edges and not
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Vignette', 'the template to be added');
-    await page.wait(500);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     const at = (x: number, y: number) => picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), Math.floor(picture.height * y), 1, 1).data[0];
     return { middle: at(0.5, 0.5), side: at(0.97, 0.5), corner: at(0.01, 0.01) };
@@ -1625,7 +1635,7 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Cells', 'the template to be added');
-    await page.wait(500);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     const { width, height } = picture;
     const at = (x: number, y: number) => [...picture.getContext('2d')!.getImageData(Math.floor(x), Math.floor(y), 1, 1).data].slice(0, 3);
@@ -1646,7 +1656,7 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     // Cells a hundredth of the height across, turned: each of the three colours on a third of the picture.
     eye('Grid');
     eye('Fine');
-    await page.wait(500);
+    await page.drawn();
     const shares = () => {
       const pixels = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
       const totals = [0, 0, 0];
@@ -1657,14 +1667,14 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     const fineShares = shares();
     eye('Fine');
     eye('White');
-    await page.wait(500);
+    await page.drawn();
     const white = shares()[0];
     const fine = fineShares.map((share) => share / white);
     // A mosaic of the halves: each cell the average under it, the cells over the edges whole.
     eye('White');
     eye('Halves');
     eye('Mosaic');
-    await page.wait(500);
+    await page.drawn();
     const m = 0.1 * height;
     const mosaic = {
       white: at(width / 2 - m / 2, height / 2),
@@ -1709,7 +1719,7 @@ test('a transform moves, sizes and flips the picture beneath, with nothing, repe
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Transform', 'the template to be added');
-    await page.wait(500);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     const at = (x: number) => picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), Math.floor(picture.height / 2), 1, 1).data[0];
     const set = async (key: string, value: string) => {
@@ -1717,7 +1727,7 @@ test('a transform moves, sizes and flips the picture beneath, with nothing, repe
       control.value = value;
       control.dispatchEvent(new Event('input', { bubbles: true }));
       control.dispatchEvent(new Event('change', { bubbles: true }));
-      await page.wait(300);
+      await page.drawn();
     };
     const levels: Record<string, number> = {};
     for (const edges of ['none', 'repeat', 'mirror', 'extend']) {
@@ -1766,7 +1776,7 @@ test('layer styles: a drop shadow falls away from the light, a stroke and an out
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Styles', 'the template to be added');
-    await page.wait(500);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     /** Where each colour is: how many pixels, and the middle of them, in parts of the picture. */
     const find = () => {
@@ -1795,7 +1805,7 @@ test('layer styles: a drop shadow falls away from the light, a stroke and an out
       const control = page.element<HTMLInputElement>('field-style');
       control.value = String(n);
       control.dispatchEvent(new Event('input', { bubbles: true }));
-      await page.wait(300);
+      await page.drawn();
       results[style] = find();
     }
     return results;
@@ -1863,7 +1873,7 @@ test('trails leave what moves behind while playing, and nothing while paused', {
     await page.until(() => !playing(), 'playback to stop');
     // Paused, a change draws the picture again, without its past.
     await on(99);
-    await page.wait(300);
+    await page.drawn();
     return { without, withTrails, paused: lit() };
   });
   assert.ok(seen.withTrails > seen.without * 3, `trails light up much more: ${seen.withTrails} against ${seen.without}`);
@@ -1888,7 +1898,7 @@ test('an effect in a group replaces the group\'s layers, rather than leaving the
     page.click('view-video');
     page.click('template-import');
     await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Grouped kaleidoscope', 'the template to be added');
-    await page.wait(500);
+    await page.drawn();
     const picture = page.element<HTMLCanvasElement>('picture');
     return [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * 0.2), Math.floor(picture.height * 0.5), 1, 1).data].slice(0, 3);
   });
@@ -2038,7 +2048,7 @@ test('a template says who made it, in the About tab and under the list of templa
     set('email', 'suva@example.com');
     set('website', 'https://example.com/suva/');
     set('description', 'A ring for the late hours.');
-    await page.wait(600);
+    await page.saved();
     page.click('editor-done');
     const about = page.element('template-about');
     return {
@@ -2090,7 +2100,7 @@ test('the window opens in the view it was left in: mastering, video, or the temp
     page.click('view-video');
     page.click('template-edit');
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
-    await page.settle();
+    await page.saved();
   });
   const editing = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
     await page.until(() => document.body.classList.contains('editing'), 'the editor to open again');
@@ -2211,7 +2221,7 @@ test('a recording\'s channels put right from the check-up: heard, levelled, expo
     const loudness = () => page.text('stat-in');
     const before = loudness();
     for (const id of ['out-of-phase', 'quieter-channel']) document.querySelector<HTMLButtonElement>(`[data-fix="${id}"]`)!.click();
-    await page.settle();
+    await page.saved();
     await page.wait(300);
     const after = loudness();
     const fixed = findings().filter((f) => f.classList.contains('fixed')).length;
@@ -2225,7 +2235,7 @@ test('a recording\'s channels put right from the check-up: heard, levelled, expo
     await page.wait(200);
     const undone = findings().filter((f) => f.classList.contains('fixed')).length;
     page.click('redo');
-    await page.settle();
+    await page.saved();
     return { offered, before, after, fixed, undone };
   });
   assert.deepEqual(seen.offered, [
@@ -2305,13 +2315,13 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
     for (let i = 0; i < 2; i++) page.key('ArrowRight');
     await page.wait(100);
     page.click('split-here');
-    await page.settle();
+    await page.saved();
     page.click('view-video');
     const template = page.element<HTMLSelectElement>('template');
     template.value = 'ring';
     template.dispatchEvent(new Event('change'));
     page.type('mix-artist', 'Suva');
-    await page.settle();
+    await page.saved();
     page.click('export-all');
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
     document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
@@ -2348,7 +2358,7 @@ test('Export all makes MP4 videos of the mixes, and a cancelled one leaves nothi
     for (let i = 0; i < 8; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
     page.click('split-here');
-    await page.settle();
+    await page.saved();
     page.click('export-all');
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
     document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
@@ -2381,7 +2391,7 @@ test('the artist can be typed in the Video view while the mix plays, and undone'
     const kept = { focused: document.activeElement === name, value: name.value };
     name.blur();
     page.key('Space');
-    await page.settle();
+    await page.saved();
     page.click('undo');
     await page.wait(200);
     return { kept, undone: page.element<HTMLInputElement>('mix-artist').value };
@@ -2504,9 +2514,9 @@ test('I and O put the start and the end of the mix at the playhead', { skip }, a
     await page.wait(60);
     const refused = { region: region(), said: page.text('readout') };
 
-    await page.settle();
+    await page.saved();
     page.click('undo');
-    await page.settle();
+    await page.saved();
     return { afterIn, afterOut, refused, afterUndo: region(), length: page.region().length };
   });
   assert.deepEqual(seen.afterIn, ['0:01:00', '0:09:00']);
@@ -2526,7 +2536,7 @@ test('a double click on a free part of the recording fills it with a mix', { ski
     for (let i = 0; i < 6; i++) page.key('ArrowRight', { shift: true });
     await page.wait(60);
     page.key('KeyO');
-    await page.settle();
+    await page.saved();
 
     const overview = page.element('overview');
     const box = overview.getBoundingClientRect();
@@ -2671,7 +2681,7 @@ test('edges and cuts land on the playhead to the millisecond, and so does the ex
     for (let i = 0; i < 2; i++) page.key('ArrowRight', { shift: true });
     await page.wait(100);
     page.click('split-here');
-    await page.settle();
+    await page.saved();
     const first = { start: field('start'), end: field('end'), length: page.region().length };
     document.querySelectorAll<HTMLElement>('.mix-tab')[1].click();
     await page.wait(100);
@@ -2721,7 +2731,7 @@ test('Export all writes each mix, levelled and under the ceiling', { skip }, asy
   const message = await runApp({ recording: night, data: await fresh(), exportFolder, timeoutMs: 120_000 }, async (page) => {
     await page.until(() => !page.element<HTMLButtonElement>('split-gaps').disabled, 'Split at gaps to be offered');
     page.click('split-gaps');
-    await page.settle();
+    await page.saved();
     page.click('export-all');
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
     page.click('export-go');

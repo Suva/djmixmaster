@@ -99,6 +99,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the help sheet and the manual |
 | `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
+| `src/app/renderer/saving.ts` | Saves made a moment after the last change, counted for scripted checks |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
 
 ## Rules that are easy to break
@@ -193,8 +194,21 @@ by id, dispatch mouse and keyboard events, and call `window.api` directly.
   arguments and what a web page has, but nothing from the test file around it.
 - **Native dialogs cannot be scripted.** Set `DJMASTER_SHOT_FOLDER` and
   Export and Export all write into it.
-- **Wait for changes to settle.** Edits are saved, and become undo steps,
-  400 ms after the last change.
+- **Wait for what the app says, not for a time.** Edits are saved, and
+  become undo steps, 400 ms after the last change; `page.saved()` waits for
+  that (`saving.ts` counts the saves due as `data-saving`). The Video view's
+  picture is drawn on a later frame, and its pictures, fonts, LUTs and the
+  music's analysis come in later still; `page.drawn()` waits until it shows
+  everything (the canvas's `data-idle`), so use it before reading pixels or
+  what the editor updates as it draws. A fixed `page.wait()` before reading
+  a result fails on a slow machine, as GitHub's Windows one is; keep it for
+  waits that only have to be long enough, such as starting a new undo step.
+  Do not swallow a `page.until()` that times out: its message says what
+  never happened.
+- **Runs can start listened to.** `dataFolder` copies what the visuals move
+  to along with the analyses, where the folder has it; `window.test.ts`
+  listens once before its tests, so the Video view need not listen again in
+  each. A test about the listening itself starts without it (`unheard`).
 - **Run it with a time limit.** A script that throws or waits forever leaves
   the app running.
 

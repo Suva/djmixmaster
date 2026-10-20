@@ -84,7 +84,7 @@ test('a video opens as a recording, and exports with its own picture, copied, fr
     page.key('Space');
     await page.until(() => !playing(), 'playback to stop');
     page.click('split-here');
-    await page.settle();
+    await page.saved();
     document.querySelectorAll<HTMLElement>('.mix-tab')[1].click();
     await page.wait(100);
     const second = page.region().start;
@@ -168,7 +168,7 @@ test('a video layer plays its clip with the music, looped, once, and at twice th
     await page.wait(100);
     page.key('KeyO');
     page.key('Enter');
-    await page.settle();
+    await page.saved();
     page.click('view-video');
     page.click('template-import');
     const select = page.element<HTMLSelectElement>('template');
@@ -242,7 +242,7 @@ test('a template shows the recording\'s own picture in step with the mix, as lat
     for (let i = 0; i < 2; i++) page.key('ArrowRight');
     await page.wait(100);
     page.key('KeyO');
-    await page.settle();
+    await page.saved();
     page.click('view-video');
     const offered = !page.element('picture-delay-row').hidden;
     const builtIn = [...page.element<HTMLSelectElement>('template').options].map((option) => option.text);
@@ -253,7 +253,7 @@ test('a template shows the recording\'s own picture in step with the mix, as lat
     const middle = () => [...picture.getContext('2d')!.getImageData(picture.width / 2, picture.height / 2, 1, 1).data];
     await page.until(() => Math.max(...middle().slice(0, 3)) > 40, 'the recording\'s picture to be drawn');
     page.type('picture-delay', '400');
-    await page.settle();
+    await page.saved();
     page.click('export-all');
     await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
     document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
@@ -313,7 +313,7 @@ test('the recording\'s picture is exported across the files of a recording in se
       for (let i = 0; i < 2; i++) page.key('ArrowRight');
       await page.wait(100);
       page.key('KeyO');
-      await page.settle();
+      await page.saved();
       page.click('export-all');
       await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
       document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
@@ -372,11 +372,11 @@ test('a clip filmed upright on a phone is shown upright, by the browser\'s decod
       page.key('ArrowRight');
       await page.wait(100);
       page.key('KeyO');
-      await page.settle();
+      await page.saved();
       page.click('view-video');
       page.click('template-import');
       await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Upright', 'the template to be added');
-      await page.settle();
+      await page.saved();
       page.click('export-all');
       await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
       document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
@@ -416,7 +416,7 @@ test('a ping-pong clip plays there and back, and a clip in a codec the window ca
     await page.wait(100);
     page.key('KeyO');
     page.key('Enter');
-    await page.settle();
+    await page.saved();
     page.click('view-video');
     page.click('template-import');
     const select = page.element<HTMLSelectElement>('template');
@@ -517,7 +517,7 @@ test('videos of a template that have moved are found again: one located by hand,
     const at = (x: number) => [...picture.getContext('2d')!.getImageData(Math.floor(picture.width * x), picture.height / 2, 1, 1).data];
     // Red on the left; the negative of red, cyan, on the right.
     await page.until(() => at(0.25)[0] > 150 && at(0.75)[0] < 100 && at(0.75)[1] > 150, 'both videos to be drawn');
-    await page.settle();
+    await page.saved();
     return { said, buttons };
   });
   assert.match(seen.said, /2 videos of this template are not where it says they are: Colours, Negative/);
@@ -557,7 +557,7 @@ test('a clip made on green or on black has that keyed out, and a clip that start
     await page.wait(100);
     page.key('KeyO');
     page.key('Enter');
-    await page.settle();
+    await page.saved();
     page.click('view-video');
     page.click('template-import');
     const select = page.element<HTMLSelectElement>('template');
@@ -601,14 +601,14 @@ test('a change of the picture delay is undone and redone like any setting', { sk
     page.click('view-video');
     const delay = page.element<HTMLInputElement>('picture-delay');
     page.type('picture-delay', '250');
-    await page.settle();
+    await page.saved();
     const typed = delay.value;
     page.click('undo');
     const undone = delay.value;
     page.click('redo');
     const redone = delay.value;
     page.click('undo');
-    await page.settle();
+    await page.saved();
     return { typed, undone, redone };
   });
   assert.deepEqual(seen, { typed: '250', undone: '0', redone: '250' });
@@ -678,10 +678,10 @@ test('a name typed in while the music is paused fades in all the way', { skip },
       for (let i = 0; i < data.length; i += 4) total += data[i];
       return total / (data.length / 4);
     };
-    await page.wait(500);
+    await page.drawn();
     const before = brightness();
     page.type('mix-artist', 'WW');
-    await page.wait(1000);
+    await page.drawn();
     return { before, after: brightness() };
   });
   assert.ok(seen.before < 1, `nothing is drawn before the name is typed (${seen.before.toFixed(1)})`);

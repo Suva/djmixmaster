@@ -21,6 +21,7 @@ import { PreviewVideos } from './video-sources.ts';
 import { lutPicker } from './lut-picker.ts';
 import { colourInput } from './colour-input.ts';
 import { lutChoices } from './layer-settings.ts';
+import { saveLater, written } from './saving.ts';
 import { packLut, parseCube, unpackLut, type Lut, type PackedLut } from '../../visuals/lut.ts';
 import {
   checked, DEFAULT_TEMPLATE, drawVideoFrame, lutOf, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
@@ -88,7 +89,6 @@ export class VideoView {
   readonly #typed = new Map<string, unknown>();
   /** The template being edited, by its name in a mix's choice, or null. */
   #editing: string | null = null;
-  #saveTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(options: VideoViewOptions) {
     this.#options = options;
@@ -259,7 +259,7 @@ export class VideoView {
     this.#readerFor = '';
     this.#listening(null);
     try {
-      const features = await this.#options.api.features(path);
+      const features = await this.#whileLoading(this.#options.api.features(path));
       if (this.#featuresFor !== path) return;
       this.#features = features;
       this.#stale = true;
@@ -320,7 +320,7 @@ export class VideoView {
     const template = this.#template();
     this.#layers = prepare(template, this.#choice.fields, MUSIC_NAMES);
     // Until a font is in, its text is drawn in a plain face; the next frame after, in the font.
-    loadFonts(fontsOf(template, this.#choice.fields)).then(() => (this.#stale = true));
+    this.#whileLoading(loadFonts(fontsOf(template, this.#choice.fields))).then(() => (this.#stale = true));
     this.#stale = true;
     if (fresh) this.#drawer.reset();
     for (const name of imagesOf(template, this.#choice.fields)) this.#loadImage(name, template);
@@ -401,7 +401,7 @@ export class VideoView {
     const typed = (this.#typed.get(id) ?? structuredClone(template)) as Template;
     typed.media = { ...typed.media, ...updates };
     this.#typed.set(id, typed);
-    this.#options.api.saveTemplate(id.slice(USER_TEMPLATE.length), typed);
+    written(this.#options.api.saveTemplate(id.slice(USER_TEMPLATE.length), typed));
     if (this.#choice.template === id) this.#prepare(false);
   }
 
@@ -427,7 +427,7 @@ export class VideoView {
           return;
         }
         // Until it is decoded, the picture there was keeps showing.
-        const picture = await pictureOf(path, template, this.#options.api);
+        const picture = await this.#whileLoading(pictureOf(path, template, this.#options.api));
         this.#packed.set(data, picture);
         // Unless the picture of that name was changed again while this one was decoded.
         if (this.#template().assets?.[path.slice(ASSET_PREFIX.length)] === data) this.#images.set(path, picture);
@@ -435,7 +435,7 @@ export class VideoView {
         return;
       }
       if (this.#images.has(path)) return;
-      this.#images.set(path, await pictureOf(path, template, this.#options.api));
+      this.#images.set(path, await this.#whileLoading(pictureOf(path, template, this.#options.api)));
       this.#stale = true;
     } catch (error) {
       this.#options.say(`Could not load the picture: ${error instanceof Error ? error.message : error}`);
@@ -468,7 +468,7 @@ export class VideoView {
         return;
       }
       if (this.#luts.has(name)) return;
-      this.#luts.set(name, await lutOf(name, template, this.#options.api));
+      this.#luts.set(name, await this.#whileLoading(lutOf(name, template, this.#options.api)));
       this.#stale = true;
     } catch (error) {
       this.#options.say(`Could not use the LUT: ${error instanceof Error ? error.message : error}`);
@@ -573,7 +573,7 @@ export class VideoView {
   /** Keeps a template of the user's own, and makes it the mix's. */
   async #adopt(template: Template) {
     const id = crypto.randomUUID();
-    await this.#options.api.saveTemplate(id, template);
+    await written(this.#options.api.saveTemplate(id, template));
     USER_TEMPLATES.set(USER_TEMPLATE + id, template);
     this.#fillTemplates();
     this.#choice = { ...this.#choice, template: USER_TEMPLATE + id };
@@ -581,8 +581,6 @@ export class VideoView {
     this.#showFields();
     this.#options.choose(this.#choice);
   }
-
-  #renameTimer: ReturnType<typeof setTimeout> | undefined;
 
   // ---------------------------------------------------------------------------
   // Editing a template of the user's own
@@ -697,8 +695,7 @@ export class VideoView {
     if (document.activeElement !== name) name.value = template.name;
     const option = [...$<HTMLSelectElement>('template').options].find((o) => o.value === id);
     if (option) option.text = template.name;
-    clearTimeout(this.#saveTimer);
-    this.#saveTimer = setTimeout(() => this.#options.api.saveTemplate(id.slice(USER_TEMPLATE.length), template), 400);
+    saveLater('template', () => written(this.#options.api.saveTemplate(id.slice(USER_TEMPLATE.length), template)));
   }
 
   /**
@@ -828,8 +825,7 @@ export class VideoView {
       template.name = name.value.trim() || 'Untitled';
       const option = [...$<HTMLSelectElement>('template').options].find((o) => o.value === id);
       if (option) option.text = template.name;
-      clearTimeout(this.#renameTimer);
-      this.#renameTimer = setTimeout(() => api.saveTemplate(id.slice(USER_TEMPLATE.length), template), 400);
+      saveLater('template-name', () => written(api.saveTemplate(id.slice(USER_TEMPLATE.length), template)));
     });
     name.addEventListener('change', () => this.#fillTemplates());
   }
@@ -977,18 +973,36 @@ export class VideoView {
 
   /** Something that needs the picture drawn anew even while paused: an edit, a picture or a font that came in. */
   #stale = true;
+  /** How many of the pictures, fonts, LUTs and the music's analysis the picture needs are still being loaded. */
+  #loading = 0;
+
+  /** Counts `work` as loading until it is done. */
+  #whileLoading<T>(work: Promise<T>): Promise<T> {
+    this.#loading++;
+    return work.finally(() => this.#loading--);
+  }
   /** What the frame last drawn showed: the playhead, the picture's size, the mix. */
   #lastShown = '';
 
   #draw() {
     if (!this.#visible) return;
     this.#frame = requestAnimationFrame(() => this.#draw());
+    const drawable = this.#drawFrame();
+    // For scripted checks (`page.drawn()` in the window tests): another turn of the loop, and whether
+    // the picture now shows everything it has been given, with nothing it needs still loading.
+    const canvas = this.#canvas;
+    canvas.dataset.ticks = String(Number(canvas.dataset.ticks ?? 0) + 1);
+    canvas.dataset.idle = String(drawable && !this.#stale && this.#loading === 0);
+  }
+
+  /** Draws the picture if anything it shows has changed; false if it could not be drawn at all. */
+  #drawFrame(): boolean {
     const now = performance.now();
     const elapsed = Math.min(0.25, (now - this.#lastFrame) / 1000);
     this.#lastFrame = now;
     const mix = this.#options.mix();
     const canvas = this.#canvas;
-    if (!mix) return;
+    if (!mix) return false;
 
     // As large as fits the area in the video's shape, drawn at the size it is
     // shown (up to that of the video) so it stays sharp and quick.
@@ -997,7 +1011,7 @@ export class VideoView {
     const area = canvas.parentElement!;
     const shownWidth = Math.floor(Math.min(area.clientWidth, area.clientHeight * aspect));
     const shownHeight = Math.floor(shownWidth / aspect);
-    if (shownWidth <= 0) return;
+    if (shownWidth <= 0) return false;
     if (canvas.style.width !== `${shownWidth}px` || canvas.style.height !== `${shownHeight}px`) {
       canvas.style.width = `${shownWidth}px`;
       canvas.style.height = `${shownHeight}px`;
@@ -1027,7 +1041,7 @@ export class VideoView {
     const playing = this.#options.playing();
     const { template, ...details } = mix;
     const shown = `${playhead}|${width}x${height}|${JSON.stringify(details)}`;
-    if (!playing && !this.#stale && shown === this.#lastShown) return;
+    if (!playing && !this.#stale && shown === this.#lastShown) return true;
     this.#stale = false;
     this.#lastShown = shown;
     // Time moves on only while playing: drawn again paused, glitter and fades stay where they were.
@@ -1046,6 +1060,7 @@ export class VideoView {
     // For scripted checks: whether the picture is drawn from the music yet.
     canvas.dataset.music = String(!!reader);
     this.#drawStrip(mix, seconds);
+    return true;
   }
 
   /** The level along the mix, worked out once per mix and width. */

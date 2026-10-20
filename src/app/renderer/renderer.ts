@@ -18,6 +18,7 @@ import { Player } from './player.ts';
 import { isUnmixed, loudnessChangeDb, then, UNMIXED, type ChannelMix } from '../../channels.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
+import { cancelSave, saveDue, saveLater } from './saving.ts';
 import { SHAPES, shapeOf } from '../../visuals/shape.ts';
 import { originalPictureExtension } from '../video-files.ts';
 
@@ -2322,7 +2323,7 @@ api.onRecentChanged(showRecent);
 /** Back to the empty window. The work on the recording is saved, as always. */
 function closeRecording() {
   if (!recording || busy) return;
-  if (saveTimer !== undefined) saveNow();
+  if (saveDue('session')) saveNow();
   for (const dialog of document.querySelectorAll<HTMLDialogElement>('dialog[open]')) dialog.close();
   player.unload();
   levelMeter.release();
@@ -2388,11 +2389,8 @@ interface Defaults {
   loudness?: string;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-
 function saveNow() {
-  clearTimeout(saveTimer);
-  saveTimer = undefined;
+  cancelSave('session');
   if (!recording || mixes.length === 0) return;
   const session: Session = {
     version: 1,
@@ -2413,12 +2411,11 @@ function saveNow() {
 /** Saves shortly after the last change, so dragging does not write on every frame. */
 function scheduleSave() {
   if (!recording) return;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveNow, 400);
+  saveLater('session', saveNow);
 }
 
 window.addEventListener('beforeunload', () => {
-  if (saveTimer !== undefined) saveNow();
+  if (saveDue('session')) saveNow();
 });
 
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -2570,7 +2567,7 @@ function stepHistory(direction: 'undo' | 'redo') {
   if (!recording || busy) return;
   if (videoView.editing) return videoView.stepTemplate(direction);
   // Count a change still in progress as done, so that it is what gets undone.
-  if (saveTimer !== undefined) saveNow();
+  if (saveDue('session')) saveNow();
   const [from, to] = direction === 'undo' ? [undoSteps, redoSteps] : [redoSteps, undoSteps];
   const step = from.pop();
   if (!step || !settled) return;
