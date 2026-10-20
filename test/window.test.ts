@@ -1603,6 +1603,7 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     name: 'Cells',
     fields: [],
     layers: [
+      { type: 'solid', name: 'White', params: { colour: '#ffffff', visible: false } },
       { type: 'image', name: 'Halves', params: { image: 'asset:halves', fit: 'stretch', width: 100, height: 100, visible: false } },
       { type: 'mosaic', name: 'Mosaic', params: { cells: 'squares', size: 10, visible: false } },
       { type: 'grid', name: 'Fine', params: { kind: 'hex cells', cell: 1, lineWidth: 0, rotation: 30, fill1: '#ff0000', fill2: '#00ff00', fill3: '#0000ff', visible: false } },
@@ -1636,12 +1637,21 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     eye('Grid');
     eye('Fine');
     await page.wait(500);
-    const pixels = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
-    const totals = [0, 0, 0];
-    for (let i = 0; i < pixels.length; i += 4) for (let c = 0; c < 3; c++) totals[c] += pixels[i + c];
-    const fine = totals.map((total) => total / (255 * width * height));
-    // A mosaic of the halves: each cell the average under it, the cells over the edges whole.
+    const shares = () => {
+      const pixels = picture.getContext('2d')!.getImageData(0, 0, width, height).data;
+      const totals = [0, 0, 0];
+      for (let i = 0; i < pixels.length; i += 4) for (let c = 0; c < 3; c++) totals[c] += pixels[i + c];
+      return totals.map((total) => total / (255 * width * height));
+    };
+    // Against a white picture, as the editor shows the picture: a little dimmed.
+    const fineShares = shares();
     eye('Fine');
+    eye('White');
+    await page.wait(500);
+    const white = shares()[0];
+    const fine = fineShares.map((share) => share / white);
+    // A mosaic of the halves: each cell the average under it, the cells over the edges whole.
+    eye('White');
     eye('Halves');
     eye('Mosaic');
     await page.wait(500);
@@ -1660,7 +1670,10 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
   assert.deepEqual(hexagons.below, [0, 0, 255], 'the third below between them');
   assert.deepEqual(hexagons.above, [0, 255, 0], 'the second above, by the turns cells.ts colours them in');
   assert.deepEqual(hexagons.between, [0, 0, 0], 'nothing in the gap between two');
-  for (const share of fine) assert.ok(share > 0.27 && share < 0.4, `a third each with the smallest cells: ${fine.map((v) => v.toFixed(3))}`);
+  for (const share of fine) assert.ok(share > 0.29 && share < 0.38, `a third each with the smallest cells: ${fine.map((v) => v.toFixed(3))}`);
+  // Cells that touch leave nothing between them: no dark mesh, with or without a graphics card.
+  const covered = fine.reduce((sum, share) => sum + share, 0);
+  assert.ok(covered > 0.97, `the smallest cells cover the picture, no seams between them: ${covered.toFixed(3)}`);
   assert.ok(mosaic.white.every((v) => v > 250), `a cell all white: ${mosaic.white}`);
   assert.ok(mosaic.across.every((v) => v > 105 && v < 150), `a cell half white, grey: ${mosaic.across}`);
   assert.ok(mosaic.black.every((v) => v < 5), `a cell all black: ${mosaic.black}`);

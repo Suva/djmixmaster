@@ -1530,15 +1530,26 @@ export class FrameDrawer {
     // Otherwise as paths, of the cells on the picture alone.
     const region = this.#visibleRegion(2 * s + line);
     const [left, top, right, bottom] = region;
-    /** One path a colour, filled at once: far quicker than a fill for each cell. */
-    const fillBy = (cells: Cell[], colourOf: (cell: Cell) => number, shape: (path: Path2D, cell: Cell) => void) => {
+    /**
+     * One path a colour, filled at once: far quicker than a fill for each cell. Where cells of different colours touch,
+     * each colour's edge is smoothed on its own, and a canvas drawing without a graphics card leaves a hairline of what
+     * is beneath along it: cells a few pixels across, nearly all edge, became a dark mesh. So where the cells cover
+     * everything (`tiling` colours, none of them left out), the first colour, if it is solid, is laid over the whole
+     * picture, and the others over it.
+     */
+    const fillBy = (cells: Cell[], colourOf: (cell: Cell) => number, shape: (path: Path2D, cell: Cell) => void, tiling = 0) => {
+      const under = tiling > 0 && fills.slice(0, tiling).every(Boolean) && fills[0]!.a >= 1;
+      if (under) {
+        ctx.fillStyle = hexOf(fills[0]);
+        ctx.fillRect(left, top, right - left, bottom - top);
+      }
       const paths = fills.map(() => new Path2D());
       for (const cell of cells) {
         const which = colourOf(cell);
         if (fills[which]) shape(paths[which], cell);
       }
       paths.forEach((path, which) => {
-        if (!fills[which]) return;
+        if (!fills[which] || (under && which === 0)) return;
         ctx.fillStyle = hexOf(fills[which]);
         ctx.fill(path);
       });
@@ -1547,11 +1558,11 @@ export class FrameDrawer {
       case 'checkerboard': {
         fillBy(squareCells(s, ox, oy, region), (cell) => (((cell.i + cell.j) % 2) + 2) % 2, (path, cell) => {
           path.roundRect(cell.x - s / 2 + inset, cell.y - s / 2 + inset, s - 2 * inset, s - 2 * inset, rounding);
-        });
+        }, inset <= 0 && rounding <= 0 ? 2 : 0);
         return;
       }
       case 'hex cells': {
-        fillBy(hexCells(s, ox, oy, region), (cell) => hexColour(cell) % used, (path, cell) => addPolygon(path, hexagonAt(cell.x, cell.y, hexSize)));
+        fillBy(hexCells(s, ox, oy, region), (cell) => hexColour(cell) % used, (path, cell) => addPolygon(path, hexagonAt(cell.x, cell.y, hexSize)), line <= 0 ? used : 0);
         return;
       }
       case 'dots': {
@@ -1566,7 +1577,7 @@ export class FrameDrawer {
         const band = s / 2;
         const bands: Cell[] = [];
         for (let i = Math.floor((left - ox) / band); i * band + ox < right; i++) bands.push({ x: ox + i * band, y: 0, i, j: 0 });
-        fillBy(bands, (cell) => ((cell.i % 2) + 2) % 2, (path, cell) => path.rect(cell.x, top, band, bottom - top));
+        fillBy(bands, (cell) => ((cell.i % 2) + 2) % 2, (path, cell) => path.rect(cell.x, top, band, bottom - top), 2);
         return;
       }
     }

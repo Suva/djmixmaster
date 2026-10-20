@@ -6,9 +6,10 @@
 // longer than a frame has.
 //
 // The cells are laid out as cells.ts lays them out, and each is shaped and
-// coloured as the canvas would draw it: the colours of a grid filled in the
-// order of their paths, a mosaic's cells in the order they are drawn. Edges
-// are smoothed by how far each pixel's middle is from them. A change to how
+// coloured as the canvas would draw it, a mosaic's cells in the order they are
+// drawn. Edges are smoothed by how far each pixel's middle is from them; where
+// two of a grid's cells touch, their shares of a pixel add up to all of it,
+// with no seam between them. A change to how
 // cells.ts lays out cells, or to how draw.ts draws them as paths, must be
 // made here too.
 //
@@ -146,7 +147,13 @@ vec4 pattern(vec2 p, float px) {
       }
     }
   }
-  return over(fills[2], min(1.0, cover.z), over(fills[1], min(1.0, cover.y), over(fills[0], min(1.0, cover.x), vec4(0.0))));
+  // A grid's cells never overlap, they only touch: where a pixel is half one cell and half the next, it is all covered.
+  // Laid over each other, as separate paths are, the two halves would leave a quarter of it empty, and cells a few
+  // pixels across, nearly all edge, would show a dark mesh between them; so each colour adds as much as it covers.
+  cover = min(cover, vec3(1.0));
+  float total = cover.x + cover.y + cover.z;
+  if (total > 1.0) cover /= total;
+  return fills[0] * cover.x + fills[1] * cover.y + fills[2] * cover.z;
 }
 void main() {
   // The canvas counts down from the top; the card, up from the bottom.
