@@ -4,7 +4,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, mkdtemp } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -168,7 +168,9 @@ export function runApp<Result, Given = undefined>(
   })().catch((error) => JSON.stringify({ error: String(error && error.stack || error) }))`;
 
   return new Promise<Result>((done, fail) => {
-    const child = spawn(electron, [PROJECT, ...[run.recording ?? []].flat()], {
+    // DJMASTER_ELECTRON_ARGS: switches for Electron itself, such as --disable-3d-apis to draw as a computer without WebGL does.
+    const switches = process.env.DJMASTER_ELECTRON_ARGS?.split(' ').filter(Boolean) ?? [];
+    const child = spawn(electron, [PROJECT, ...switches, ...[run.recording ?? []].flat()], {
       env: {
         ...process.env,
         DJMASTER_SHOT: join(run.data, 'window.png'),
@@ -224,4 +226,17 @@ export async function workFolder(): Promise<string> {
   const folder = await mkdtemp(join(tmpdir(), 'djmaster-window-'));
   await mkdir(join(folder, 'exports'));
   return folder;
+}
+
+/**
+ * Keeps a picture a test took (a canvas's `toDataURL()`) as `name`.png in the
+ * folder DJMASTER_TEST_PICTURES names, when it names one: GitHub's test
+ * workflow sets it and keeps the folder when the tests fail, so that a
+ * failure on a machine nobody can look at can be seen.
+ */
+export async function keepPicture(name: string, dataUrl: string) {
+  const folder = process.env.DJMASTER_TEST_PICTURES;
+  if (!folder) return;
+  await mkdir(folder, { recursive: true });
+  await writeFile(join(folder, `${name}.png`), Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'));
 }

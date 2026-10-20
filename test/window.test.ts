@@ -13,7 +13,7 @@ import { ffmpeg, probe } from '../src/audio-io.ts';
 import { HOP_SECONDS } from '../src/loudness.ts';
 import { measure } from '../src/master.ts';
 import { TRACK_LEVELS_DB, TRACK_SECONDS, writeSyntheticMix } from './synthetic-mix.ts';
-import { dataFolder, electronPath, runApp, workFolder } from './window-app.ts';
+import { dataFolder, electronPath, keepPicture, runApp, workFolder } from './window-app.ts';
 import { readZip, readZipEntry } from '../src/app/zip.ts';
 
 const skip = process.env.DJMASTER_SKIP_WINDOW_TESTS
@@ -1642,6 +1642,11 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     // Hexagons a fifth of the height apart, the first at the middle; rows of them s·√3/2 apart, every other half a cell along.
     const s = 0.2 * height;
     const row = (s * Math.sqrt(3)) / 2;
+    // Kept for when this fails on a machine nobody can look at, with what drew them.
+    const pictures: Record<string, string> = { grid: picture.toDataURL() };
+    const gl = new OffscreenCanvas(1, 1).getContext('webgl2');
+    const info = gl?.getExtension('WEBGL_debug_renderer_info');
+    const drawnBy = gl ? String(gl.getParameter(info ? info.UNMASKED_RENDERER_WEBGL : gl.RENDERER)) : 'no WebGL 2';
     const hexagons = {
       middle: at(width / 2, height / 2),
       right: at(width / 2 + s, height / 2),
@@ -1664,6 +1669,7 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
       return totals.map((total) => total / (255 * width * height));
     };
     // Against a white picture, as the editor shows the picture: a little dimmed.
+    pictures.fine = picture.toDataURL();
     const fineShares = shares();
     eye('Fine');
     eye('White');
@@ -1675,6 +1681,7 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
     eye('Halves');
     eye('Mosaic');
     await page.drawn();
+    pictures.mosaic = picture.toDataURL();
     const m = 0.1 * height;
     const mosaic = {
       white: at(width / 2 - m / 2, height / 2),
@@ -1682,9 +1689,11 @@ test('a grid\'s cells and a mosaic\'s lie where cells.ts lays them, coloured as 
       black: at(width / 2 + m * 1.5, height / 2),
       corner: at(1, 1),
     };
-    return { hexagons, fine, mosaic };
+    return { hexagons, fine, mosaic, pictures, drawnBy, size: `${width}×${height} at ${window.devicePixelRatio}` };
   });
   const { hexagons, fine, mosaic } = seen;
+  for (const [name, picture] of Object.entries(seen.pictures)) await keepPicture(`cells-${name}`, picture);
+  console.log(`Cells drawn by ${seen.drawnBy}, ${seen.size}`);
   assert.deepEqual(hexagons.middle, [255, 0, 0], 'the first colour on the hexagon at the middle');
   assert.deepEqual(hexagons.right, [0, 255, 0], 'the second beside it');
   assert.deepEqual(hexagons.below, [0, 0, 255], 'the third below between them');

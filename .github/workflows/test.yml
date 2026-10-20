@@ -66,3 +66,11 @@ jobs:
         timeout-minutes: 10
         env:
           DJMASTER_FFMPEG: ${{ github.workspace }}/${{ matrix.ffmpeg }}
+          DJMASTER_TEST_PICTURES: ${{ runner.temp }}/test-pictures
+      # What the tests saw, to look at when they fail here and nowhere else.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-pictures-${{ matrix.name }}
+          path: ${{ runner.temp }}/test-pictures
+          if-no-files-found: ignore
