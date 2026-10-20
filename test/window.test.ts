@@ -92,6 +92,69 @@ test('a recording opens as one mix over all of it', { skip }, async () => {
   assert.ok(shown.canExport && shown.settingsUsable && !shown.startScreen);
 });
 
+test('a tooltip waits for the pointer to rest, and runs on along a row of buttons', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data }, async (page) => {
+    const tip = document.getElementById('tooltip')!;
+    const showing = () => tip.matches(':popover-open') ? tip.textContent : null;
+    const at = (element: HTMLElement) => {
+      const box = element.getBoundingClientRect();
+      return { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2, bubbles: true };
+    };
+    const over = (element: HTMLElement) => element.dispatchEvent(new MouseEvent('mouseover', at(element)));
+    const away = () => document.body.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    // A control with words of its own rather than a button, as many in the editor's panel are.
+    const label = document.createElement('span');
+    label.textContent = 'A label';
+    label.title = 'About the label';
+    document.body.append(label);
+    const rest = { early: '', late: '' };
+
+    // Passed over on the way elsewhere, moving all the while: nothing.
+    over(page.element('rewind'));
+    for (let i = 0; i < 10; i++) {
+      page.element('rewind').dispatchEvent(new MouseEvent('mousemove', at(page.element('rewind'))));
+      await page.wait(100);
+    }
+    const passing = showing();
+    // Resting on it: after a moment, not at once.
+    await page.wait(300);
+    rest.early = String(showing());
+    await page.until(() => showing() !== null, 'the tooltip to show after resting');
+    rest.late = String(showing());
+    // On to the next button: at once.
+    over(page.element('play'));
+    const along = showing();
+    // From a button onto a label: it waits again.
+    over(label);
+    const toLabel = showing();
+    away();
+    await page.wait(700);
+    // From a label's tooltip to a button: that waits too.
+    over(label);
+    await page.until(() => showing() !== null, 'the label\'s tooltip to show');
+    const labelShown = showing();
+    over(page.element('forward'));
+    const fromLabel = showing();
+    away();
+    // Over a button with the mouse held down, as when dragging: nothing.
+    await page.wait(700);
+    page.element('rewind').dispatchEvent(new MouseEvent('mouseover', { ...at(page.element('rewind')), buttons: 1 }));
+    await page.wait(800);
+    const dragging = showing();
+    label.remove();
+    return { passing, rest, along, toLabel, labelShown, fromLabel, dragging };
+  });
+  assert.equal(seen.passing, null, 'nothing while the pointer moves');
+  assert.equal(seen.rest.early, 'null', 'not at once');
+  assert.match(seen.rest.late, /^Back 5 seconds/);
+  assert.equal(seen.along, 'Play (Space)', 'the next button at once');
+  assert.equal(seen.toLabel, null);
+  assert.equal(seen.labelShown, 'About the label');
+  assert.equal(seen.fromLabel, null);
+  assert.equal(seen.dragging, null, 'nothing while dragging');
+});
+
 test('settings change the levelling', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     await page.until(() => page.text('stat-out') !== '–', 'the levelling to be worked out');

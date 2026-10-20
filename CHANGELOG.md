@@ -6,6 +6,9 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Calmer tooltips.** A tooltip now waits until the pointer rests on a
+  control, rather than popping up on everything it passes over. Moving
+  along a row of buttons still shows each one's at once.
 - **Fifty-seven LUTs come with the app.** Every list of LUTs now offers a
   set of looks without your having to find any: forty-three imitations of
   real films (Kodak Portra and Tri-X, Fuji Velvia and Provia, Ilford HP5,

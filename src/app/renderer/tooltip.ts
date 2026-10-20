@@ -1,14 +1,16 @@
 // The app's own tooltips. The system's take well over a second to appear and
 // do not follow the pointer from one button to the next, which makes a row of
-// icon buttons hard to explore. These appear after a short pause, and at once
-// when moving on from a control that was already showing one.
+// icon buttons hard to explore. These appear once the pointer has rested on a
+// control for a moment, so that passing over the many controls of a panel
+// does not set them off; and at once when moving from a button that was
+// showing one to the next button, to read along a row of them.
 //
 // Controls keep being given an ordinary `title`; it is taken over here.
 
-/** How long the pointer rests on a control before its tooltip appears. */
-const SHOW_AFTER_MS = 400;
-/** Moving to another control within this time of a tooltip closing shows the next one at once. */
-const WARM_FOR_MS = 600;
+/** How long the pointer rests on a control, without moving, before its tooltip appears. */
+const SHOW_AFTER_MS = 600;
+/** Moving to another button within this time of a button's tooltip closing shows the next one at once. */
+const WARM_FOR_MS = 400;
 const GAP_PX = 8;
 
 const TIP = 'tip';
@@ -16,7 +18,11 @@ const TIP = 'tip';
 let bubble: HTMLElement;
 let current: HTMLElement | null = null;
 let pending: ReturnType<typeof setTimeout> | undefined;
+/** Whether the tooltip showing, or last shown, was a button's: only then is the next button's shown at once. */
+let fromButton = false;
 let closedAt = -Infinity;
+
+const isButton = (element: HTMLElement) => element.matches('button, [role="button"]');
 
 /** Moves a control's `title` out of the system's reach, keeping it as the control's description. */
 function adopt(element: HTMLElement) {
@@ -32,6 +38,10 @@ function adopt(element: HTMLElement) {
 
 function show(target: HTMLElement) {
   current = target;
+  pending = undefined;
+  // Not over a box being typed in: what it is for is known by then.
+  if (target === document.activeElement && target.matches('input, textarea, select')) return;
+  fromButton = isButton(target);
   bubble.textContent = target.dataset[TIP] ?? '';
   // Shown afresh each time, so it sits above any dialog that opened in between.
   if (bubble.matches(':popover-open')) bubble.hidePopover();
@@ -79,13 +89,23 @@ export function initTooltips() {
   document.addEventListener('mouseover', (event) => {
     const target = (event.target as Element).closest<HTMLElement>(`[data-${TIP}]`);
     if (target === current) return;
-    const warm = current !== null || performance.now() - closedAt < WARM_FOR_MS;
+    // From one button whose tooltip is up, or was just now, along to the next.
+    const showing = bubble.matches(':popover-open');
+    const warm = fromButton && (showing || performance.now() - closedAt < WARM_FOR_MS) && !!target && isButton(target);
     hide();
-    if (!target) return;
+    // Nothing while a button is held: something is being dragged.
+    if (!target || event.buttons) return;
     current = target;
     if (warm) show(target);
     else pending = setTimeout(() => show(target), SHOW_AFTER_MS);
   });
+  // Waited for from when the pointer stops: one passing over a control on its way elsewhere sets nothing off.
+  document.addEventListener('mousemove', (event) => {
+    if (!pending || !current) return;
+    clearTimeout(pending);
+    const target = current;
+    pending = event.buttons ? undefined : setTimeout(() => show(target), SHOW_AFTER_MS);
+  }, { passive: true });
   // A press or a key means the control is being used, not read about.
   for (const type of ['mousedown', 'keydown', 'wheel'] as const) {
     document.addEventListener(type, () => {
