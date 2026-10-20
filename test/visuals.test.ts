@@ -265,6 +265,30 @@ test('the built-in templates are free of problems', async () => {
   }
 });
 
+test('smooth() in a drawn layer takes the seconds it is given, however the layer is drawn', async () => {
+  const { FrameDrawer } = await import('../src/visuals/draw.ts');
+  // A canvas whose context takes every call and does nothing: a solid colour layer needs no more.
+  const context = new Proxy({}, { get: () => () => {}, set: () => true });
+  const canvas = { width: 16, height: 9, getContext: () => context } as unknown as OffscreenCanvas;
+  // A solid colour fading in with the bass over a second; profiling looks at each layer's settings once more.
+  for (const [what, profiled] of [['drawn', false], ['drawn while profiling', true]] as const) {
+    const layers = [{ type: 'solid', params: { opacity: 'smooth(bass, 1, 1)' } }];
+    const { template, problems } = checkTemplate({ format: TEMPLATE_FORMAT, name: 'Smooth', fields: [], layers }, music, textNames);
+    assert.deepEqual(problems, [], what);
+    const prepared = prepare(template, {}, music);
+    const drawer = new FrameDrawer(canvas);
+    if (profiled) drawer.profile = new Map();
+    const frame = (bass: number) => ({
+      seconds: 0, dt: 0.1, length: 60, music: { bass, dt: 0.1 }, spectrum: new Float32Array(BAND_COUNT),
+      levelHistory: (_span: number, points: number) => new Float32Array(points), text: {}, images: new Map(),
+    });
+    drawer.draw(prepared, frame(0));
+    drawer.draw(prepared, frame(1));
+    // A tenth of a second towards 1, with a rise of a second: 1 - e^-0.1. Worked out twice, it would be 1 - e^-0.2.
+    assert.ok(Math.abs((prepared[0].last!.opacity as number) - (1 - Math.exp(-0.1))) < 1e-9, `${what}: ${prepared[0].last!.opacity}`);
+  }
+});
+
 test('pictures packed into a template are checked, and named by asset:', () => {
   const { template, problems } = checkTemplate({
     format: 1,

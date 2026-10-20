@@ -256,6 +256,7 @@ export class FrameDrawer {
     this.boxes = layers.map(() => null);
     this.frames = layers.map(() => null);
     this.changing = false;
+    this.#resolved = [];
     this.#drawRange(layers, 0, layers.length, frame);
     // The picture follows the sound's fades: black where it is silent, by the same curve.
     const shown = frame.shown ?? 1;
@@ -269,6 +270,18 @@ export class FrameDrawer {
     }
   }
 
+  /** Each layer's settings in this frame, by its place, once worked out. */
+  #resolved: (ResolvedParams | undefined)[] = [];
+
+  /**
+   * A layer's settings for this frame, worked out once: functions such as
+   * `smooth` move on by the frame's time each time they are worked out, so a
+   * second time in a frame would have them move twice as fast.
+   */
+  #paramsOf(layers: PreparedLayer[], index: number, frame: Frame): ResolvedParams {
+    return (this.#resolved[index] ??= layers[index].resolve(frame.music, frame.text));
+  }
+
   /**
    * Draws layers `start` to `end` of the list, a group's with its layers in
    * it. A layer used as a mask takes the rest of the range: those layers are
@@ -277,7 +290,7 @@ export class FrameDrawer {
   #drawRange(layers: PreparedLayer[], start: number, end: number, frame: Frame) {
     for (let index = start; index < end;) {
       const inside = layers[index].type === 'group' ? Math.max(0, Math.min(layers[index].size, end - index - 1)) : 0;
-      const params = layers[index].resolve(frame.music, frame.text);
+      const params = this.#paramsOf(layers, index, frame);
       // A mask switched off (hidden) masks nothing: the layers above it show as they are.
       if (params.visible !== false && (params.mask === 'by its shape' || params.mask === 'by its brightness')) {
         return this.#drawMasked(layers, index, inside, end, params, frame);
@@ -393,7 +406,7 @@ export class FrameDrawer {
     this.#drawLayerNow(layers, index, inside, frame);
     this.#finish();
     const layer = layers[index];
-    const params = layer.resolve(frame.music, frame.text);
+    const params = this.#paramsOf(layers, index, frame);
     const styled = STYLES.filter((key) => params[key] === true);
     const name = `${index} ${layer.type}${styled.length ? ` + ${styled.join(', ')}` : ''}`;
     this.profile.set(name, (this.profile.get(name) ?? 0) + performance.now() - start);
@@ -402,7 +415,7 @@ export class FrameDrawer {
   #drawLayerNow(layers: PreparedLayer[], index: number, inside: number, frame: Frame) {
     const layer = layers[index];
     this.#index = index;
-    const params = layer.resolve(frame.music, frame.text);
+    const params = this.#paramsOf(layers, index, frame);
     if (params.visible === false) return;
     const appear = this.#appearance(params, frame);
     const opacity = num(params, 'opacity') * appear;
