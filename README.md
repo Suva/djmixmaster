@@ -16,7 +16,9 @@ that shares the same processing.
 
 Installers for macOS (Apple Silicon), Windows and Linux are on the
 [website](https://suva.github.io/djmixmaster/) and the
-[releases page](https://github.com/Suva/djmixmaster/releases). Nothing else
+[releases page](https://github.com/Suva/djmixmaster/releases); on Windows it
+is also in the
+[Microsoft Store](https://apps.microsoft.com/detail/9PCL3QKW3G4N). Nothing else
 needs to be installed; the app carries everything it uses. The installers
 are not signed, so each system warns about them the first time; the manual's
 [Installing](https://suva.github.io/djmixmaster/manual/install.html) page

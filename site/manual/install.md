@@ -8,7 +8,7 @@ Download the installer for your system from the [website](../index.html). Nothin
 | Windows | 64-bit Windows 10 or later |
 | Linux | 64-bit, Intel or AMD processor |
 
-The installers are not signed, so each system warns about them the first time.
+The installers are not signed, so each system warns about them the first time. On Windows, the [Microsoft Store](https://apps.microsoft.com/detail/9PCL3QKW3G4N) has a copy that needs no such steps and updates itself.
 
 ## Mac
 
