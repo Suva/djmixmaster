@@ -6,6 +6,8 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A gear for Settings.** The Settings button showed what looked like a sun; it
+  is now a gear.
 - **In the Microsoft Store.** On Windows, DJ Mix Master can now be installed
   from the Microsoft Store, which updates it for you. The website links to it.
 - **Calmer tooltips.** A tooltip now waits until the pointer rests on a
