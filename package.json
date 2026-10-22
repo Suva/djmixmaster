@@ -97,6 +97,14 @@
         {
           "from": "node_modules/ffmpeg-static/ffmpeg.README",
           "to": "bin/ffmpeg.README"
+        },
+        {
+          "from": "native/capture/build/djm-capture",
+          "to": "bin/djm-capture"
+        },
+        {
+          "from": "native/capture/miniaudio/LICENSE",
+          "to": "bin/djm-capture.miniaudio.LICENSE"
         }
       ],
       "extendInfo": {
@@ -137,6 +145,14 @@
         {
           "from": "node_modules/ffmpeg-static/ffmpeg.exe.README",
           "to": "bin/ffmpeg.README"
+        },
+        {
+          "from": "native/capture/build/djm-capture.exe",
+          "to": "bin/djm-capture.exe"
+        },
+        {
+          "from": "native/capture/miniaudio/LICENSE",
+          "to": "bin/djm-capture.miniaudio.LICENSE"
         }
       ]
     },
@@ -184,6 +200,14 @@
         {
           "from": "node_modules/ffmpeg-static/ffmpeg.README",
           "to": "bin/ffmpeg.README"
+        },
+        {
+          "from": "native/capture/build/djm-capture",
+          "to": "bin/djm-capture"
+        },
+        {
+          "from": "native/capture/miniaudio/LICENSE",
+          "to": "bin/djm-capture.miniaudio.LICENSE"
         }
       ]
     },

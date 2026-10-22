@@ -80,10 +80,10 @@ installed for you. Turn the check off in Settings.
   templates that move to the music, or the recording's own picture with the
   mastered sound. Templates can be made in an editor with layers, effects,
   blends, layer styles and formulas, and shared as files.
-- **Records the night itself** from a DJ mixer's sound card or any other
-  input (macOS for now), with its level shown before you start, in parts of
-  half an hour that a crash cannot spoil, and opens the recording when it
-  stops.
+- **Records the night itself** from any two inputs of a DJ mixer's sound card
+  or any other input (macOS for now), with its level shown before you start,
+  in parts of half an hour by a program of its own that carries on if the app
+  closes, and opens the recording when it stops.
 - **Handles long files.** Recordings are streamed, never loaded whole.
 
 ## Limitations

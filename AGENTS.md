@@ -386,8 +386,10 @@ Do not write test data there.
   ffmpeg has closed it, and the WAV removed once the FLAC is as long, as FLAC
   written through the segments has no length in it. On stop the parts go to
   the window as files opened together, so they open as a recording in
-  several files. Only macOS has been tried, and the packaged app does not
-  carry the helper yet (TASKS.md).
+  several files. Only macOS has been tried. The release workflow builds the
+  helper on each system as a step of its own, so that a failed build fails
+  the release, packages it beside ffmpeg (`bin/djm-capture`, with
+  miniaudio's licence), and sees that it is there and runs.
 - **A recording can be several files.** Recorders split long recordings at
   2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
   their numbers, or else by when each was written) and listed in

@@ -42,7 +42,8 @@ if (process.platform === 'darwin') {
 } else if (windows) {
   failure = has('cl')
     ? compile('cl', ['/nologo', '/O2', '/W3', `/Fe:${output}`, `/Fo:${folder}\\`, source, 'ole32.lib'])
-    : compile('gcc', ['-O2', '-std=c11', '-o', output, source, '-lole32', '-lm']);
+    // Linked statically, so that the program needs none of MinGW's own libraries beside it.
+    : compile('gcc', ['-O2', '-std=c11', '-static', '-o', output, source, '-lole32', '-lm']);
 } else {
   failure = compile('cc', ['-O2', '-std=c11', '-o', output, source, '-ldl', '-lpthread', '-lm']);
 }

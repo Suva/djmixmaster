@@ -219,22 +219,19 @@ Through the whole app, BlackHole's channels 3 and 4 came back for 30 s without
 a break, and the Komplete Audio 6 (6 channels) kept 60.02 s of sound in
 60.06 s.
 
+The release workflow builds it on each system and packages it beside ffmpeg;
+a package made on macOS was signed (ad hoc) with the app, found its helper,
+and recorded through it. On Windows and Linux it is built only by the
+workflows, which have not run it yet, and it has never met a sound card there.
+
 What is left:
 
-1. Ship it: built by the release workflow on each system and packaged beside
-   ffmpeg (`extraResources`, as `bin/djm-capture`, where `captureHelper` in
-   `main.ts` looks for it). It needs no certificate of its own: on macOS the
-   linker signs it ad hoc and electron-builder signs it with the app; on
-   Windows only downloads are judged, and the Store signs its package whole.
-   With a Developer ID later, it needs the audio-input entitlement, as the
-   app. Then the manual, the README and the changelog can say that any two
-   inputs of a sound card can be recorded, and that a recording carries on
-   if the app closes.
-2. An hour with a real source into the Komplete Audio 6's inputs 3 and 4 on
-   macOS, and the same on Windows and Linux, where the helper has not yet been
-   compiled. On Windows, see too whether its pairs of inputs show as devices
-   of their own ("Line 3/4").
-3. ASIO on Windows only if an interface turns out to need it: miniaudio has
+1. An hour with a real source into the Komplete Audio 6's inputs 3 and 4 on
+   macOS, and the same on Windows and Linux. On Windows, see too whether its pairs of inputs show as devices
+   of their own ("Line 3/4"). On Linux, it is built against the workflow
+   machine's C library, and a much older system may not start it; the app
+   then records with Chromium.
+2. ASIO on Windows only if an interface turns out to need it: miniaudio has
    none, and Steinberg's SDK is under GPLv3 since 2023.
 
 ### Recording on Windows and Linux

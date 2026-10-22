@@ -56,6 +56,11 @@ jobs:
 
       - run: npm run typecheck
 
+      # The capture helper for recording (native/capture), packaged beside ffmpeg. Built here as a step of its
+      # own: `npm run package` would go on without it, and the app would record two channels only.
+      - name: Build the capture helper
+        run: node scripts/build-capture.mjs
+
       # The tests need ffmpeg; use the copy that gets bundled into the app.
       # The tests that drive the window are left out here until they have
       # proved themselves on these machines (see the trial job in test.yml);
@@ -75,6 +80,19 @@ jobs:
           found=$(find release -path '*bin/ffmpeg.LICENSE' | head -1)
           if [ -z "$found" ]; then echo "::error::ffmpeg's licence is not in the app"; exit 1; fi
           echo "Found $found"
+
+      # The helper is in the app, and runs there: these machines have no sound card, so it may have nothing to
+      # list, but it says so in JSON. A library it cannot find, or a program the system will not start, would not.
+      - name: See that the capture helper is in the app, and runs
+        shell: bash
+        run: |
+          found=$(find release -path '*bin/djm-capture' -o -path '*bin/djm-capture.exe' | grep -v '\.msix' | head -1)
+          if [ -z "$found" ]; then echo "::error::The capture helper is not in the app"; exit 1; fi
+          echo "Found $found"
+          if [ "$RUNNER_OS" = macOS ]; then codesign --verify --verbose "$found"; fi
+          said=$("$found" list 2>&1) || true
+          echo "$said"
+          echo "$said" | grep -qE '^\[|"error"'
 
       # Nobody here runs Linux, so the AppImage is started once, on a short
       # recording, to see that it opens, finds its own ffmpeg and draws.
