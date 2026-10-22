@@ -3,22 +3,11 @@
 import type { Adjustment } from '../../gain-curve.ts';
 import { fadeGain } from '../../fade.ts';
 import { HOP_SECONDS } from '../../loudness.ts';
+import { colours } from './theme.ts';
 
-const COLOR = {
-  grid: '#262a33',
-  text: '#8b93a1',
-  label: '#c9ced8',
-  before: '#6b7280',
-  after: '#3ddc97',
-  otherMix: '#2c8f66',
-  gain: '#f2a83b',
-  bass: '#6aa9ff',
-  warn: '#ff5d5d',
-  // The limiter at work is no fault, so it is not red, which stays for clipping
-  // in the recording. The meter's limiter column uses the same amber.
-  limited: '#f2a83b',
-  hover: '#e6e8ec',
-};
+// The limiter at work is no fault, so it is not red (`warn`), which stays for clipping
+// in the recording: it is drawn in the gain's amber, as the meter's limiter column is.
+const COLOR = colours;
 const FONT = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
 /** Left margin of the detail view that holds the axis labels. */
@@ -153,7 +142,7 @@ export function drawOverview(
     const x1 = Math.min(width, toX(mix.end));
     if (x1 <= x0) return;
     for (let x = Math.ceil(x0); x < x1; x++) owner[x] = index;
-    ctx.fillStyle = index === selected ? 'rgba(61, 220, 151, 0.12)' : 'rgba(61, 220, 151, 0.05)';
+    ctx.fillStyle = index === selected ? `rgba(${COLOR.mixTint}, 0.12)` : `rgba(${COLOR.mixTint}, 0.05)`;
     ctx.fillRect(x0, 0, x1 - x0, waveHeight);
   });
   for (let x = 0; x < width; x++) {
@@ -179,7 +168,7 @@ export function drawOverview(
     let label = `${index + 1}  ${mix.name}`;
     while (label.length > 1 && ctx.measureText(label).width > room) label = `${label.slice(0, -2).trimEnd()}…`;
     if (room > 8 && ctx.measureText(label).width <= room) {
-      ctx.fillStyle = 'rgba(16, 18, 22, 0.85)';
+      ctx.fillStyle = COLOR.scrim;
       ctx.fillRect(labelX + 1, 0, ctx.measureText(label).width + 10, 15);
       ctx.fillStyle = index === selected ? COLOR.after : COLOR.label;
       ctx.textAlign = 'left';
@@ -311,7 +300,7 @@ function laneLabel(
   const pointedAt =
     pointer !== null && pointer.x >= x - 6 && pointer.x <= x - 4 + widthOfAll && pointer.y >= y - 10 && pointer.y <= y + 10;
   if (pointedAt) {
-    ctx.fillStyle = 'rgba(16, 18, 22, 0.8)';
+    ctx.fillStyle = COLOR.scrimSoft;
     ctx.fillRect(x - 6, y - 9, widthOfAll + 2, 18);
   }
   ctx.globalAlpha = pointedAt ? 1 : LEGEND_FAINT;
@@ -374,7 +363,7 @@ export function drawDetail(
     ctx.fillText(label, GUTTER - 6, y);
   };
   const separator = (y: number) => {
-    ctx.fillStyle = '#14161a';
+    ctx.fillStyle = COLOR.lane;
     ctx.fillRect(0, y, width, gap);
   };
   const line = (values: Float32Array, toY: (v: number) => number, color: string, lineWidth: number) => {
@@ -428,7 +417,7 @@ export function drawDetail(
         ctx.fillStyle = COLOR.after;
         bar(x, Math.max(-detail.ceiling, low[x] * gain), Math.min(detail.ceiling, high[x] * gain));
         // Peaks the limiter will have to hold down.
-        ctx.fillStyle = COLOR.limited;
+        ctx.fillStyle = COLOR.gain;
         const edge = Math.min(1, detail.ceiling) * scale;
         if (high[x] * gain > detail.ceiling) ctx.fillRect(GUTTER + x, mid - edge - 3, 1, 3);
         if (low[x] * gain < -detail.ceiling) ctx.fillRect(GUTTER + x, mid + edge, 1, 3);
@@ -450,7 +439,7 @@ export function drawDetail(
       ctx.fillRect(GUTTER + x, mid - inner, 1, inner * 2);
       if (after[x] > detail.ceiling) {
         // Peaks the limiter will have to hold down.
-        ctx.fillStyle = COLOR.limited;
+        ctx.fillStyle = COLOR.gain;
         ctx.fillRect(GUTTER + x, mid - a - 3, 1, 3);
         ctx.fillRect(GUTTER + x, mid + a, 1, 3);
       }
@@ -484,7 +473,7 @@ export function drawDetail(
       // Keep the whole handle inside the lane when it sits in a corner.
       const x = clampTo(toX(block), GUTTER + FADE_HANDLE_SIZE / 2, width - FADE_HANDLE_SIZE / 2);
       const y = waveLane.top + FADE_HANDLE_Y;
-      ctx.fillStyle = activeFade === which ? COLOR.hover : '#14161a';
+      ctx.fillStyle = activeFade === which ? COLOR.hover : COLOR.lane;
       ctx.strokeStyle = COLOR.hover;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -494,7 +483,7 @@ export function drawDetail(
     }
 
     laneLabel(ctx, GUTTER + 8, waveLane.top + 10, [
-      ['Waveform', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['limited', COLOR.limited],
+      ['Waveform', COLOR.label], ['original', COLOR.before], ['levelled', COLOR.after], ['limited', COLOR.gain],
     ], pointer);
   }
 
@@ -556,7 +545,7 @@ export function drawDetail(
       if (x1 <= x0) return;
       const active = index === activeAdjustment;
       // Bass adjustments are tinted like the bass curve they move.
-      const tint = adjustment.bass ? '106, 169, 255' : '255, 255, 255';
+      const tint = adjustment.bass ? COLOR.bassTint : COLOR.adjustTint;
       ctx.fillStyle = `rgba(${tint}, ${active ? 0.16 : 0.08})`;
       ctx.fillRect(x0, gainLane.top, x1 - x0, gainLane.height);
       ctx.fillStyle = adjustment.bass ? COLOR.bass : active ? COLOR.hover : COLOR.text;
@@ -572,7 +561,7 @@ export function drawDetail(
     });
     const cols = across(detail.gainDb, 'mean');
     const zero = toY(0);
-    ctx.fillStyle = 'rgba(242, 168, 59, 0.22)';
+    ctx.fillStyle = COLOR.gainFill;
     for (let x = 0; x < plot; x++) {
       const y = toY(cols[x]);
       ctx.fillRect(GUTTER + x, Math.min(y, zero), 1, Math.abs(y - zero));
@@ -610,12 +599,12 @@ export function drawDetail(
     while (label.length > 1 && ctx.measureText(label).width + 10 > room) label = `${label.slice(0, -2).trimEnd()}…`;
     const tab = room >= 14 ? Math.min(room, ctx.measureText(label).width + 10) : 6;
     ctx.globalAlpha = 1;
-    ctx.fillStyle = marker.selected ? 'rgba(230, 232, 236, 0.92)' : 'rgba(16, 18, 22, 0.82)';
+    ctx.fillStyle = marker.selected ? COLOR.tabSelected : COLOR.tab;
     ctx.fillRect(x, tabTop, tab, MARKER_TAB_HEIGHT);
     ctx.fillStyle = colour;
     ctx.fillRect(x, tabTop, 1, MARKER_TAB_HEIGHT);
     if (room >= 14) {
-      ctx.fillStyle = marker.selected ? '#14161a' : marker.guessed ? COLOR.text : COLOR.label;
+      ctx.fillStyle = marker.selected ? COLOR.ink : marker.guessed ? COLOR.text : COLOR.label;
       ctx.textAlign = 'left';
       ctx.fillText(label, x + 5, tabTop + MARKER_TAB_HEIGHT / 2 + 0.5);
     }

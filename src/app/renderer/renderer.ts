@@ -12,6 +12,7 @@ import type { VideoInfo } from '../../audio-io.ts';
 import type { Api, FineWave, VideoMixInfo, VisualsChoice } from '../api.ts';
 import { clock, detailLanes, displayGain, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type MarkerBox, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
+import { colours, onThemeChange } from './theme.ts';
 import { VideoView } from './video-view.ts';
 import { templateOf, VIDEO_RECORDING_TEMPLATE } from './video-frame.ts';
 import { Player } from './player.ts';
@@ -1724,9 +1725,9 @@ function showFigures() {
   const loudness = inside ? curveAt(hearLevelled ? detail.loudnessOut : detail.loudnessIn, seconds) : NaN;
   const applied = inside && hearLevelled;
   levelMeter.setFigures([
-    ['LUFS', loudness > -60 ? loudness.toFixed(1).replace('-', '−') : '–', hearLevelled ? '#3ddc97' : '#e6e8ec'],
-    ['gain', applied ? signed(curveAt(detail.gainDb, seconds)) : '–', '#f2a83b'],
-    ...(detail.bassDb ? [['bass', applied ? signed(bassAt(seconds)) : '–', '#6aa9ff'] as MeterFigure] : []),
+    ['LUFS', loudness > -60 ? loudness.toFixed(1).replace('-', '−') : '–', hearLevelled ? colours.after : colours.hover],
+    ['gain', applied ? signed(curveAt(detail.gainDb, seconds)) : '–', colours.gain],
+    ...(detail.bassDb ? [['bass', applied ? signed(bassAt(seconds)) : '–', colours.bass] as MeterFigure] : []),
   ]);
 }
 
@@ -2648,6 +2649,8 @@ $('help-close').addEventListener('click', () => helpDialog.close());
 $('help-manual').addEventListener('click', () => api.openManual());
 
 const settings = settingsDialog(api);
+onThemeChange(scheduleDraw);
+settings.start();
 $('open-settings').title = `Settings (${COMMAND},)`;
 $('open-settings').addEventListener('click', () => settings.open());
 

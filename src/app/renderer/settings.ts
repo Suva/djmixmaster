@@ -3,10 +3,11 @@
 // process; the dialog shows what it says after each change.
 
 import type { Api, AppSettings, FolderKind } from '../api.ts';
+import { setTheme } from './theme.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-export function settingsDialog(api: Api): { open(): void; readonly element: HTMLDialogElement } {
+export function settingsDialog(api: Api): { open(): void; start(): Promise<void>; readonly element: HTMLDialogElement } {
   const dialog = $<HTMLDialogElement>('settings-dialog');
   const updates = $<HTMLInputElement>('settings-updates');
 
@@ -25,6 +26,10 @@ export function settingsDialog(api: Api): { open(): void; readonly element: HTML
       // Already the app's own: nothing to go back to.
       $<HTMLButtonElement>(`${prefix}-default`).disabled = !chosen;
     }
+    for (const button of document.querySelectorAll<HTMLButtonElement>('#settings-theme button')) {
+      button.classList.toggle('on', button.dataset.themeChoice === settings.theme);
+    }
+    setTheme(settings.theme);
     updates.checked = settings.checkUpdates;
     $('settings-updates-own').hidden = settings.updatesFromStore;
     $('settings-updates-store').hidden = !settings.updatesFromStore;
@@ -38,12 +43,19 @@ export function settingsDialog(api: Api): { open(): void; readonly element: HTML
   };
   folder('media', 'settings-media');
   folder('luts', 'settings-lut');
+  for (const button of document.querySelectorAll<HTMLButtonElement>('#settings-theme button')) {
+    button.addEventListener('click', async () => show(await api.setTheme(button.dataset.themeChoice === 'light' ? 'light' : 'dark')));
+  }
   updates.addEventListener('change', async () => show(await api.setCheckUpdates(updates.checked)));
   $('settings-check-now').addEventListener('click', () => api.checkUpdatesNow());
   $('settings-close').addEventListener('click', () => dialog.close());
 
   return {
     element: dialog,
+    /** Puts the window in the look last chosen; before anything is shown, so that it never flashes the other. */
+    async start() {
+      setTheme((await api.settings()).theme);
+    },
     async open() {
       show(await api.settings());
       if (!dialog.open) dialog.showModal();

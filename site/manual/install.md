@@ -43,6 +43,7 @@ A few choices belong to the app rather than to a recording. Open them with the g
 
 ![The Settings dialog](pictures/settings.png)
 
+- **Appearance**: Dark or Light. The app is dark unless you choose Light, whatever your system's own setting is; Light is easier to read in bright daylight. The choice is kept for next time.
 - **Folder for template videos**: where videos added to templates are copied. Choose a drive with more room if you use many.
 - **LUT folder**: put your .cube files here, and they are offered wherever a LUT is chosen.
 - **Updates**: whether the app looks for a newer version when it starts. This is the only time it contacts anything: it asks GitHub for the newest version's number, at most once a day, and sends nothing about you or your recordings. If there is a newer version, a line at the top of the window says so; nothing is installed for you.

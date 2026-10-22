@@ -6,6 +6,10 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A light look.** Settings has a new Appearance choice, Dark or Light. The
+  app stays dark unless you choose Light, whatever your system is set to; Light
+  is for when the screen is hard to see in bright daylight. The curves, the
+  meter and the video's strip change with it, and the choice is remembered.
 - **A gear for Settings.** The Settings button showed what looked like a sun; it
   is now a gear.
 - **In the Microsoft Store.** On Windows, DJ Mix Master can now be installed

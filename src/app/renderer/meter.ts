@@ -3,6 +3,8 @@
 // limiter works, and a lamp for when the recording itself is clipped. Under
 // them, in figures, what the levelling is doing at the playhead.
 
+import { colours } from './theme.ts';
+
 /** The scale runs from a little above full scale down to here, in dBFS. */
 const TOP_DB = 3;
 const KNEE_DB = -12;
@@ -19,12 +21,12 @@ const LAMP_HOLD_MS = 700;
 const SEGMENT = 3;
 const GAP = 1;
 const COLOR = {
-  off: '#1e222a',
-  low: '#3ddc97',
-  near: '#f2a83b',
-  over: '#ff5d5d',
-  text: '#8b93a1',
-  bright: '#e6e8ec',
+  get off() { return colours.off; },
+  get low() { return colours.after; },
+  get near() { return colours.gain; },
+  get over() { return colours.warn; },
+  get text() { return colours.text; },
+  get bright() { return colours.hover; },
 };
 /** Rows kept free under the lights for the figures, so the lights never change height. */
 const FIGURE_ROWS = 3;

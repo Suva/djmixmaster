@@ -15,7 +15,7 @@ import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
-import type { AppSettings, AppView, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import type { AppSettings, AppTheme, AppView, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
 import { clipStreamArgs, VIDEO_EXTENSIONS } from './video-files.ts';
@@ -1139,6 +1139,7 @@ interface Preferences {
   mediaFolder?: string;
   lutFolder?: string;
   view?: AppView;
+  theme?: AppTheme;
 }
 const VIEWS: AppView[] = ['mastering', 'video', 'editing'];
 let preferences: Preferences = {};
@@ -1150,6 +1151,7 @@ async function loadPreferences() {
   if (typeof saved?.mediaFolder === 'string' && saved.mediaFolder) preferences.mediaFolder = saved.mediaFolder;
   if (typeof saved?.lutFolder === 'string' && saved.lutFolder) preferences.lutFolder = saved.lutFolder;
   if (VIEWS.includes(saved?.view as AppView)) preferences.view = saved!.view as AppView;
+  if (saved?.theme === 'light') preferences.theme = 'light';
 }
 
 const savePreferences = () => writeStored(preferencesFile(), JSON.stringify(preferences));
@@ -1163,6 +1165,7 @@ const settingsNow = (): AppSettings => ({
   checkUpdates: checksAutomatically,
   updatesFromStore: UPDATES_FROM_STORE,
   version: app.getVersion(),
+  theme: preferences.theme ?? 'dark',
 });
 ipcMain.handle('settings', () => settingsNow());
 ipcMain.handle('choose-folder', async (_event, which: FolderKind) => {
@@ -1185,6 +1188,17 @@ ipcMain.on('show-folder', (_event, which: FolderKind) => {
 ipcMain.handle('set-check-updates', async (_event, on: boolean) => {
   checksAutomatically = on === true;
   await setAutomatic(checksAutomatically);
+  return settingsNow();
+});
+/** The ground of the window, shown before the page has drawn anything: dark, or light when that was chosen. */
+const groundColour = () => (preferences.theme === 'light' ? '#eef0f3' : '#14161a');
+ipcMain.handle('set-theme', async (_event, theme: AppTheme) => {
+  if (theme !== 'dark' && theme !== 'light') return settingsNow();
+  // Dark is the default and is kept as no choice at all, as the folders are.
+  const { theme: _was, ...kept } = preferences;
+  preferences = theme === 'light' ? { ...kept, theme } : kept;
+  window?.setBackgroundColor(groundColour());
+  await savePreferences();
   return settingsNow();
 });
 ipcMain.on('check-updates-now', () => checkForUpdatesNow());
@@ -1435,7 +1449,7 @@ function createWindow() {
     height: 860,
     minWidth: 900,
     minHeight: 600,
-    backgroundColor: '#14161a',
+    backgroundColor: groundColour(),
     title: 'DJ Mix Master',
     // Automated checks draw off screen, so they also run while the display is asleep.
     show: !SCREENSHOT,

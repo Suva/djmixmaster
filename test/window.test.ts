@@ -2251,6 +2251,37 @@ test('the Settings dialog shows the folders and the update check, and changes th
   assert.equal(updates.automatic, false);
 });
 
+test('the window is dark until light is chosen in Settings, and starts in the look last chosen', { skip }, async () => {
+  const data = await fresh();
+  const first = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    const look = () => ({ theme: document.documentElement.dataset.theme, ground: getComputedStyle(document.body).backgroundColor });
+    await page.wait(500);
+    const dark = look();
+    page.click('open-settings');
+    await page.until(() => page.element<HTMLDialogElement>('settings-dialog').open, 'the dialog to open');
+    page.click('settings-theme-light');
+    await page.until(() => document.documentElement.dataset.theme === 'light', 'the window to turn light');
+    return { dark, light: look(), chosen: page.element('settings-theme-light').classList.contains('on') };
+  });
+  assert.equal(first.dark.theme, 'dark');
+  assert.equal(first.light.theme, 'light');
+  assert.notEqual(first.dark.ground, first.light.ground);
+  assert.ok(first.chosen);
+  assert.equal(JSON.parse(readFileSync(join(data, 'preferences.json'), 'utf8')).theme, 'light');
+  const second = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    const look = () => ({ theme: document.documentElement.dataset.theme, ground: getComputedStyle(document.body).backgroundColor });
+    await page.until(() => document.documentElement.dataset.theme === 'light', 'the window to start light');
+    page.click('open-settings');
+    await page.until(() => page.element<HTMLDialogElement>('settings-dialog').open, 'the dialog to open');
+    page.click('settings-theme-dark');
+    await page.until(() => document.documentElement.dataset.theme === 'dark', 'the window to turn dark');
+    return look();
+  });
+  assert.equal(second.theme, 'dark');
+  assert.equal(second.ground, first.dark.ground);
+  assert.equal(JSON.parse(readFileSync(join(data, 'preferences.json'), 'utf8')).theme, undefined);
+});
+
 test('a copy from the Microsoft Store leaves its updates to the Store', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh(), env: { DJMASTER_STORE: '1' } }, async (page) => {
     page.click('open-settings');

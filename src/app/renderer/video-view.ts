@@ -21,6 +21,7 @@ import { PreviewVideos } from './video-sources.ts';
 import { lutPicker } from './lut-picker.ts';
 import { colourInput } from './colour-input.ts';
 import { lutChoices } from './layer-settings.ts';
+import { colours } from './theme.ts';
 import { saveLater, written } from './saving.ts';
 import { packLut, parseCube, unpackLut, type Lut, type PackedLut } from '../../visuals/lut.ts';
 import {
@@ -1087,13 +1088,13 @@ export class VideoView {
     for (let i = 0; i < columns; i++) {
       const x = i * column;
       const h = Math.max(1, this.#stripLevels![i] * (height - 8 * ratio));
-      ctx.fillStyle = x < played ? '#3ddc97' : '#4a505c';
+      ctx.fillStyle = x < played ? colours.played : colours.unplayed;
       ctx.fillRect(x, (height - h) / 2, Math.max(1, column - ratio), h);
     }
     // Where each track starts.
-    ctx.fillStyle = 'rgba(230, 232, 236, 0.55)';
+    ctx.fillStyle = colours.trackStart;
     for (const track of mix.tracks) ctx.fillRect(Math.round((track.at / Math.max(1e-9, mix.end - mix.start)) * width), 0, Math.max(1, ratio), 6 * ratio);
-    ctx.fillStyle = '#e6e8ec';
+    ctx.fillStyle = colours.playhead;
     ctx.fillRect(Math.round(played), 0, Math.max(1, ratio * 1.5), height);
     // For scripted checks.
     strip.dataset.seconds = seconds.toFixed(1);

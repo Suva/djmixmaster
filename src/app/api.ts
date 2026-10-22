@@ -137,6 +137,9 @@ export type AppView = 'mastering' | 'video' | 'editing';
 /** The folders the Settings dialog chooses. */
 export type FolderKind = 'media' | 'luts';
 
+/** The window's look: dark unless the person has chosen light, whatever the system's own setting. */
+export type AppTheme = 'dark' | 'light';
+
 /** What the Settings dialog shows: the choices that belong to the app rather than to a recording. */
 export interface AppSettings {
   /** Where videos added to templates are kept, and whether that is one chosen rather than the app's own. */
@@ -150,6 +153,7 @@ export interface AppSettings {
   /** Whether this copy came from the Microsoft Store, which brings its updates itself. */
   updatesFromStore: boolean;
   version: string;
+  theme: AppTheme;
 }
 
 /** What the window may ask the main process to do. */
@@ -204,6 +208,8 @@ export interface Api {
   /** Opens the folder in Finder or Explorer. */
   showFolder(which: FolderKind): void;
   setCheckUpdates(on: boolean): Promise<AppSettings>;
+  /** Chooses the window's look, kept for the next start. */
+  setTheme(theme: AppTheme): Promise<AppSettings>;
   /** Looks for a newer version now, and says what was found. */
   checkUpdatesNow(): void;
   /** The view the window was in when last used. */
