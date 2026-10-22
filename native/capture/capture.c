@@ -28,6 +28,12 @@
  * writes from it. Nothing is dropped silently.
  */
 
+/* POSIX, which a strict C11 hides on Linux's C library: nanosleep, clock_gettime and the rest. Before any include. */
+#if !defined(_WIN32) && !defined(__APPLE__)
+#define _POSIX_C_SOURCE 200809L
+#define _DEFAULT_SOURCE
+#endif
+
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_NO_DECODING
 #define MA_NO_ENCODING
