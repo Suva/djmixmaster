@@ -10,13 +10,16 @@ import { checkup, type Checkup } from '../../checkup.ts';
 import type { Examination } from '../../master.ts';
 import type { VideoInfo } from '../../audio-io.ts';
 import type { Api, FineWave, VideoMixInfo, VisualsChoice } from '../api.ts';
-import { clock, detailLanes, displayGain, drawDetail, drawOverview, FADE_HANDLE_Y, GUTTER, type Detail, type MarkerBox, type Region } from './draw.ts';
+import { clock, detailLanes, displayGain, drawDetail, drawEq, drawOverview, type EqBackdrop, FADE_HANDLE_Y, GUTTER, type Detail, type MarkerBox, type Region } from './draw.ts';
 import { LevelMeter, type MeterFigure } from './meter.ts';
 import { colours, onThemeChange } from './theme.ts';
 import { VideoView } from './video-view.ts';
 import { templateOf, VIDEO_RECORDING_TEMPLATE } from './video-frame.ts';
 import { Player } from './player.ts';
 import { isUnmixed, loudnessChangeDb, then, UNMIXED, type ChannelMix } from '../../channels.ts';
+import { bandShares, bandSpectrum, checkedEq, EQ_RANGES_HZ, FLAT_EQ, isFlat, withEq, type Eq, type EqOutput } from '../../eq.ts';
+import { BANDS } from '../../bands.ts';
+import { Rta } from './rta.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
 import { cancelSave, saveDue, saveLater } from './saving.ts';
@@ -81,6 +84,12 @@ interface Mix {
   loudness?: string;
   /** The template of the mix's video and what was filled in for it, set in the visuals window. */
   visuals?: VisualsChoice;
+  /**
+   * A corrective EQ for how this stretch was recorded; absent means flat. It
+   * belongs to the mix rather than the recording, as one DJ of a night may
+   * have played records through a faulty phono stage and the next a CDJ.
+   */
+  eq?: Eq;
 }
 
 let recording: Recording | null = null;
@@ -452,18 +461,42 @@ function compute(m: Mix): { detail: Detail; stats: Stats } {
   return Math.abs(off) < 0.05 ? trial : computeWith(m, { ...m.options, targetLufs: preset.lufs + off });
 }
 
-function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: Stats } {
+/** A mix's measurements as its EQ makes it sound, by its stretch and its EQ; a handful are kept, for exports of several mixes. */
+const heardWithEq = new Map<string, EqOutput>();
+let heardFrom: Examination | null = null;
+
+/** The measurements of a mix's stretch of the recording, as its channel fix and its EQ make it sound. */
+function heard(m: Mix): EqOutput {
   const measured = measuredAsFixed();
   const { start, end } = m.region;
-  const shortTerm = measured.shortTerm.subarray(start, end);
-  const restShortTerm = measured.restShortTerm.subarray(start, end);
-  const peaksIn = measured.peaks.subarray(start, end);
-  const blocksIn = measured.blocks.subarray(start, end);
+  const slices: EqOutput = {
+    blocks: measured.blocks.subarray(start, end),
+    peaks: measured.peaks.subarray(start, end),
+    shortTerm: measured.shortTerm.subarray(start, end),
+    lowShortTerm: measured.lowShortTerm.subarray(start, end),
+    restShortTerm: measured.restShortTerm.subarray(start, end),
+  };
+  if (isFlat(m.eq)) return slices;
+  if (heardFrom !== measured) heardWithEq.clear();
+  heardFrom = measured;
+  const key = `${start}|${end}|${JSON.stringify(m.eq)}`;
+  let result = heardWithEq.get(key);
+  if (!result) {
+    result = withEq({ ...slices, sampleRate: measured.sampleRate, bands: measured.bands, firstBlock: start }, m.eq);
+    if (heardWithEq.size >= 16) heardWithEq.delete(heardWithEq.keys().next().value!);
+    heardWithEq.set(key, result);
+  }
+  return result;
+}
+
+function computeWith(m: Mix, options: LevelOptions): { detail: Detail; stats: Stats } {
+  const { start, end } = m.region;
+  const { shortTerm, restShortTerm, lowShortTerm, peaks: peaksIn, blocks: blocksIn } = heard(m);
   const n = end - start;
   const adjustments = m.adjustments.map((a) => ({ ...a, start: a.start - start, end: a.end - start }));
 
   const levelling = level(
-    { shortTerm, lowShortTerm: measured.lowShortTerm.subarray(start, end), restShortTerm },
+    { shortTerm, lowShortTerm, restShortTerm },
     options,
     { peaks: peaksIn, ceilingDb: m.ceilingDb },
     adjustments,
@@ -769,6 +802,7 @@ function setRegion(start: number, end: number) {
 }
 
 function select(m: Mix) {
+  if (m !== mix) rta.reset();
   mix = m;
   view = { ...m.region };
   detail = null;
@@ -1000,6 +1034,7 @@ function splitInto(regions: Region[]) {
       ceilingDb: original.ceilingDb,
       adjustments: original.adjustments.map((a) => ({ ...a })),
       ...(original.loudness ? { loudness: original.loudness } : {}),
+      ...(original.eq ? { eq: { ...original.eq } } : {}),
     };
     setEdges(piece, region.start, region.end);
     mixes.push(piece);
@@ -1759,10 +1794,16 @@ function follow() {
   }
   const fade = fades(mix);
   const held = hearLevelled ? fadeGain(time / HOP_SECONDS - start, end - start, fade.in, fade.out) : 1;
+  player.setEq(hearLevelled ? mix.eq : undefined);
   player.apply(hearLevelled ? gainAt(time) : 1, hearLevelled ? bassAt(time) : 0, held, {
     ceilingDb: mix.ceilingDb,
     bypass: !hearLevelled,
   });
+  const heard = player.spectrum();
+  if (heard) {
+    rta.update(heard, performance.now());
+    drawEqPanel();
+  }
   const [left, right] = player.outputPeaks();
   const block = clamp(Math.floor(time / HOP_SECONDS), 0, recording.measured.peaks.length - 1);
   levelMeter.update({
@@ -2085,6 +2126,7 @@ function choiceOf(m: Mix): string {
 }
 
 function syncControls() {
+  syncEq();
   for (const slider of sliders) {
     $<HTMLInputElement>(slider.id).value = String(slider.get());
     $(`${slider.id}-value`).textContent = slider.format(slider.get());
@@ -2198,6 +2240,154 @@ $('apply-all').addEventListener('click', () => {
   $('readout').textContent = `These settings now apply to the other ${others === 1 ? 'mix' : `${others} mixes`} too. Undo takes it back.`;
   scheduleSave();
 });
+
+// ---------------------------------------------------------------------------
+// The EQ: a mix's own, for putting right how it was recorded
+
+/** The bands as the panel has them: a slider for the gain, one for the frequency, and how the readout puts the two together. */
+const EQ_BANDS = [
+  { id: 'low', gain: 'lowDb', hz: 'lowHz', where: 'below' },
+  { id: 'low-mid', gain: 'lowMidDb', hz: 'lowMidHz', where: 'at' },
+  { id: 'high-mid', gain: 'highMidDb', hz: 'highMidHz', where: 'at' },
+  { id: 'high', gain: 'highDb', hz: 'highHz', where: 'above' },
+] as const;
+
+const eqOf = (m: Mix): Eq => m.eq ?? FLAT_EQ;
+const hzText = (hz: number) => (hz >= 1000 ? `${(hz / 1000).toFixed(hz % 1000 === 0 ? 0 : 1)} kHz` : `${Math.round(hz)} Hz`);
+
+/** A frequency slider's place from 0 to 1, spread evenly in pitch over its band's range, as a round number of Hz. */
+function hzAt(key: keyof typeof EQ_RANGES_HZ, place: number): number {
+  const [lo, hi] = EQ_RANGES_HZ[key];
+  const hz = lo * Math.pow(hi / lo, place);
+  const step = Math.pow(10, Math.floor(Math.log10(hz)) - 1);
+  return clamp(Math.round(hz / step) * step, lo, hi);
+}
+
+function placeOf(key: keyof typeof EQ_RANGES_HZ, hz: number): number {
+  const [lo, hi] = EQ_RANGES_HZ[key];
+  return Math.log(hz / lo) / Math.log(hi / lo);
+}
+
+function syncEq() {
+  const eq = eqOf(mix);
+  $<HTMLInputElement>('eq-high-pass').value = String(eq.highPassHz);
+  $('eq-high-pass-value').textContent = eq.highPassHz === 0 ? 'off' : `below ${eq.highPassHz} Hz`;
+  for (const band of EQ_BANDS) {
+    $<HTMLInputElement>(`eq-${band.id}`).value = String(eq[band.gain]);
+    $<HTMLInputElement>(`eq-${band.id}-hz`).value = String(placeOf(band.hz, eq[band.hz]));
+    $(`eq-${band.id}-value`).textContent = `${eq[band.gain] === 0 ? '0 dB' : db(eq[band.gain])} ${band.where} ${hzText(eq[band.hz])}`;
+  }
+  $<HTMLButtonElement>('eq-flat').disabled = !mix.eq;
+  fillEqCopy();
+  drawEqPanel();
+}
+
+/** What is playing, after the EQ, for the analyser behind it. */
+const rta = new Rta();
+let backdropFor: { key: string; backdrop: EqBackdrop } | null = null;
+
+/**
+ * The averages behind the EQ, from the analysis: this mix as its EQ makes it
+ * sound, and the other mixes together as theirs do, each weighed by its
+ * length rather than its loudness. Worked out again only when a stretch or an
+ * EQ changes, as the drawing is redone on every frame while playing.
+ */
+function eqBackdrop(): EqBackdrop {
+  if (!recording) return {};
+  const { bands, sampleRate } = recording.measured;
+  const key = JSON.stringify([recording.path, mixes.indexOf(mix), mixes.map((m) => [m.region, m.eq ?? null])]);
+  if (backdropFor?.key !== key) {
+    const mine = bandShares(bands, sampleRate, mix.region.start, mix.region.end, mix.eq);
+    const together = new Float64Array(BANDS);
+    let length = 0;
+    for (const other of mixes) {
+      if (other === mix) continue;
+      const shares = bandShares(bands, sampleRate, other.region.start, other.region.end, other.eq);
+      if (!shares) continue;
+      const blocks = other.region.end - other.region.start;
+      shares.forEach((share, b) => (together[b] += share * blocks));
+      length += blocks;
+    }
+    backdropFor = {
+      key,
+      backdrop: {
+        mix: mine && bandSpectrum(mine, sampleRate),
+        others: length > 0 ? bandSpectrum(together.map((sum) => sum / length), sampleRate) : null,
+      },
+    };
+  }
+  return { ...backdropFor.backdrop, live: rta.empty ? undefined : (frequencies) => rta.line(frequencies) };
+}
+
+function drawEqPanel() {
+  drawEq($<HTMLCanvasElement>('eq-curve'), eqOf(mix), eqBackdrop());
+}
+
+/**
+ * Changes the selected mix's EQ. One that does nothing is kept as long as
+ * its frequencies have been moved, so that a slider does not jump back when
+ * its gain passes through zero; only Flat takes it away.
+ */
+function changeEq(change: Partial<Eq>) {
+  const eq = { ...eqOf(mix), ...change };
+  if (checkedEq(eq)) mix.eq = eq;
+  else delete mix.eq;
+  syncEq();
+  scheduleRecompute();
+}
+
+$<HTMLInputElement>('eq-high-pass').addEventListener('input', (event) => {
+  changeEq({ highPassHz: Number((event.target as HTMLInputElement).value) });
+});
+for (const band of EQ_BANDS) {
+  $<HTMLInputElement>(`eq-${band.id}`).addEventListener('input', (event) => {
+    changeEq({ [band.gain]: Number((event.target as HTMLInputElement).value) });
+  });
+  $<HTMLInputElement>(`eq-${band.id}-hz`).addEventListener('input', (event) => {
+    changeEq({ [band.hz]: hzAt(band.hz, Number((event.target as HTMLInputElement).value)) });
+  });
+}
+
+$('eq-flat').addEventListener('click', () => {
+  if (!recording || busy) return;
+  delete mix.eq;
+  syncEq();
+  scheduleRecompute();
+});
+
+/** The list of mixes the EQ can be copied to: each other one, and all of them. */
+function fillEqCopy() {
+  const select = $<HTMLSelectElement>('eq-copy');
+  const others = mixes.filter((m) => m !== mix);
+  const prompt = new Option('Copy to…', '');
+  prompt.disabled = true;
+  select.replaceChildren(
+    prompt,
+    ...others.map((m) => new Option(m.name, String(mixes.indexOf(m)))),
+    ...(others.length > 1 ? [new Option('Every other mix', 'all')] : []),
+  );
+  select.value = '';
+  select.disabled = others.length === 0;
+}
+
+// Names may have changed since the list was made.
+$('eq-copy').addEventListener('pointerdown', fillEqCopy);
+$('eq-copy').addEventListener('change', (event) => {
+  const select = event.target as HTMLSelectElement;
+  const targets = select.value === 'all' ? mixes.filter((m) => m !== mix) : [mixes[Number(select.value)]].filter((m) => m && m !== mix);
+  select.value = '';
+  if (!recording || busy || targets.length === 0) return;
+  for (const target of targets) {
+    if (mix.eq) target.eq = { ...mix.eq };
+    else delete target.eq;
+  }
+  $('readout').textContent =
+    targets.length === 1 ? `“${targets[0].name}” now has this EQ too. Undo takes it back.` : `Every other mix now has this EQ too. Undo takes it back.`;
+  drawEqPanel();
+  scheduleRecompute();
+});
+
+onThemeChange(syncEq);
 
 // ---------------------------------------------------------------------------
 // Opening and exporting
@@ -2473,6 +2663,7 @@ function restore(remembered: { session: unknown; defaults: unknown }, total: num
       ...(isNumber(m.fadeIn) && m.fadeIn > 0 ? { fadeIn: Math.round(m.fadeIn) } : {}),
       ...(isNumber(m.fadeOut) && m.fadeOut > 0 ? { fadeOut: Math.round(m.fadeOut) } : {}),
       ...(visualsChoice(m.visuals) ? { visuals: visualsChoice(m.visuals)! } : {}),
+      ...(checkedEq(m.eq) ? { eq: checkedEq(m.eq)! } : {}),
     }));
     album = typeof session!.album === 'string' ? session!.album : '';
     pictureDelayMs = isNumber(session!.pictureDelayMs) ? clamp(Math.round(session!.pictureDelayMs), -MOST_PICTURE_DELAY_MS, MOST_PICTURE_DELAY_MS) : 0;
@@ -3009,6 +3200,7 @@ function renderMix(m: Mix, output: string, track?: string) {
     fadeInSeconds: fades(m).in * HOP_SECONDS,
     fadeOutSeconds: fades(m).out * HOP_SECONDS,
     ...(isUnmixed(channelMix()) ? {} : { channels: channelMix() }),
+    ...(isFlat(m.eq) ? {} : { eq: m.eq }),
     ...(exportSettings.format === 'mp4' ? { video: { ...VIDEO, width: SHAPES[video.shape].width, height: SHAPES[video.shape].height, mix: video } } : {}),
     ...(exportSettings.format === 'original' ? { originalPicture: true, pictureDelay: pictureDelayMs / 1000 } : {}),
   });

@@ -39,6 +39,8 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/loudness.ts` | Streaming meter (BS.1770), short-term and integrated loudness |
 | `src/gain-curve.ts` | Full-energy envelope, gain curve, hand adjustments |
 | `src/level.ts` | Combines the above; automatic target with headroom; bass correction |
+| `src/bands.ts` | How each stretch's energy divides over thirteen bands, measured during analysis |
+| `src/eq.ts` | A mix's corrective EQ: its filters, as Web Audio has them, and what it does to the loudness, worked out from the bands |
 | `src/gaps.ts` | Finds silences between sets |
 | `src/tracks.ts` | The tracks in a mix: reading track lists, chapters, the list for YouTube |
 | `src/features.ts` | What the visuals of a video move to: spectrum, level and beats |
@@ -96,6 +98,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/draw.ts` | Canvas drawing for the overview and the detail view |
 | `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
 | `src/app/renderer/meter.ts` | The level meter beside the curves |
+| `src/app/renderer/rta.ts` | The analyser behind the EQ: what is playing, averaged and smoothed |
 | `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the help sheet and the manual |
 | `src/app/renderer/theme.ts` | Dark and light: the colours canvases draw with, changed in place when the look changes. The CSS follows `data-theme` on the root element |
 | `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
@@ -112,13 +115,15 @@ and curves in the code are block indexes unless a name says seconds.
   dependency, and the app is bundled by esbuild. Adding a runtime dependency
   also means changing what gets packaged.
 - **Keep the shared modules pure.** `loudness.ts`, `gain-curve.ts`,
-  `level.ts`, `gaps.ts`, `tracks.ts`, `features.ts`, `visuals/*.ts` (`draw.ts` needs a canvas, so it is for windows only), `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
+  `level.ts`, `bands.ts`, `eq.ts`, `gaps.ts`, `tracks.ts`, `features.ts`, `visuals/*.ts` (`draw.ts` needs a canvas, so it is for windows only), `fade.ts`, `shelf.ts`, `limiter.ts`, `true-peak.ts`,
   `diagnostics.ts`, `checkup.ts`, `channels.ts` and `encode-options.ts` are
   bundled into the window and the audio worklet. They must not import Node
   modules.
 - **Preview and export must sound the same.** They share the limiter code.
-  The bass shelf in `shelf.ts` uses the same formulas as the Web Audio
-  `lowshelf` filter the preview uses; change one and the other must follow.
+  The bass shelf in `shelf.ts` and the EQ's filters in `eq.ts` use the same
+  formulas as the Web Audio filters the preview uses; change one and the other
+  must follow. Web Audio takes a high-pass filter's Q in dB and a peaking
+  filter's as a plain number; the EQ's window test compares the two.
 - **A mix has two kinds of position.** `region` is in whole blocks and is what
   indexes the curves. The mix's real edges are kept to the millisecond as
   `trimStart` and `trimEnd`, fractions of the first and last block; `edges()`
@@ -358,6 +363,14 @@ Do not write test data there.
   time on request (`fine-wave` in `main.ts`), and the window keeps the pieces
   it was given (`fineWave` in `renderer.ts`). Until a piece arrives the view
   falls back to blocks. This is for display only; nothing is levelled from it.
+- **A mix's EQ comes after the channel fix.** It belongs to the mix (`Mix.eq`, absent when
+  flat), since the DJs of one night may play through different gear. It is
+  applied after the channel fix in export and player, and the levelling reads
+  the mix's measurements as the EQ would leave them (`withEq` in `eq.ts`,
+  `heard` in `renderer.ts`): the loudness curves are moved block by block by
+  what the EQ does to the bands the analysis measured, every 400 ms. The
+  peaks are an estimate that leaves out cuts, as a filter's phase shift tends
+  to raise a mastered recording's peaks about as much as a cut lowers them.
 - **A channel fix is applied before anything else.** The check-up's fixes
   (`channels.ts`) are a mix of the two channels into two, applied first in
   export (`render` in `master.ts`) and in the player (four gains between a

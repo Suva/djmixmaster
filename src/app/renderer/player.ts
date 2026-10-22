@@ -1,11 +1,12 @@
 // Plays the recording and applies the levelling live:
-// audio element -> bass shelf -> gain -> limiter -> fade -> speakers.
+// audio element -> channel fix -> EQ -> bass shelf -> gain -> limiter -> fade -> speakers.
 //
 // Most recordings are played by the audio element straight from the file. The
 // ones it cannot seek in exactly are streamed instead: each time playback
 // starts or jumps, the main process decodes from that position onwards.
 import { UNMIXED, type ChannelMix } from '../../channels.ts';
 import { BASS_SHELF_HZ } from '../../shelf.ts';
+import { eqFilters, FLAT_EQ, type Eq } from '../../eq.ts';
 import type { MediaSource } from '../api.ts';
 import type { LimiterReport, LimiterSettings } from './limiter-worklet.ts';
 
@@ -38,6 +39,12 @@ export class Player {
   /** A fix for the recording's channels: four gains, from each channel in to each channel out. */
   #channels: { ll: GainNode; lr: GainNode; rl: GainNode; rr: GainNode } | null = null;
   #mix: ChannelMix = UNMIXED;
+  /** The selected mix's EQ: always the same five filters, whose settings change. */
+  #eqNodes: BiquadFilterNode[] = [];
+  #eq: Eq = FLAT_EQ;
+  /** Listens in after the EQ, for the analyser drawn behind it: what the EQ has made of the sound, before the levelling moves it. */
+  #rta: AnalyserNode | null = null;
+  #rtaData: Float32Array<ArrayBuffer> | null = null;
   readonly #heard = new Float32Array(2048);
   #settings: Required<LimiterSettings> = { ceilingDb: -1, bypass: false };
 
@@ -145,6 +152,21 @@ export class Player {
     for (const key of ['ll', 'lr', 'rl', 'rr'] as const) this.#channels[key].gain.value = mix[key];
   }
 
+  /** The EQ heard, the one the export applies after the channel fix; undefined is flat. */
+  setEq(eq: Eq | undefined) {
+    const next = eq ?? FLAT_EQ;
+    if (JSON.stringify(next) === JSON.stringify(this.#eq)) return;
+    this.#eq = next;
+    if (!this.#context) return;
+    // Glided over a moment, as a slider moves it, so that it does not click.
+    const at = this.#context.currentTime;
+    eqFilters(next).forEach((filter, i) => {
+      const node = this.#eqNodes[i];
+      node.frequency.setTargetAtTime(filter.frequency, at, 0.02);
+      node.gain.setTargetAtTime(filter.gain, at, 0.02);
+    });
+  }
+
   apply(gain: number, bassDb: number, fade: number, settings: Required<LimiterSettings>) {
     if (!this.#context || !this.#gain || !this.#shelf || !this.#limiter || !this.#fade) return;
     this.#gain.gain.setTargetAtTime(gain, this.#context.currentTime, 0.03);
@@ -157,6 +179,16 @@ export class Player {
       this.#limiter.port.postMessage(changed);
       this.#settings = { ...settings };
     }
+  }
+
+  /**
+   * The spectrum of the last moment after the EQ, in dB per bin up to half
+   * the sample rate, and that rate; null before anything has played.
+   */
+  spectrum(): { db: Float32Array; sampleRate: number } | null {
+    if (!this.#rta || !this.#rtaData || !this.#context) return null;
+    this.#rta.getFloatFrequencyData(this.#rtaData);
+    return { db: this.#rtaData, sampleRate: this.#context.sampleRate };
   }
 
   /** The highest level in the last moment of what reached the left and the right speaker, linear. */
@@ -224,7 +256,15 @@ export class Player {
     apart.connect(channels.lr, 1).connect(together, 0, 0);
     apart.connect(channels.rl, 0).connect(together, 0, 1);
     apart.connect(channels.rr, 1).connect(together, 0, 1);
-    together.connect(shelf).connect(gain).connect(limiter).connect(fade).connect(context.destination);
+    const eqNodes = eqFilters(this.#eq).map((filter) => new BiquadFilterNode(context, filter));
+    let last: AudioNode = together;
+    for (const node of eqNodes) last = last.connect(node);
+    this.#eqNodes = eqNodes;
+    // Long enough to tell 30 Hz from 40; the window averages what it shows over time itself.
+    this.#rta = new AnalyserNode(context, { fftSize: 8192, smoothingTimeConstant: 0 });
+    this.#rtaData = new Float32Array(this.#rta.frequencyBinCount);
+    last.connect(this.#rta);
+    last.connect(shelf).connect(gain).connect(limiter).connect(fade).connect(context.destination);
     this.#channels = channels;
     fade.connect(split);
     split.connect(meters[0], 0);

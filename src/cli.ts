@@ -8,6 +8,7 @@ import {
 import { DEFAULT_LEVEL_OPTIONS, type LevelOptions } from './gain-curve.ts';
 import { checkup } from './checkup.ts';
 import { HOP_SECONDS } from './loudness.ts';
+import { EQ_MOST_DB, EQ_MOST_HIGH_PASS_HZ, EQ_RANGES_HZ, FLAT_EQ, isFlat, withEq, type Eq } from './eq.ts';
 import { level, measure, render, type Levelling, type Measurement, type Progress } from './master.ts';
 
 const USAGE = `Usage: djmaster <input> [options]
@@ -50,6 +51,15 @@ Levelling
   --smooth <seconds>   How long a gain change takes (default: ${DEFAULT_LEVEL_OPTIONS.smoothSeconds})
   --slew <dB/s>        Fastest the gain may move (default: ${DEFAULT_LEVEL_OPTIONS.slewDbPerSecond})
 
+EQ, applied before the levelling, to put right how the mix was recorded
+  --rumble <Hz>        Take out what lies below this, up to ${EQ_MOST_HIGH_PASS_HZ} Hz (default: off)
+  --bass <dB[@Hz]>     Raise or lower the bass, below ${FLAT_EQ.lowHz} Hz unless given (${EQ_RANGES_HZ.lowHz.join('-')} Hz)
+  --low-mids <dB[@Hz]> The low middle, around ${FLAT_EQ.lowMidHz} Hz unless given (${EQ_RANGES_HZ.lowMidHz.join('-')} Hz)
+  --high-mids <dB[@Hz]>
+                       The upper middle, around ${FLAT_EQ.highMidHz} Hz unless given (${EQ_RANGES_HZ.highMidHz.join('-')} Hz)
+  --treble <dB[@Hz]>   The treble, above ${FLAT_EQ.highHz} Hz unless given (${EQ_RANGES_HZ.highHz.join('-')} Hz)
+                       Each moves by at most ${EQ_MOST_DB} dB, e.g. --treble 2.5@6000
+
 Limiter
   --ceiling <dBTP>     True-peak ceiling (default: -1)
   --no-limiter         Leave peaks alone; boosted tracks may clip
@@ -68,6 +78,7 @@ interface Args {
   analyzeOnly: boolean;
   dump?: string;
   force: boolean;
+  eq: Eq;
 }
 
 function parseTime(text: string): number {
@@ -89,6 +100,7 @@ function parseArgs(argv: string[]): Args {
     fadeOutSeconds: 0,
     analyzeOnly: false,
     force: false,
+    eq: { ...FLAT_EQ },
   };
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
@@ -107,6 +119,16 @@ function parseArgs(argv: string[]): Args {
       const v = Number(value());
       if (!Number.isFinite(v)) throw new Error(`${flag} needs a number`);
       return v;
+    };
+    /** A band of the EQ: its gain, and its frequency after an @ if given. */
+    const band = (gain: 'lowDb' | 'lowMidDb' | 'highMidDb' | 'highDb', hz: keyof typeof EQ_RANGES_HZ) => {
+      const [db, at] = value().split('@').map(Number);
+      if (!Number.isFinite(db) || Math.abs(db) > EQ_MOST_DB) throw new Error(`${flag} needs a gain of at most ${EQ_MOST_DB} dB either way`);
+      args.eq[gain] = db;
+      if (at === undefined) return;
+      const [lo, hi] = EQ_RANGES_HZ[hz];
+      if (!(at >= lo && at <= hi)) throw new Error(`${flag} needs a frequency from ${lo} to ${hi} Hz`);
+      args.eq[hz] = at;
     };
     switch (flag) {
       case '-h': case '--help': process.stdout.write(USAGE); process.exit(0);
@@ -144,6 +166,11 @@ function parseArgs(argv: string[]): Args {
       case '--slew': args.options.slewDbPerSecond = number(); break;
       case '--ceiling': args.ceilingDb = number(); break;
       case '--no-limiter': args.ceilingDb = null; break;
+      case '--rumble': args.eq.highPassHz = number(); break;
+      case '--bass': band('lowDb', 'lowHz'); break;
+      case '--low-mids': band('lowMidDb', 'lowMidHz'); break;
+      case '--high-mids': band('highMidDb', 'highMidHz'); break;
+      case '--treble': band('highDb', 'highHz'); break;
       default:
         if (flag.startsWith('-') && flag.length > 1) throw new Error(`Unknown option ${flag}`);
         positional.push(flag);
@@ -165,6 +192,7 @@ function parseArgs(argv: string[]): Args {
   if (args.options.fixedGainDb !== undefined && args.options.targetLufs !== undefined) {
     throw new Error('--gain and --target cannot be used together');
   }
+  if (!(args.eq.highPassHz >= 0 && args.eq.highPassHz <= EQ_MOST_HIGH_PASS_HZ)) throw new Error(`--rumble must be from 0 to ${EQ_MOST_HIGH_PASS_HZ} Hz`);
   if (args.ceilingDb !== null && args.ceilingDb > 0) throw new Error('--ceiling must be 0 dBFS or lower');
   if (!(args.fadeInSeconds >= 0) || !(args.fadeOutSeconds >= 0)) throw new Error('--fade-in and --fade-out must not be negative');
   if (args.headroomDb !== undefined && !(args.headroomDb >= 0)) throw new Error('--headroom must not be negative');
@@ -222,18 +250,21 @@ async function main() {
     if (existsSync(output) && !args.force) throw new Error(`${output} already exists (use --force to overwrite)`);
   }
 
-  const before = await measure(args.input, args.region, progress('Analysing'));
+  const measured = await measure(args.input, args.region, progress('Analysing'));
+  // Levelled as the EQ makes it sound.
+  const eq = isFlat(args.eq) ? undefined : args.eq;
+  const before = { ...measured, ...withEq({ ...measured, firstBlock: 0 }, eq) };
   const levelling = level(before, args.options, { peaks: before.peaks, ceilingDb: args.ceilingDb ?? 0 });
   const { gainDb, bassDb } = levelling;
   const minGain = gainDb.reduce((a, b) => Math.min(a, b), Infinity);
   const maxGain = gainDb.reduce((a, b) => Math.max(a, b), -Infinity);
 
   // What is worth knowing about the recording itself, before anything is done to it.
-  for (const finding of checkup(before).findings) {
+  for (const finding of checkup(measured).findings) {
     console.log(`${finding.kind === 'fault' ? 'Fault' : 'Note '}        ${finding.title}. ${finding.detail}`);
   }
   console.log(`Length       ${clock(before.shortTerm.length * HOP_SECONDS)}`);
-  console.log(`Input        ${lufs(before.integratedLufs)} integrated, peak ${dbfs(before.peak)}`);
+  console.log(`Input        ${lufs(measured.integratedLufs)} integrated, peak ${dbfs(measured.peak)}`);
   console.log(`Target       ${lufs(levelling.targetLufs)} for full-energy sections`);
   console.log(`Gain         ${db(minGain)} to ${db(maxGain)}`);
   if (args.options.levelTracks && args.options.bassCorrection > 0) {
@@ -249,7 +280,7 @@ async function main() {
     const result = await render(
       args.input, args.region, gainDb, output, {
         ceilingDb: args.ceilingDb, bassDb, encode: args.encode, headroomDb,
-        fadeInSeconds: args.fadeInSeconds, fadeOutSeconds: args.fadeOutSeconds,
+        fadeInSeconds: args.fadeInSeconds, fadeOutSeconds: args.fadeOutSeconds, eq,
       },
       progress('Rendering'),
     );

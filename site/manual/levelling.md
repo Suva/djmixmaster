@@ -28,6 +28,17 @@ It levels track against track, not moment against moment. A slow gain curve foll
 | Most boost, Most cut | How far a quiet track may be raised, and a loud one lowered. |
 | True-peak ceiling | The highest level the output may reach. |
 
+## EQ
+
+Under the levelling settings is an EQ, for putting right how a mix was recorded before it is levelled: a turntable's phono stage that makes records sound dull or harsh, a PA mixer's EQ left on, rumble from a turntable. The levelling measures the mix as the EQ makes it sound, so the loudness figures and the curves follow it.
+
+- **Rumble filter** takes out what lies below the frequency you set.
+- **Bass, Low mids, High mids, Treble** each raise or lower their part of the sound by up to 6 dB. The left slider sets how much, the right one where: where the bass ends, where each middle band is centred, where the treble starts. The drawing above them shows what they add up to.
+- **Behind the curve** are three spectra, lined up on its middle line: this mix's average (white), the other mixes' average (dashed), and what is playing, averaged over a second or two (blue). The averages come from the analysis, so they are there while paused, and this mix's moves as you change its EQ. For a set that sounds unlike the rest of the night, such as one played on records through a different phono stage, move the EQ until its line follows the other mixes'.
+- **Each mix has its own EQ**, as the DJs of one night may have played through different gear: records through a phono stage, then CDJs. A new mix starts flat. **Copy to** gives this EQ to another mix, or to every other one; **Flat** takes it off. Reset settings and Apply to all mixes leave the EQ alone.
+
+Bypass (A) turns the EQ off too, so you can compare.
+
 ## Adjusting by hand
 
 - **Raise or lower a stretch**: drag across the gain lane to mark it, then drag it up or down. The switch in the corner of the lane chooses whether a new stretch changes the whole sound or the bass only.

@@ -186,27 +186,27 @@ from Mixcloud was found either way. A test would settle it: upload the same
 minute at -9 and at -14 as private tracks and compare. Adjust the preset
 descriptions in `renderer.ts` to match what is found.
 
-### Corrective EQ, with a suggested correction
+### A suggested EQ correction
 
-A recording taken from a PA mixer can carry the system's EQ: boosted bass,
-dulled highs. A small set of broad controls could undo it: a low and a high
-shelf, one or two mid bands, and a high-pass filter, set once per recording
-and inherited by its mixes.
+Each mix has a corrective EQ (`eq.ts`), and the analysis measures how every
+four blocks' energy divides over thirteen bands (`bands.ts`). What is left:
 
-- An EQ changes loudness and peaks, which the levelling and the automatic
-  target depend on. Measuring energy in about ten frequency bands during
-  analysis would let any EQ's effect be predicted without decoding again.
-- The same bands give an average spectrum. Over an hour of varied tracks
-  that settles into a predictable shape, so a recording that sits well off
-  it probably shows the system's EQ. A "Suggest" button could propose a
-  gentle, capped correction to judge by ear.
-- Preview and export have to use the same filter formulas, as with the bass
-  shelf.
+- A "Suggest" button. The EQ panel already draws this mix's average spectrum
+  beside the other mixes' (`bandShares` in `eq.ts`); the button would close
+  the gap between them. The other mixes of the same night went through the same
+  mixer, PA and recorder, so their average spectrum is the best reference for
+  a set that sounds off, such as one played on records through a faulty phono
+  stage while the rest came from CDJs. The difference, smoothed and capped,
+  is a correction to judge by ear. Where there is only one mix, the spectrum
+  an hour of varied tracks settles into could stand in.
+- Presets for faults known from real gear, once someone sends measurements:
+  a recording of a test record's sweep through their mixer would show how far
+  its phono stage is off.
+- An EQ that changes inside a mix, for a DJ who switches between records and
+  CDJs during a set, perhaps as a kind of hand adjustment over a stretch.
+  Wait until someone asks for it.
 - It cannot undo a limiter in the PA chain, clipping, or bass that was split
   off before the recorder.
-
-Waiting on a real recording known to have come off a PA mixer, to see
-whether the spectrum shows what is expected.
 
 ### Fixes for common recording faults
 
@@ -215,7 +215,8 @@ show which faults actually turn up:
 
 - Narrow filters for mains hum and its harmonics, at 50 or 60 Hz according
   to which the check-up found.
-- A high-pass filter for rumble and DC offset (shared with the EQ idea).
+- A high-pass filter for rumble and DC offset: the EQ's rumble filter does
+  this by hand; the check-up could offer it.
 - Patch very short dropouts.
 
 ### Cut a section out of a mix

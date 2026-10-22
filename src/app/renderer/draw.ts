@@ -3,6 +3,7 @@
 import type { Adjustment } from '../../gain-curve.ts';
 import { fadeGain } from '../../fade.ts';
 import { HOP_SECONDS } from '../../loudness.ts';
+import { EQ_MOST_DB, eqResponseDb, type Eq } from '../../eq.ts';
 import { colours } from './theme.ts';
 
 // The limiter at work is no fault, so it is not red (`warn`), which stays for clipping
@@ -622,4 +623,193 @@ export function drawDetail(
     ctx.globalAlpha = 1;
   }
   return boxes;
+}
+
+/** How far up and down the EQ's drawing reaches: a little past the most a band moves, so a full one stays clear of the edge. */
+const EQ_SHOWN_DB = EQ_MOST_DB + 3;
+
+/** A spectrum drawn behind the EQ: energy per octave in dB at some frequencies. */
+export interface Spectrum {
+  hz: Float64Array;
+  db: Float64Array;
+}
+
+/** What is drawn behind the EQ's curve, where there is any. */
+export interface EqBackdrop {
+  /** What is playing, averaged, at the frequencies asked for. */
+  live?: (frequencies: Float64Array) => Float64Array | null;
+  /** The mix's average, as its EQ makes it sound. */
+  mix?: Spectrum | null;
+  /** The other mixes' average, each as its own EQ makes it sound. */
+  others?: Spectrum | null;
+}
+
+/** Spectra are lined up by their level over the middle of the sound, where every recording has plenty. */
+/**
+ * How far up and down the spectra reach: music's own bass and treble lie
+ * further from its middle than an EQ should ever move them, so they are drawn
+ * at half the EQ's scale.
+ */
+const SPECTRUM_SHOWN_DB = 2 * EQ_SHOWN_DB;
+const LINE_UP_HZ = [90, 8000];
+
+/**
+ * A spectrum known at a few points, read at `frequencies` along a smooth
+ * curve through them that never overshoots (monotone cubic, by pitch); NaN
+ * outside them.
+ */
+function through(spectrum: Spectrum, frequencies: Float64Array): Float64Array {
+  const x = Array.from(spectrum.hz, Math.log2);
+  const y = Array.from(spectrum.db);
+  const n = x.length;
+  const slopes = x.slice(0, -1).map((_, i) => (y[i + 1] - y[i]) / (x[i + 1] - x[i]));
+  const tangents = x.map((_, i) => {
+    if (i === 0) return slopes[0];
+    if (i === n - 1) return slopes[n - 2];
+    return slopes[i - 1] * slopes[i] <= 0 ? 0 : (2 * slopes[i - 1] * slopes[i]) / (slopes[i - 1] + slopes[i]);
+  });
+  return frequencies.map((hz) => {
+    const at = Math.log2(hz);
+    if (n < 2 || at < x[0] || at > x[n - 1]) return NaN;
+    let i = 0;
+    while (i < n - 2 && at > x[i + 1]) i++;
+    const h = x[i + 1] - x[i];
+    const t = (at - x[i]) / h;
+    const t2 = t * t, t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * y[i] + (t3 - 2 * t2 + t) * h * tangents[i] + (-2 * t3 + 3 * t2) * y[i + 1] + (t3 - t2) * h * tangents[i + 1];
+  });
+}
+
+/** Moves a line so that its middle sits on 0 dB, which lets spectra of mixes of any loudness be compared by shape. */
+function linedUp(line: Float64Array, frequencies: Float64Array): Float64Array {
+  let sum = 0;
+  let count = 0;
+  frequencies.forEach((hz, i) => {
+    if (hz >= LINE_UP_HZ[0] && hz <= LINE_UP_HZ[1] && Number.isFinite(line[i])) {
+      sum += line[i];
+      count++;
+    }
+  });
+  return count ? line.map((db) => db - sum / count) : line;
+}
+
+/**
+ * An EQ's response from 20 Hz to 20 kHz, on a scale even in pitch, with the
+ * flat line through the middle; behind it, the spectra of `backdrop`, lined
+ * up on that line, at half the scale.
+ */
+export function drawEq(canvas: HTMLCanvasElement, eq: Eq, backdrop: EqBackdrop = {}) {
+  const { ctx, width, height } = fit(canvas);
+  if (width === 0) return;
+  const xOf = (hz: number) => (Math.log(hz / 20) / Math.log(1000)) * width;
+  const yOf = (db: number) => height / 2 - (Math.max(-EQ_SHOWN_DB, Math.min(EQ_SHOWN_DB, db)) / EQ_SHOWN_DB) * (height / 2 - 1);
+  const ySpectrum = (db: number) => yOf((db * EQ_SHOWN_DB) / SPECTRUM_SHOWN_DB);
+  const small = '9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.strokeStyle = colours.grid;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = colours.text;
+  ctx.textAlign = 'left';
+  ctx.font = small;
+  for (const [hz, label] of [[100, '100'], [1000, '1k'], [10000, '10k']] as const) {
+    const x = Math.round(xOf(hz)) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+    ctx.fillText(label, x + 3, height - 6);
+  }
+  for (const db of [-EQ_MOST_DB, EQ_MOST_DB]) {
+    const y = Math.round(yOf(db)) + 0.5;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // At the left, below 100 Hz, where nothing else is written.
+  ctx.fillText(`+${EQ_MOST_DB} dB`, 2, yOf(EQ_MOST_DB) - 6);
+  ctx.fillText(`−${EQ_MOST_DB} dB`, 2, yOf(-EQ_MOST_DB) + 6);
+  const zero = Math.round(yOf(0)) + 0.5;
+  ctx.strokeStyle = colours.before;
+  ctx.beginPath();
+  ctx.moveTo(0, zero);
+  ctx.lineTo(width, zero);
+  ctx.stroke();
+
+  const columns = Math.max(2, Math.round(width));
+  const frequencies = Float64Array.from({ length: columns }, (_, i) => 20 * Math.pow(1000, i / (columns - 1)));
+  const xAt = (i: number) => (i / (columns - 1)) * width;
+  /** A line along the columns, broken where it is unknown. */
+  const trace = (line: Float64Array) => {
+    ctx.beginPath();
+    let drawing = false;
+    line.forEach((db, i) => {
+      if (!Number.isFinite(db)) {
+        drawing = false;
+        return;
+      }
+      if (drawing) ctx.lineTo(xAt(i), ySpectrum(db));
+      else ctx.moveTo(xAt(i), ySpectrum(db));
+      drawing = true;
+    });
+  };
+
+  const legend: [string, string][] = [];
+  const live = backdrop.live?.(frequencies);
+  if (live) {
+    const line = linedUp(live, frequencies);
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    line.forEach((db, i) => ctx.lineTo(xAt(i), ySpectrum(db)));
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${colours.bassTint}, 0.12)`;
+    ctx.fill();
+    trace(line);
+    ctx.strokeStyle = `rgba(${colours.bassTint}, 0.7)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    legend.push(['playing', colours.bass]);
+  }
+  if (backdrop.others) {
+    trace(linedUp(through(backdrop.others, frequencies), frequencies));
+    ctx.strokeStyle = colours.gain;
+    ctx.lineWidth = 1.25;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    legend.push(['other mixes', colours.gain]);
+  }
+  if (backdrop.mix) {
+    trace(linedUp(through(backdrop.mix, frequencies), frequencies));
+    ctx.strokeStyle = colours.label;
+    ctx.lineWidth = 1.25;
+    ctx.stroke();
+    legend.push(['this mix', colours.label]);
+  }
+
+  const response = eqResponseDb(eq, frequencies);
+  ctx.beginPath();
+  ctx.moveTo(0, zero);
+  response.forEach((db, i) => ctx.lineTo(xAt(i), yOf(db)));
+  ctx.lineTo(width, zero);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(${colours.mixTint}, 0.18)`;
+  ctx.fill();
+  ctx.beginPath();
+  response.forEach((db, i) => ctx.lineTo(xAt(i), yOf(db)));
+  ctx.strokeStyle = colours.after;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // What each line is, along the top right, the last-drawn on the right.
+  ctx.font = small;
+  ctx.textAlign = 'right';
+  let right = width - 2;
+  for (const [label, colour] of [['EQ', colours.after] as [string, string], ...legend.reverse()]) {
+    ctx.fillStyle = colour;
+    ctx.fillText(label, right, 7);
+    right -= ctx.measureText(label).width + 8;
+  }
 }

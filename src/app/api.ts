@@ -1,5 +1,6 @@
 import type { MediaFile, Template } from '../visuals/template.ts';
 import type { ChannelMix } from '../channels.ts';
+import type { Eq } from '../eq.ts';
 import type { Shape } from '../visuals/shape.ts';
 import type { EncodeOptions, VideoInfo } from '../audio-io.ts';
 
@@ -25,6 +26,8 @@ export interface RenderRequest {
   ceilingDb: number | null;
   /** A fix for the recording's channels, applied before anything else. */
   channels?: ChannelMix;
+  /** The mix's corrective EQ, applied after the channel fix. */
+  eq?: Eq;
   /** For an MP4: the picture to go with the sound. */
   video?: VideoRequest;
   /**

@@ -3,12 +3,22 @@
 
 export const HOP_SECONDS = 0.1;
 /** Bump whenever a recording would measure differently, so that stored analyses are redone. */
-export const ANALYSIS_VERSION = 3;
+export const ANALYSIS_VERSION = 4;
 /** Loudness reported for digital silence. */
 export const SILENCE_LUFS = -120;
 
-interface Biquad {
+/** A second-order filter, normalised so that a0 is 1. */
+export interface Biquad {
   b0: number; b1: number; b2: number; a1: number; a2: number;
+}
+
+/** How much a filter multiplies the power of a tone at `hz`. */
+export function biquadPower(f: Biquad, hz: number, sampleRate: number): number {
+  const w = (2 * Math.PI * hz) / sampleRate;
+  const c1 = Math.cos(w), s1 = Math.sin(w), c2 = Math.cos(2 * w), s2 = Math.sin(2 * w);
+  const nr = f.b0 + f.b1 * c1 + f.b2 * c2, ni = -(f.b1 * s1 + f.b2 * s2);
+  const dr = 1 + f.a1 * c1 + f.a2 * c2, di = -(f.a1 * s1 + f.a2 * s2);
+  return (nr * nr + ni * ni) / (dr * dr + di * di);
 }
 
 /** The two K-weighting stages (high shelf, then high-pass) for any sample rate. */
@@ -37,6 +47,18 @@ function kWeighting(sampleRate: number): [Biquad, Biquad] {
     a2: (1 - hpK / hpQ + hpK * hpK) / hpA0,
   };
   return [shelf, highpass];
+}
+
+/** How much the K-weighting multiplies the power of a tone at `hz`. */
+export function kWeightingPower(hz: number, sampleRate: number): number {
+  const [shelf, highpass] = kWeighting(sampleRate);
+  return biquadPower(shelf, hz, sampleRate) * biquadPower(highpass, hz, sampleRate);
+}
+
+/** How much of the power of a tone at `hz` the low band takes in. */
+export function lowBandPower(hz: number, sampleRate: number): number {
+  const [stage] = lowBand(sampleRate);
+  return biquadPower(stage, hz, sampleRate) ** 2;
 }
 
 /** Bass and kick region used to compare the low-end weight of tracks. */

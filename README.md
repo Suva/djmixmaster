@@ -64,6 +64,9 @@ installed for you. Turn the check off in Settings.
 - **Optional bass correction.** Kick and bass can be levelled separately from
   everything above them with a slowly moving low-shelf EQ, so the low end stays
   consistent without dragging the mids and highs along.
+- **A corrective EQ per mix**, for a phono stage that sounds dull or harsh, a
+  PA mixer's EQ or turntable rumble: a rumble filter and four broad bands,
+  applied before the levelling, which measures the mix as it sounds with it.
 - **Leaves headroom by default.** With no target set, the result is made as
   loud as fits under the ceiling without leaning on the limiter. A higher
   target pushes into the limiter for more level.

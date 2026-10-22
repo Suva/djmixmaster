@@ -6,6 +6,19 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **A corrective EQ for each mix.** The settings have a new EQ section: a
+  rumble filter, and bass, low mids, high mids and treble, each up or down by
+  as much as 6 dB at a frequency you choose, with a drawing of what they add
+  up to. It is for putting right how a mix was recorded, such as a turntable's
+  phono stage that sounds dull or harsh, or a PA mixer's EQ, and it is heard
+  before the levelling, which measures the mix as the EQ makes it sound. Each
+  mix has its own, as one DJ of a night may have played records and the next
+  CDJs; Copy to gives it to another mix, or to all of them. Behind the EQ's
+  curve are this mix's average spectrum, the other mixes' and an analyser of
+  what is playing, so a set that sounds unlike the rest of the night can be
+  brought in line with it by eye as well as by ear. Recordings are
+  analysed again once, the first time they are opened, which takes a little
+  longer than before.
 - **A light look.** Settings has a new Appearance choice, Dark or Light. The
   app stays dark unless you choose Light, whatever your system is set to; Light
   is for when the screen is hard to see in bright daylight. The curves, the

@@ -12,6 +12,7 @@ import { after, before, test } from 'node:test';
 import { ffmpeg, probe } from '../src/audio-io.ts';
 import { HOP_SECONDS } from '../src/loudness.ts';
 import { measure } from '../src/master.ts';
+import { eqFilters, eqPower, FLAT_EQ } from '../src/eq.ts';
 import { TRACK_LEVELS_DB, TRACK_SECONDS, writeSyntheticMix } from './synthetic-mix.ts';
 import { dataFolder, electronPath, keepPicture, runApp, workFolder } from './window-app.ts';
 import { readZip, readZipEntry } from '../src/app/zip.ts';
@@ -2368,6 +2369,96 @@ test('a recording\'s channels put right from the check-up: heard, levelled, expo
   // Kept with the recording.
   const again = await runApp({ recording: faulty, data }, () => [...document.querySelectorAll('#checkup-findings .finding.fixed')].length);
   assert.equal(again, 2);
+});
+
+test('an EQ belongs to one mix: heard as the export applies it, copied, undone, exported and kept', { skip }, async () => {
+  const out = join(work, 'equalised');
+  await mkdir(out);
+  const data = await fresh();
+  // The EQ the window is given: the treble up 6 dB from 2 kHz, as the sliders will set it, and a rumble filter.
+  const eq = { ...FLAT_EQ, highDb: 6, highHz: 2000, highPassHz: 30 };
+  const frequencies = [30, 60, 120, 400, 1200, 3000, 6000, 12000];
+  const given = { filters: eqFilters(eq), frequencies };
+  const seen = await runApp({ recording: night, data, exportFolder: out, timeoutMs: 150_000, given }, async (page, given) => {
+    await page.until(() => !page.element<HTMLButtonElement>('split-gaps').disabled, 'Split at gaps to be offered');
+    page.click('split-gaps');
+    await page.saved();
+    const tab = async (i: number) => {
+      document.querySelectorAll<HTMLElement>('.mix-tab')[i].click();
+      await page.wait(100);
+    };
+    await tab(0);
+    const before = page.text('stat-in');
+    page.slide('eq-high', 6);
+    page.slide('eq-high-hz', 0);
+    page.slide('eq-high-pass', 30);
+    await page.saved();
+    const first = { readout: page.text('eq-high-value'), loudness: page.text('stat-in') };
+    await tab(1);
+    const second = { readout: page.text('eq-high-value'), flat: page.element<HTMLButtonElement>('eq-flat').disabled };
+    // Copied over, and taken back.
+    await tab(0);
+    await page.saved();
+    page.choose('eq-copy', '1');
+    await page.saved();
+    const copied = page.text('readout');
+    await tab(1);
+    const secondCopied = page.text('eq-high-value');
+    page.click('undo');
+    await page.wait(200);
+    await tab(1);
+    const secondUndone = page.text('eq-high-value');
+    await page.saved();
+
+    // What the preview's filters do, by Web Audio's own reckoning.
+    const context = new OfflineAudioContext(2, 128, 44100);
+    const at = Float32Array.from(given.frequencies);
+    const heardDb = given.frequencies.map(() => 0);
+    for (const filter of given.filters) {
+      const magnitude = new Float32Array(at.length);
+      new BiquadFilterNode(context, filter).getFrequencyResponse(at, magnitude, new Float32Array(at.length));
+      magnitude.forEach((m, i) => (heardDb[i] += 20 * Math.log10(m)));
+    }
+
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=wav]')!.click();
+    page.click('export-go');
+    await page.until(() => page.text('export-status').startsWith('Exported'), 'the export to finish', 120_000);
+    return { before, first, second, copied, secondCopied, secondUndone, heardDb };
+  });
+  assert.equal(seen.first.readout, '+6.0 dB above 2 kHz');
+  assert.notEqual(seen.first.loudness, seen.before, 'the loudness is measured as the EQ makes it sound');
+  assert.deepEqual(seen.second, { readout: '0 dB above 8 kHz', flat: true });
+  assert.match(seen.copied, /now has this EQ too/);
+  assert.equal(seen.secondCopied, '+6.0 dB above 2 kHz');
+  assert.equal(seen.secondUndone, '0 dB above 8 kHz');
+  // The preview's filters and the export's are the same filters.
+  frequencies.forEach((hz, i) => {
+    const exported = 10 * Math.log10(eqPower(eq, hz, 44100));
+    assert.ok(Math.abs(seen.heardDb[i] - exported) < 0.05, `${hz} Hz: heard ${seen.heardDb[i].toFixed(2)} dB, exported ${exported.toFixed(2)} dB`);
+  });
+
+  // The two sets are the same music: only the first comes out brighter.
+  const files = (await readdir(out)).sort();
+  assert.equal(files.length, 2);
+  const brightness = (file: string) => {
+    const level = (filter: string) => {
+      const report = spawnSync(ffmpeg(), ['-hide_banner', '-nostats', '-i', join(out, file), '-af', `${filter}astats=measure_perchannel=none:measure_overall=RMS_level`, '-f', 'null', '-'], { encoding: 'utf8' }).stderr;
+      return Number(report.match(/RMS level dB: (-?[\d.]+)/)![1]);
+    };
+    return level('highpass=f=5000:poles=2,highpass=f=5000:poles=2,') - level('');
+  };
+  const brighter = brightness(files[0]) - brightness(files[1]);
+  assert.ok(brighter > 4 && brighter < 8, `the first set's treble is ${brighter.toFixed(1)} dB up on the rest of it`);
+
+  // Kept with the mix.
+  const again = await runApp({ recording: night, data }, async (page) => {
+    document.querySelectorAll<HTMLElement>('.mix-tab')[0].click();
+    await page.wait(100);
+    return page.text('eq-high-value');
+  });
+  assert.equal(again, '+6.0 dB above 2 kHz');
 });
 
 test('a silent channel is filled from the other, and the recording measures 3 dB louder for it', { skip }, async () => {

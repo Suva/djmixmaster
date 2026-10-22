@@ -274,6 +274,63 @@
       </div>
       </div>
 
+      <h2>EQ</h2>
+      <div class="control">
+        <canvas id="eq-curve" role="img" aria-label="How the EQ changes the sound, from 20 Hz to 20 kHz, over the spectrum of this mix, of the other mixes and of what is playing"></canvas>
+        <p class="note">Puts right how this mix was recorded, before it is levelled: a turntable's phono stage that sounds dull or harsh, or a PA mixer's EQ. Each mix has its own. Behind it are this mix's average spectrum, the other mixes' and what is playing, so a set that sounds unlike the rest of the night can be brought in line.</p>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="eq-high-pass">Rumble filter</label>
+          <output id="eq-high-pass-value"></output>
+        </div>
+        <input id="eq-high-pass" type="range" min="0" max="60" step="5" title="Takes out what lies below this: rumble from a turntable, wind, a microphone being handled">
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="eq-low">Bass</label>
+          <output id="eq-low-value"></output>
+        </div>
+        <div class="eq-pair">
+          <input id="eq-low" type="range" min="-6" max="6" step="0.5" title="How much the bass is raised or lowered">
+          <input id="eq-low-hz" type="range" min="0" max="1" step="0.01" title="Where the bass ends: moving it right takes in more of the low notes" aria-label="Bass: frequency">
+        </div>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="eq-low-mid">Low mids</label>
+          <output id="eq-low-mid-value"></output>
+        </div>
+        <div class="eq-pair">
+          <input id="eq-low-mid" type="range" min="-6" max="6" step="0.5" title="How much the low middle is raised or lowered, where a mix sounds full or muddy">
+          <input id="eq-low-mid-hz" type="range" min="0" max="1" step="0.01" title="Where the low middle is centred" aria-label="Low mids: frequency">
+        </div>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="eq-high-mid">High mids</label>
+          <output id="eq-high-mid-value"></output>
+        </div>
+        <div class="eq-pair">
+          <input id="eq-high-mid" type="range" min="-6" max="6" step="0.5" title="How much the upper middle is raised or lowered, where a mix sounds present or harsh">
+          <input id="eq-high-mid-hz" type="range" min="0" max="1" step="0.01" title="Where the upper middle is centred" aria-label="High mids: frequency">
+        </div>
+      </div>
+      <div class="control">
+        <div class="control-head">
+          <label for="eq-high">Treble</label>
+          <output id="eq-high-value"></output>
+        </div>
+        <div class="eq-pair">
+          <input id="eq-high" type="range" min="-6" max="6" step="0.5" title="How much the treble is raised or lowered">
+          <input id="eq-high-hz" type="range" min="0" max="1" step="0.01" title="Where the treble starts: moving it right leaves more of the upper middle alone" aria-label="Treble: frequency">
+        </div>
+      </div>
+      <div class="settings-buttons">
+        <button id="eq-flat" title="Take this mix's EQ off">Flat</button>
+        <select id="eq-copy" title="Give another mix the same EQ as this one" aria-label="Copy this EQ to another mix"></select>
+      </div>
+
       <h2>Limiter</h2>
       <div class="control">
         <div class="control-head">
@@ -292,8 +349,8 @@
         <dt>Adjustments</dt><dd id="stat-adjustments">none</dd>
       </dl>
       <div class="settings-buttons">
-        <button id="reset" title="Put this mix's settings back to the defaults">Reset settings</button>
-        <button id="apply-all" title="Give every other mix in this recording the same settings as this one. Fades and hand adjustments stay as they are." disabled>Apply to all mixes</button>
+        <button id="reset" title="Put this mix's levelling and limiter back to the defaults. The EQ stays as it is.">Reset settings</button>
+        <button id="apply-all" title="Give every other mix in this recording the same levelling and limiter as this one. Their EQs, fades and hand adjustments stay as they are." disabled>Apply to all mixes</button>
       </div>
       </div>
     </aside>

@@ -26,6 +26,7 @@ async function run(job: Job): Promise<unknown> {
     fadeInSeconds: job.fadeInSeconds,
     fadeOutSeconds: job.fadeOutSeconds,
     channels: job.channels,
+    eq: job.eq,
   }, progress);
 }
 

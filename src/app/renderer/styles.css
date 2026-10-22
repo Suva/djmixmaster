@@ -477,6 +477,10 @@ h2 {
 #stats dt { color: var(--muted); }
 #stats dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+#eq-curve { display: block; width: 100%; height: 120px; margin-bottom: 4px; }
+.eq-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.eq-pair input { min-width: 0; }
+#eq-copy { flex: 1; min-width: 0; }
 #stats dd a { color: var(--accent); cursor: pointer; text-decoration: underline; }
 
 /* Choosing a font for a video: the font in use, and a list to search, each name in its own face. */

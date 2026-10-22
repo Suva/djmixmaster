@@ -8,6 +8,8 @@ import type { LoudnessCurves } from './level.ts';
 import { Limiter } from './limiter.ts';
 import { fadeGain } from './fade.ts';
 import { LowShelf } from './shelf.ts';
+import { BandMeter } from './bands.ts';
+import { EqFilter, isFlat, type Eq } from './eq.ts';
 import { BlockEnergyMeter, HOP_SECONDS, integratedLoudness, shortTermLoudness } from './loudness.ts';
 
 /** How often the bass shelf is re-tuned while rendering. */
@@ -34,6 +36,8 @@ export interface Examination extends Measurement {
   source: SourceInfo;
   /** For a recording that came in several files: how many frames each one holds. */
   partFrames?: number[];
+  /** How the energy divides over the spectrum, for working out what an EQ does (see bands.ts). */
+  bands: Float32Array;
 }
 
 export interface RenderOptions {
@@ -53,6 +57,8 @@ export interface RenderOptions {
   fadeOutSeconds?: number;
   /** A fix for the recording's channels (see channels.ts), applied before anything else. */
   channels?: ChannelMix;
+  /** The mix's corrective EQ, applied after the channel fix and before the levelling. */
+  eq?: Eq;
 }
 
 export interface RenderResult extends Measurement {
@@ -87,6 +93,7 @@ export async function measure(input: string, region: Region = {}, onProgress?: P
   const { info, sampleRate, totalFrames } = await regionFrames(input, region);
   const meter = new BlockEnergyMeter(sampleRate, CHANNELS);
   const examiner = new RecordingExaminer(sampleRate);
+  const bands = new BandMeter(sampleRate);
   let frames = 0;
   // A whole recording in parts is read part by part, counting each.
   const whole = region.start === undefined && region.end === undefined;
@@ -95,12 +102,14 @@ export async function measure(input: string, region: Region = {}, onProgress?: P
   for await (const chunk of source) {
     meter.push(chunk);
     examiner.push(chunk);
+    bands.push(chunk);
     frames += chunk.length / CHANNELS;
     onProgress?.(Math.min(1, frames / totalFrames));
   }
   return {
     ...measurement(sampleRate, meter),
     diagnostics: examiner.finish(),
+    bands: bands.bands(),
     source: {
       codec: info.codec,
       channels: info.channels,
@@ -129,6 +138,7 @@ export async function render(
   // The shelf is left out entirely when there is nothing for it to do.
   const bassDb = options.bassDb?.some((db) => db !== 0) ? options.bassDb : null;
   const shelf = bassDb ? new LowShelf(sampleRate, CHANNELS) : null;
+  const eq = options.eq && !isFlat(options.eq) ? new EqFilter(options.eq, sampleRate, CHANNELS) : null;
   // Block positions, with each curve value sitting at the centre of its block.
   const blockAt = (atFrame: number) => Math.min(lastBlock, Math.max(0, (atFrame + 0.5) / hopFrames - 0.5));
 
@@ -166,6 +176,8 @@ export async function render(
     const frames = chunk.length / CHANNELS;
     // The recording put right first: everything after works on what it should have been.
     if (options.channels) mixChannels(chunk, options.channels);
+    // Then how it sounds, as the levelling's measurements of it have been adjusted for.
+    eq?.process(chunk);
     if (shelf && bassDb) {
       // The shelf moves far too slowly to need per-sample updates.
       for (let from = 0; from < frames; from += SHELF_STEP_FRAMES) {
