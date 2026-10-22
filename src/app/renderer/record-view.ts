@@ -260,6 +260,9 @@ export class RecordView {
       : '–';
     const lowOnRoom = recording && status.secondsLeft !== null && status.secondsLeft < 3600;
     this.#problem(status.problem ?? (lowOnRoom ? `Less than an hour of room is left on the drive: ${roughly(status.secondsLeft!)}.` : undefined));
+    if (recording && !status.live) {
+      this.#problem('This recording was started before the app was last closed, and has gone on since. Its level cannot be shown; Stop ends it as usual.');
+    }
     $('record-interrupted').hidden = status.state !== 'interrupted';
     if (status.state === 'interrupted') {
       const parts = status.files?.length ?? 0;
@@ -273,8 +276,8 @@ export class RecordView {
     this.#showGo();
     this.#showSettings();
     if (this.#visible) this.#drawMeter();
-    // Found as the app starts: one a crash cut short is shown straight away.
-    if (!this.#visible && status.state === 'interrupted') this.#reveal();
+    // Found as the app starts: one still going after the app was closed, or one a crash cut short, is shown straight away.
+    if (!this.#visible && (status.state === 'interrupted' || (was === undefined && recording && !status.live))) this.#reveal();
     // Stopped from here: once the recording has been handed over to be opened, Mastering shows it.
     if (this.#stopping && (was === 'stopping' || was === 'interrupted') && (status.state === 'idle' || status.state === 'monitoring')) {
       this.#stopping = false;

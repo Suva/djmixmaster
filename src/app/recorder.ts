@@ -1,9 +1,16 @@
-// Runs the Record view's input and its recordings. The input is captured in a
-// hidden page (capture.ts) as soon as a device is chosen, so that its level
-// can be set before anything is written: that is monitoring. Recording hands
-// the same samples to an ffmpeg process that writes the parts (see
-// recording.ts). A lock file says a recording is being made, so that the next
-// start of the app finds one a crash cut short.
+// Runs the Record view's input and its recordings. The input is opened as soon
+// as a device is chosen, so that its level can be set before anything is
+// written: that is monitoring. Recording sends the same sound to an ffmpeg
+// process that writes the parts (see recording.ts). A lock file says a
+// recording is being made, so that the next start of the app finds it.
+//
+// An input is captured in one of two ways. The capture helper
+// (native/capture/capture.c) takes any two of a device's channels, and while
+// recording its output goes straight into the writing ffmpeg, both detached,
+// so that the recording carries on if the app goes down; only its level comes
+// here. Where there is no helper, or it cannot open a device, Chromium
+// captures it in a hidden page (capture.ts) and sends the samples here, to be
+// handed on to ffmpeg: two channels at most, and ended with the app.
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { closeSync, openSync } from 'node:fs';
@@ -12,7 +19,7 @@ import { join } from 'node:path';
 import { ffmpeg, probe } from '../audio-io.ts';
 import {
   bytesPerSecond, isPartOf, measureStereo, packArgs, PART_SECONDS, repairWav, stereoOf, wavFinished, writerArgs,
-  type Levels, type RecordInput, type RecordPlan,
+  type Levels, type RecordDevice, type RecordInput, type RecordPlan,
 } from './recording.ts';
 
 export interface RecordStatus {
@@ -34,6 +41,8 @@ export interface RecordStatus {
   /** Room left on the drive, and how long that lasts at this rate; null where it cannot be told. */
   freeBytes: number | null;
   secondsLeft: number | null;
+  /** Whether the level comes in: not for a recording picked up after the app was closed, which sends it to no one. */
+  live: boolean;
   /** Whether the parts are being packed into FLAC, after the recording has stopped. */
   packing?: boolean;
   /** Something to know about: no sound coming in, or why the recording stopped. */
@@ -42,15 +51,18 @@ export interface RecordStatus {
   files?: string[];
 }
 
-/** What opens an input and closes it again: the hidden capture page. */
+/** Chromium's capture, in the hidden page: the fallback. */
 export interface Capture {
+  list(): Promise<RecordDevice[]>;
   start(device: string): Promise<RecordInput>;
   stop(): Promise<void>;
 }
 
 /** What a recording's lock file says. */
 interface Lock {
+  /** The ffmpeg writing the parts, and the helper capturing for it, if it is one. */
   pid: number;
+  helperPid?: number;
   plan: RecordPlan;
   input: RecordInput;
   started: number;
@@ -62,6 +74,8 @@ const LEVELS_EVERY_MS = 100;
 const STATUS_EVERY_MS = 1000;
 /** An input that sends no sound for this long has stopped working. */
 const SILENT_INPUT_MS = 3000;
+/** How long the helper has to open a device before it is given up on. */
+const OPEN_TIMEOUT_MS = 10_000;
 
 const alive = (pid: number) => {
   try {
@@ -71,6 +85,9 @@ const alive = (pid: number) => {
     return false;
   }
 };
+
+const ended = (child: ChildProcess) =>
+  child.exitCode !== null || child.signalCode !== null ? Promise.resolve() : new Promise<void>((done) => child.once('exit', () => done()));
 
 /** Runs ffmpeg to its end. */
 function run(args: string[], timeoutMs: number): Promise<void> {
@@ -85,23 +102,48 @@ function run(args: string[], timeoutMs: number): Promise<void> {
   });
 }
 
-const IDLE: RecordStatus = { state: 'idle', seconds: 0, bytes: 0, parts: 0, freeBytes: null, secondsLeft: null };
+/** A device the helper can open: its id for it, and how many channels it has. */
+interface HelperDevice {
+  id: string;
+  channels: number;
+}
+
+/** A helper at work: monitoring, or recording into the writing ffmpeg. */
+interface Helper {
+  child: ChildProcess;
+  input: RecordInput;
+  /** What it said last went wrong, for when it ends. */
+  said?: string;
+}
+
+const IDLE: RecordStatus = { state: 'idle', seconds: 0, bytes: 0, parts: 0, freeBytes: null, secondsLeft: null, live: false };
 
 export class Recorder {
   readonly #lockFile: string;
   readonly #logFile: string;
   readonly #partSeconds: number;
   readonly #capture: Capture;
+  /** The capture helper's program, or null where there is none. */
+  readonly #helperPath: string | null;
+  /** In check mode: the helper's test interface only, so that no real input is opened. */
+  readonly #testing: boolean;
   readonly #send: (channel: 'record-status' | 'record-levels', value: unknown) => void;
   readonly #awake: { start(): number; stop(id: number): void };
 
   #status: RecordStatus = IDLE;
-  /** The input open, and which two of its channels are left and right. */
+  /** The devices the helper listed, by name. */
+  #helperDevices = new Map<string, HelperDevice>();
+  /** The input open, how, and which two of its channels are left and right. */
   #device: string | null = null;
   #input: RecordInput | null = null;
+  #via: 'helper' | 'chromium' | null = null;
   #channels: [number, number] = [0, 1];
+  #monitor: Helper | null = null;
+  #recordHelper: Helper | null = null;
   #lock: Lock | null = null;
   #writer: ChildProcess | null = null;
+  /** For a recording picked up after a restart: nothing of it is ours but its process ids. */
+  #adopted = false;
   #frames = 0;
   #gathered: Levels = { peak: [0, 0], meanSquare: [0, 0], frames: 0 };
   #lastSound = 0;
@@ -115,6 +157,8 @@ export class Recorder {
     folder: string;
     partSeconds?: number;
     capture: Capture;
+    helper: string | null;
+    testing: boolean;
     send: (channel: 'record-status' | 'record-levels', value: unknown) => void;
     awake: { start(): number; stop(id: number): void };
   }) {
@@ -122,6 +166,8 @@ export class Recorder {
     this.#logFile = join(options.folder, 'recording.log');
     this.#partSeconds = options.partSeconds ?? PART_SECONDS;
     this.#capture = options.capture;
+    this.#helperPath = options.helper;
+    this.#testing = options.testing;
     this.#send = options.send;
     this.#awake = options.awake;
   }
@@ -134,52 +180,97 @@ export class Recorder {
     return this.#status.state === 'recording' || this.#status.state === 'stopping';
   }
 
+  /**
+   * The devices to record from: the helper's, with all their channels, or
+   * Chromium's where there is no helper or it cannot list them. In check mode,
+   * the test signals of both.
+   */
+  async devices(): Promise<RecordDevice[]> {
+    const listed = await this.#helperList();
+    this.#helperDevices = new Map(listed.map((device) => [device.name, device]));
+    const chromium = listed.length === 0 || this.#testing ? await this.#capture.list() : [];
+    return [...listed.map(({ name, channels }) => ({ name, channels })), ...chromium.filter((device) => !this.#helperDevices.has(device.name))];
+  }
+
+  async #helperList(): Promise<(HelperDevice & { name: string })[]> {
+    if (!this.#helperPath) return [];
+    const printed = await new Promise<string>((done) => {
+      const child = spawn(this.#helperPath!, ['list', ...(this.#testing ? ['--test'] : [])], { stdio: ['ignore', 'pipe', 'ignore'] });
+      let out = '';
+      child.stdout.on('data', (chunk) => (out += chunk));
+      child.on('close', () => done(out));
+      child.on('error', () => done(''));
+    });
+    try {
+      const devices = JSON.parse(printed) as { id: string; name: string; channels: number }[];
+      // In check mode nothing real is opened, unless asked for by DJMASTER_REAL_INPUTS (main.ts).
+      return devices.filter((device) => !this.#testing || device.id === 'test' || process.env.DJMASTER_REAL_INPUTS);
+    } catch {
+      return [];
+    }
+  }
+
   /** Opens an input for its level, closing the one open before; null closes it. Not while recording. */
   async monitor(device: string | null): Promise<RecordStatus> {
     if (this.recording) throw new Error('A recording is running.');
     if (device === this.#device && this.#input) return this.#status;
-    await this.#capture.stop();
-    this.#device = null;
-    this.#input = null;
-    this.#stopTimers();
-    if (!device) return this.#set(this.#status.state === 'interrupted' ? { ...this.#status, device: undefined, input: undefined } : { ...IDLE });
+    await this.#closeInput();
+    const keep = this.#status.state === 'interrupted' ? this.#status : null;
+    if (!device) return this.#set(keep ? { ...keep, device: undefined, input: undefined } : { ...IDLE });
     try {
-      this.#input = await this.#capture.start(device);
+      const helper = this.#helperDevices.get(device);
+      if (helper && this.#helperPath) {
+        try {
+          this.#monitor = await this.#openHelper(helper, this.#channels, false);
+          this.#input = this.#monitor.input;
+          this.#via = 'helper';
+        } catch (error) {
+          // A device the helper cannot open may still be one Chromium can, as far as its first two channels.
+          const chromium = (await this.#capture.list().catch(() => [])).find((d) => d.name.startsWith(device));
+          if (!chromium) throw error;
+          this.#input = await this.#capture.start(chromium.name);
+          this.#via = 'chromium';
+        }
+      } else {
+        this.#input = await this.#capture.start(device);
+        this.#via = 'chromium';
+      }
     } catch (error) {
-      this.#set({ ...IDLE });
+      this.#set(keep ?? { ...IDLE });
       throw error;
     }
     this.#device = device;
     this.#lastSound = Date.now();
-    this.#timers.push(setInterval(() => this.#sendLevels(), LEVELS_EVERY_MS));
-    this.#timers.push(setInterval(() => void this.#update(), STATUS_EVERY_MS));
+    this.#startTimers();
     // A recording a crash cut short is still offered while the input is listened to.
-    if (this.#status.state === 'interrupted') return this.#set({ ...this.#status, device, input: this.#input });
+    if (keep) return this.#set({ ...keep, device, input: this.#input });
     return this.#set({ ...IDLE, state: 'monitoring', device, input: this.#input });
   }
 
   /** Which two of the input's channels are heard, and recorded, as left and right. */
-  setChannels(channels: [number, number]) {
-    if (!this.recording) this.#channels = channels;
+  async setChannels(channels: [number, number]) {
+    if (this.recording || (channels[0] === this.#channels[0] && channels[1] === this.#channels[1])) return;
+    this.#channels = channels;
+    // The helper is told its channels as it starts: it is started again with these.
+    const helper = this.#device ? this.#helperDevices.get(this.#device) : undefined;
+    if (this.#via === 'helper' && helper) {
+      // Let go of first, so that its ending is not taken for the device going away.
+      const old = this.#monitor;
+      this.#monitor = null;
+      await this.#stopHelper(old);
+      this.#monitor = await this.#openHelper(helper, channels, false).catch(() => null);
+      if (!this.#monitor) void this.inputEnded(`“${this.#device}” could not be opened again.`);
+    }
   }
 
   /** What the capture page sends: the input's samples, its channels interleaved. */
   samples(samples: Float32Array) {
-    if (!this.#input) return;
+    if (!this.#input || this.#via !== 'chromium') return;
     const stereo = stereoOf(samples, this.#input.channels, this.#channels);
     const levels = measureStereo(stereo);
-    const g = this.#gathered;
-    const total = g.frames + levels.frames;
-    if (total === 0) return;
-    for (const c of [0, 1]) {
-      g.peak[c] = Math.max(g.peak[c], levels.peak[c]);
-      g.meanSquare[c] = (g.meanSquare[c] * g.frames + levels.meanSquare[c] * levels.frames) / total;
-    }
-    g.frames = total;
-    this.#lastSound = Date.now();
+    this.#addLevels(levels);
     if (this.#writer && this.#status.state === 'recording') {
       this.#writer.stdin!.write(Buffer.from(stereo.buffer, stereo.byteOffset, stereo.byteLength));
-      this.#frames += levels.frames;
     }
   }
 
@@ -187,12 +278,9 @@ export class Recorder {
   async inputEnded(reason: string) {
     const lock = this.#lock;
     const wasRecording = this.recording;
-    if (wasRecording) await this.#endWriter();
+    if (wasRecording) await this.#endRecording();
     const files = wasRecording && lock ? await this.#finish(lock) : [];
-    await this.#capture.stop();
-    this.#device = null;
-    this.#input = null;
-    this.#stopTimers();
+    await this.#closeInput();
     if (wasRecording) {
       this.#set({ ...IDLE, state: files.length ? 'interrupted' : 'idle', files, plan: lock?.plan, problem: `${reason} The recording stopped there; what was recorded until then is kept.` });
     } else {
@@ -202,30 +290,43 @@ export class Recorder {
 
   async start(plan: RecordPlan): Promise<RecordStatus> {
     if (this.recording) throw new Error('A recording is running already.');
-    this.#channels = plan.channels;
+    await this.setChannels(plan.channels);
     await this.monitor(plan.device);
-    const input = this.#input!;
     const taken = (await readdir(plan.folder).catch(() => [] as string[])).some((file) => isPartOf(file, plan));
     if (taken) throw new Error(`There is a recording called “${plan.name}” in that folder already.`);
+    let input = this.#input!;
     const log = openSync(this.#logFile, 'w');
-    let writer: ChildProcess;
     try {
-      writer = spawn(ffmpeg(), writerArgs(plan, input.sampleRate, this.#partSeconds), { stdio: ['pipe', 'ignore', log] });
+      if (this.#via === 'helper') {
+        // A helper of its own, whose sound goes to ffmpeg without passing through here, and outlives the app.
+        const monitor = this.#monitor;
+        this.#monitor = null;
+        await this.#stopHelper(monitor);
+        const helper = await this.#openHelper(this.#helperDevices.get(plan.device)!, plan.channels, true);
+        input = helper.input;
+        this.#recordHelper = helper;
+        this.#writer = spawn(ffmpeg(), writerArgs(plan, input.sampleRate, this.#partSeconds), { detached: true, stdio: [helper.child.stdout!, 'ignore', log] });
+        // Ours is not needed: were it kept open, the helper would not notice ffmpeg had gone.
+        helper.child.stdout!.destroy();
+      } else {
+        this.#writer = spawn(ffmpeg(), writerArgs(plan, input.sampleRate, this.#partSeconds), { stdio: ['pipe', 'ignore', log] });
+        this.#writer.stdin!.on('error', () => {});
+      }
     } finally {
       closeSync(log);
     }
-    writer.stdin!.on('error', () => {});
-    this.#writer = writer;
+    const writer = this.#writer;
     this.#frames = 0;
-    this.#lock = { pid: writer.pid!, plan, input, started: Date.now() };
+    this.#adopted = false;
+    this.#lock = { pid: writer.pid!, ...(this.#recordHelper ? { helperPid: this.#recordHelper.child.pid } : {}), plan, input, started: Date.now() };
     await writeFile(this.#lockFile, JSON.stringify(this.#lock));
     this.#awakeId = this.#awake.start();
     writer.on('exit', () => {
-      this.#writer = null;
-      // Ended without being asked to: the drive is full, or ffmpeg failed.
+      if (this.#writer === writer) this.#writer = null;
+      // Ended without being asked to: the drive is full, the input went away, or ffmpeg failed.
       if (this.#status.state === 'recording' && this.#lock) void this.#writerFailed(this.#lock);
     });
-    this.#set({ ...this.#status, state: 'recording', plan, problem: undefined });
+    this.#set({ ...this.#status, state: 'recording', plan, input, live: true, problem: undefined });
     void this.#update();
     return this.#status;
   }
@@ -235,9 +336,18 @@ export class Recorder {
     const lock = this.#lock;
     if (!lock || this.#status.state !== 'recording') return [];
     this.#set({ ...this.#status, state: 'stopping' });
-    await this.#endWriter();
+    await this.#endRecording();
     const files = await this.#finish(lock);
-    this.#set(this.#monitoring());
+    this.#adopted = false;
+    // The helper's own input, closed with the recording, is opened again for its level.
+    const device = this.#device;
+    if (device && this.#via === 'helper' && !this.#monitor) {
+      this.#input = null;
+      this.#device = null;
+      await this.monitor(device).catch(() => this.#set({ ...IDLE }));
+    } else {
+      this.#set(this.#monitoring());
+    }
     return files;
   }
 
@@ -247,18 +357,29 @@ export class Recorder {
   }
 
   /**
-   * At the start of the app: a recording the last run left. Its ffmpeg has
-   * ended with the app, as its stdin closed; should it still be going, it is
-   * ended. Its parts are put right and offered to be opened.
+   * At the start of the app: a recording the last run left. One the helper
+   * makes is still going, and is followed as far as it can be: its level
+   * went to the app that is gone. One whose ffmpeg has ended is put right
+   * and offered to be opened.
    */
   async adopt(): Promise<RecordStatus> {
     const lock = await readFile(this.#lockFile, 'utf8').then((text) => JSON.parse(text) as Lock, () => null);
     if (!lock || typeof lock.pid !== 'number' || !lock.plan) return this.#status;
-    if (alive(lock.pid)) {
-      try {
-        process.kill(lock.pid, 'SIGKILL');
-      } catch {
-        // Gone by now.
+    if (lock.helperPid && alive(lock.helperPid) && alive(lock.pid)) {
+      this.#lock = lock;
+      this.#adopted = true;
+      this.#device = lock.plan.device;
+      this.#awakeId = this.#awake.start();
+      this.#startTimers();
+      return this.#set({ ...IDLE, state: 'recording', plan: lock.plan, input: lock.input, live: false });
+    }
+    for (const pid of [lock.helperPid, lock.pid]) {
+      if (pid && alive(pid)) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Gone by now.
+        }
       }
     }
     const files = await this.#finish(lock);
@@ -272,7 +393,7 @@ export class Recorder {
 
   /** The status of the input open for its level, or of nothing open. */
   #monitoring(): RecordStatus {
-    return this.#input && this.#device ? { ...IDLE, state: 'monitoring', device: this.#device, input: this.#input } : { ...IDLE };
+    return this.#input && this.#device ? { ...IDLE, state: 'monitoring', device: this.#device, input: this.#input, live: true } : { ...IDLE };
   }
 
   #set(status: RecordStatus): RecordStatus {
@@ -281,25 +402,163 @@ export class Recorder {
     return status;
   }
 
-  /** Lets ffmpeg finish: its stdin closed, it writes out the part it is on. */
-  async #endWriter() {
-    const writer = this.#writer;
-    if (!writer) return;
-    const ended = new Promise((done) => writer.once('exit', done));
-    writer.stdin!.end();
-    const timer = setTimeout(() => writer.kill('SIGKILL'), 15_000);
-    await ended;
+  /**
+   * Starts the helper on a device: for its level only, or with its sound on
+   * stdout for the writing ffmpeg, detached so that it outlives the app. Waits
+   * until it says the device is open.
+   */
+  #openHelper(device: HelperDevice, channels: [number, number], output: boolean): Promise<Helper> {
+    const child = spawn(this.#helperPath!, ['record', '--device', device.id, '--channels', `${channels[0] + 1},${channels[1] + 1}`, ...(output ? [] : ['--no-output'])], {
+      detached: output,
+      stdio: ['pipe', output ? 'pipe' : 'ignore', 'pipe'],
+    });
+    child.stdin!.on('error', () => {});
+    return new Promise((done, fail) => {
+      const helper: Helper = { child, input: { channels: device.channels, sampleRate: 0 } };
+      let opened = false;
+      let rest = '';
+      const timer = setTimeout(() => {
+        if (opened) return;
+        child.kill();
+        fail(new Error('The input did not open.'));
+      }, OPEN_TIMEOUT_MS);
+      child.stderr!.on('data', (chunk) => {
+        rest += chunk;
+        const lines = rest.split('\n');
+        rest = lines.pop()!;
+        for (const line of lines) {
+          let said: { started?: { rate: number }; levels?: Levels; lost?: number; error?: string };
+          try {
+            said = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (said.started && !opened) {
+            opened = true;
+            clearTimeout(timer);
+            helper.input = { channels: device.channels, sampleRate: said.started.rate };
+            done(helper);
+          } else if (said.levels) {
+            this.#addLevels(said.levels);
+            if (this.#recordHelper === helper) this.#frames += said.levels.frames;
+          } else if (said.lost) {
+            this.#set({ ...this.#status, problem: `${said.lost} frames could not be kept: the drive could not keep up. The recording goes on.` });
+          } else if (said.error) {
+            helper.said = said.error;
+            if (!opened) {
+              clearTimeout(timer);
+              fail(new Error(said.error));
+            }
+          }
+        }
+      });
+      child.on('error', (error) => {
+        clearTimeout(timer);
+        if (!opened) fail(error);
+      });
+      child.on('exit', () => {
+        clearTimeout(timer);
+        if (!opened) fail(new Error(helper.said ?? 'The input could not be opened.'));
+        // A monitor that ends by itself has lost its device. A recording's helper ending ends its ffmpeg, seen to there.
+        else if (this.#monitor === helper) {
+          this.#monitor = null;
+          void this.inputEnded(helper.said ? `${helper.said}` : `“${this.#device}” went away.`);
+        }
+      });
+    });
+  }
+
+  /** Asks a helper to stop, and waits for it; one that will not is ended. */
+  async #stopHelper(helper: Helper | null) {
+    if (!helper) return;
+    const done = ended(helper.child);
+    helper.child.stdin!.write('q');
+    const timer = setTimeout(() => helper.child.kill('SIGKILL'), 5000);
+    await done;
     clearTimeout(timer);
   }
 
+  async #closeInput() {
+    const monitor = this.#monitor;
+    this.#monitor = null;
+    await this.#stopHelper(monitor);
+    if (this.#via === 'chromium') await this.#capture.stop();
+    this.#device = null;
+    this.#input = null;
+    this.#via = null;
+    this.#stopTimers();
+  }
+
+  /** Ends the writing: the helper asked to stop, or ffmpeg's stdin closed; either way ffmpeg finishes its part. */
+  async #endRecording() {
+    const lock = this.#lock;
+    const writer = this.#writer;
+    const helper = this.#recordHelper;
+    this.#recordHelper = null;
+    if (helper) {
+      await this.#stopHelper(helper);
+    } else if (this.#adopted && lock?.helperPid) {
+      // Picked up after a restart: its stdin is gone with the app before, so it is ended, and ffmpeg sees its input end.
+      for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
+        try {
+          process.kill(lock.helperPid, signal);
+        } catch {
+          break;
+        }
+        const until = Date.now() + 3000;
+        while (alive(lock.helperPid) && Date.now() < until) await new Promise((done) => setTimeout(done, 50));
+        if (!alive(lock.helperPid)) break;
+      }
+    } else if (writer) {
+      writer.stdin?.end();
+    }
+    if (writer) {
+      const timer = setTimeout(() => writer.kill('SIGKILL'), 15_000);
+      await ended(writer);
+      clearTimeout(timer);
+    } else if (lock && alive(lock.pid)) {
+      const until = Date.now() + 15_000;
+      while (alive(lock.pid) && Date.now() < until) await new Promise((done) => setTimeout(done, 50));
+      if (alive(lock.pid)) process.kill(lock.pid, 'SIGKILL');
+    }
+    this.#writer = null;
+  }
+
   async #writerFailed(lock: Lock) {
-    const log = await readFile(this.#logFile, 'utf8').catch(() => '');
-    const said = log.split('\n').map((line) => line.trim()).filter(Boolean).at(-1);
+    const said = this.#recordHelper?.said ?? (await readFile(this.#logFile, 'utf8').catch(() => '')).split('\n').map((line) => line.trim()).filter(Boolean).at(-1);
+    await this.#stopHelper(this.#recordHelper);
+    this.#recordHelper = null;
     const files = await this.#finish(lock);
+    const device = this.#device;
+    // The input of a helper's recording went with it; it is listened to again if it is still there.
+    if (this.#via === 'helper' && device) {
+      this.#input = null;
+      this.#device = null;
+      await this.monitor(device).catch(() => {});
+    }
     this.#set({
       ...this.#monitoring(), ...(files.length ? { state: 'interrupted' as const, files, plan: lock.plan } : {}),
       problem: `The recording stopped by itself${said ? `: ${said}` : ''}. What was recorded until then is kept.`,
     });
+  }
+
+  #addLevels(levels: Levels) {
+    const g = this.#gathered;
+    const total = g.frames + levels.frames;
+    if (total === 0) return;
+    for (const c of [0, 1]) {
+      g.peak[c] = Math.max(g.peak[c], levels.peak[c]);
+      g.meanSquare[c] = (g.meanSquare[c] * g.frames + levels.meanSquare[c] * levels.frames) / total;
+    }
+    g.frames = total;
+    this.#lastSound = Date.now();
+    if (this.#via === 'chromium' && this.#status.state === 'recording') this.#frames += levels.frames;
+  }
+
+  #startTimers() {
+    this.#stopTimers();
+    this.#timers.push(setInterval(() => this.#sendLevels(), LEVELS_EVERY_MS));
+    this.#timers.push(setInterval(() => void this.#update(), STATUS_EVERY_MS));
   }
 
   #sendLevels() {
@@ -312,7 +571,7 @@ export class Recorder {
   async #update() {
     const state = this.#status.state;
     if (state !== 'monitoring' && state !== 'recording') return;
-    const quiet = Date.now() - this.#lastSound > SILENT_INPUT_MS;
+    const quiet = !this.#adopted && Date.now() - this.#lastSound > SILENT_INPUT_MS;
     const problem = quiet ? `No sound has come from “${this.#device}” for ${Math.round((Date.now() - this.#lastSound) / 1000)} seconds. Is it still connected?` : undefined;
     const lock = this.#lock;
     if (state === 'monitoring' || !lock) {
@@ -329,10 +588,12 @@ export class Recorder {
     const bytes = sizes.reduce((sum, size) => sum + size, 0);
     const room = await statfs(plan.folder).then((s) => s.bavail * s.bsize, () => null);
     if (this.#status.state !== 'recording') return;
+    // A recording picked up after a restart has no level coming in to count: its time is the clock's.
+    const seconds = this.#adopted ? (Date.now() - lock.started) / 1000 : this.#frames / input.sampleRate;
     this.#set({
-      ...this.#status, seconds: this.#frames / input.sampleRate, bytes, parts: files.length, freeBytes: room,
+      ...this.#status, seconds, bytes, parts: files.length, freeBytes: room,
       secondsLeft: room === null ? null : room / bytesPerSecond(input.sampleRate, plan.format),
-      problem,
+      problem: problem ?? (this.#status.problem?.includes('could not be kept') ? this.#status.problem : undefined),
     });
   }
 

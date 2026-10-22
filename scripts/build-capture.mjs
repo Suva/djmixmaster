@@ -3,14 +3,16 @@
 // macOS, Visual Studio's (cl) or MinGW's gcc on Windows, gcc or clang on
 // Linux. miniaudio comes with the source, so nothing else is needed.
 //
-//   node scripts/build-capture.mjs
+//   node scripts/build-capture.mjs [folder]
+//
+// A folder given builds it there instead, as the test of the build does, so as not to replace the one in use.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const source = 'native/capture/capture.c';
-const folder = 'native/capture/build';
+const folder = process.argv[2] ?? 'native/capture/build';
 mkdirSync(folder, { recursive: true });
 const windows = process.platform === 'win32';
 const output = join(folder, windows ? 'djm-capture.exe' : 'djm-capture');

@@ -24,9 +24,10 @@ export type RecordFormat = 'wav' | 'flac';
 /** How long each part of a recording is, in seconds. */
 export const PART_SECONDS = 30 * 60;
 
-/** An input to record from, by its name. */
+/** An input to record from, by its name; with how many channels it has, where that is known before it is opened. */
 export interface RecordDevice {
   name: string;
+  channels?: number;
 }
 
 /** What a device gives when it is opened: Chromium gives one channel or two. */

@@ -41,6 +41,19 @@ for (const file of await readdir('assets/luts').catch(() => [])) {
   if (/\.(bin|txt)$/.test(file)) await copyFile(`assets/luts/${file}`, `dist/luts/${file}`);
 }
 
+// The capture helper for recording, when it is missing or older than its source. Where there is no C
+// compiler the app does without it, and records with Chromium's capture, two channels at most.
+{
+  const { existsSync, statSync } = await import('node:fs');
+  const { spawnSync } = await import('node:child_process');
+  const helper = `native/capture/build/${process.platform === 'win32' ? 'djm-capture.exe' : 'djm-capture'}`;
+  const sources = ['native/capture/capture.c', 'native/capture/miniaudio/miniaudio.h'];
+  const stale = !existsSync(helper) || sources.some((source) => statSync(source).mtimeMs > statSync(helper).mtimeMs);
+  if (stale && spawnSync(process.execPath, ['scripts/build-capture.mjs'], { stdio: 'inherit' }).status !== 0) {
+    console.warn('The capture helper was not built: recording will use Chromium, inputs 1 and 2 only.');
+  }
+}
+
 // The manual, as it travels with the app: Help opens it without a network (scripts/build-manual.mjs).
 await import('./build-manual.mjs');
 

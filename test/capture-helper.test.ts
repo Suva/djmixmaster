@@ -4,6 +4,8 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
@@ -12,9 +14,13 @@ const compiler = windows ? ['cl', 'gcc'] : ['cc'];
 const found = compiler.some((name) => spawnSync(windows ? 'where' : 'which', [name], { stdio: 'ignore' }).status === 0);
 const skip = found ? false : 'No C compiler here';
 
-test('the capture helper builds, and lists the inputs as JSON', { skip, timeout: 120_000 }, () => {
-  execFileSync(process.execPath, ['scripts/build-capture.mjs'], { stdio: 'pipe' });
-  const helper = join('native/capture/build', windows ? 'djm-capture.exe' : 'djm-capture');
+test('the capture helper builds, and lists the inputs as JSON', { skip, timeout: 120_000 }, (t) => {
+  const after = (done: () => void) => t.after(done);
+  // Built apart, as the window's tests use the one in native/capture/build meanwhile.
+  const folder = mkdtempSync(join(tmpdir(), 'djmaster-capture-'));
+  after(() => rmSync(folder, { recursive: true, force: true }));
+  execFileSync(process.execPath, ['scripts/build-capture.mjs', folder], { stdio: 'pipe' });
+  const helper = join(folder, windows ? 'djm-capture.exe' : 'djm-capture');
   const result = spawnSync(helper, ['list'], { encoding: 'utf8' });
   // A machine without sound can have nothing to list, or no sound system at all to ask; either way it says so in JSON.
   if (result.status === 0) {

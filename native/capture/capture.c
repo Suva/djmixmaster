@@ -6,8 +6,10 @@
  * inputs, so the app starts this instead. It uses miniaudio, which talks to
  * Core Audio, WASAPI, ALSA, PulseAudio and JACK alike.
  *
- *   djm-capture list
+ *   djm-capture list [--test]
  *     Prints the inputs as JSON: [{"id", "name", "channels", "rates", "default"}].
+ *     With --test, the test interface too: four channels of tones, generated,
+ *     at 48 kHz, its id "test", for checks on a machine with no sound card.
  *
  *   djm-capture record --device <id> --channels <a>,<b> [--rate <hz>]
  *     Writes channels a and b (counted from 1; the same twice puts one on
@@ -45,6 +47,12 @@
 #include <io.h>
 #include <windows.h>
 static void pause_ms(int ms) { Sleep(ms); }
+static double seconds_now(void) {
+  LARGE_INTEGER now, rate;
+  QueryPerformanceCounter(&now);
+  QueryPerformanceFrequency(&rate);
+  return (double)now.QuadPart / (double)rate.QuadPart;
+}
 #else
 #include <pthread.h>
 #include <signal.h>
@@ -54,7 +62,18 @@ static void pause_ms(int ms) {
   struct timespec t = { ms / 1000, (long)(ms % 1000) * 1000000L };
   nanosleep(&t, NULL);
 }
+static double seconds_now(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (double)t.tv_sec + (double)t.tv_nsec / 1e9;
+}
 #endif
+
+/* The test interface: each channel a tone at a level of its own, the first at half of full scale and each next one half as loud. */
+#define TEST_ID "test"
+#define TEST_RATE 48000
+#define TEST_CHANNELS 4
+static const double TEST_HZ[TEST_CHANNELS] = { 440, 550, 660, 880 };
 
 /* How much the ring buffer holds, in seconds: how far the writing may fall behind before sound is lost. */
 #define RING_SECONDS 10
@@ -113,15 +132,16 @@ static int id_from_text(const char *text, ma_device_id *id) {
 /* ------------------------------------------------------------------ */
 /* list */
 
-static int list(ma_context *context) {
-  ma_device_info *captures;
-  ma_uint32 count;
-  if (ma_context_get_devices(context, NULL, NULL, &captures, &count) != MA_SUCCESS) {
+static int list(ma_context *context, int with_test) {
+  ma_device_info *captures = NULL;
+  ma_uint32 count = 0;
+  if (context && ma_context_get_devices(context, NULL, NULL, &captures, &count) != MA_SUCCESS) {
     say_error("The inputs could not be listed.");
     return 1;
   }
   char id[sizeof(ma_device_id) * 2 + 1];
   fputc('[', stdout);
+  if (with_test) printf("{\"id\": \"%s\", \"name\": \"Test interface\", \"channels\": %d, \"rates\": [%d], \"default\": false}%s", TEST_ID, TEST_CHANNELS, TEST_RATE, count ? ", " : "");
   for (ma_uint32 i = 0; i < count; i++) {
     ma_device_info info;
     /* The full information has the formats the device takes; the list alone does not. */
@@ -171,6 +191,34 @@ static void on_sound(ma_device *device, void *output, const void *input, ma_uint
   if (done < frames) lost += frames - done;
 }
 
+/* The test interface's own thread: tones, a hundredth of a second at a time, as fast as a clock says a device would give them. */
+static volatile int generating;
+#ifdef _WIN32
+static DWORD WINAPI generate(LPVOID unused) {
+#else
+static void *generate(void *unused) {
+#endif
+  (void)unused;
+  float block[TEST_RATE / 100 * TEST_CHANNELS];
+  const double start = seconds_now();
+  ma_uint64 made = 0;
+  while (generating) {
+    ma_uint64 due = (ma_uint64)((seconds_now() - start) * TEST_RATE);
+    while (made + TEST_RATE / 100 <= due) {
+      for (int f = 0; f < TEST_RATE / 100; f++) {
+        for (int c = 0; c < TEST_CHANNELS; c++) {
+          double level = 0.5 / (double)(1 << c);
+          block[f * TEST_CHANNELS + c] = (float)(level * sin(2 * MA_PI_D * TEST_HZ[c] * (double)(made + f) / TEST_RATE));
+        }
+      }
+      on_sound(NULL, NULL, block, TEST_RATE / 100);
+      made += TEST_RATE / 100;
+    }
+    pause_ms(2);
+  }
+  return 0;
+}
+
 /* Waits for a "q" on stdin. A stdin that closes is not one. */
 #ifdef _WIN32
 static DWORD WINAPI watch_stdin(LPVOID unused) {
@@ -189,21 +237,28 @@ static void *watch_stdin(void *unused) {
 }
 
 static int record(ma_context *context, const char *device_text, ma_uint32 a, ma_uint32 b, ma_uint32 rate, int to_stdout) {
+  const int test = strcmp(device_text, TEST_ID) == 0;
   ma_device_id id;
-  if (!id_from_text(device_text, &id)) {
+  if (test) memset(&id, 0, sizeof(id));
+  else if (!id_from_text(device_text, &id)) {
     say_error("That is not a device's id.");
     return 1;
   }
   ma_device_info info;
-  if (ma_context_get_device_info(context, ma_device_type_capture, &id, &info) != MA_SUCCESS) {
-    say_error("The input is not connected.");
-    return 1;
-  }
   ma_uint32 channels = 0;
-  for (ma_uint32 f = 0; f < info.nativeDataFormatCount; f++) {
-    if (info.nativeDataFormats[f].channels > channels) channels = info.nativeDataFormats[f].channels;
+  if (test) {
+    strcpy(info.name, "Test interface");
+    channels = TEST_CHANNELS;
+  } else {
+    if (ma_context_get_device_info(context, ma_device_type_capture, &id, &info) != MA_SUCCESS) {
+      say_error("The input is not connected.");
+      return 1;
+    }
+    for (ma_uint32 f = 0; f < info.nativeDataFormatCount; f++) {
+      if (info.nativeDataFormats[f].channels > channels) channels = info.nativeDataFormats[f].channels;
+    }
+    if (channels == 0) channels = 2;
   }
-  if (channels == 0) channels = 2;
   if (a < 1 || b < 1 || a > channels || b > channels) {
     say_error("The input does not have those channels.");
     return 1;
@@ -211,29 +266,34 @@ static int record(ma_context *context, const char *device_text, ma_uint32 a, ma_
   pick[0] = a - 1;
   pick[1] = b - 1;
 
-  ma_device_config config = ma_device_config_init(ma_device_type_capture);
-  config.capture.pDeviceID = &id;
-  config.capture.format = ma_format_f32;
-  /* All of the device's channels, as it gives them; the two wanted are picked out of them. */
-  config.capture.channels = channels;
-  config.capture.shareMode = ma_share_mode_shared;
-  /* Its own rate unless another is asked for, so that nothing is resampled. */
-  config.sampleRate = rate;
-  config.dataCallback = on_sound;
-  /* Nothing done to the sound: no mixing down, no change of rate behind our back. */
-  config.noPreSilencedOutputBuffer = MA_TRUE;
-  config.noClip = MA_TRUE;
-
   ma_device device;
-  if (ma_device_init(context, &config, &device) != MA_SUCCESS) {
-    say_error("The input could not be opened.");
-    return 1;
+  ma_uint32 actual_rate;
+  if (test) {
+    device_channels = TEST_CHANNELS;
+    actual_rate = TEST_RATE;
+  } else {
+    ma_device_config config = ma_device_config_init(ma_device_type_capture);
+    config.capture.pDeviceID = &id;
+    config.capture.format = ma_format_f32;
+    /* All of the device's channels, as it gives them; the two wanted are picked out of them. */
+    config.capture.channels = channels;
+    config.capture.shareMode = ma_share_mode_shared;
+    /* Its own rate unless another is asked for, so that nothing is resampled. */
+    config.sampleRate = rate;
+    config.dataCallback = on_sound;
+    /* Nothing done to the sound: no mixing down, no change of rate behind our back. */
+    config.noPreSilencedOutputBuffer = MA_TRUE;
+    config.noClip = MA_TRUE;
+    if (ma_device_init(context, &config, &device) != MA_SUCCESS) {
+      say_error("The input could not be opened.");
+      return 1;
+    }
+    device_channels = device.capture.channels;
+    actual_rate = device.sampleRate;
   }
-  device_channels = device.capture.channels;
-  ma_uint32 actual_rate = device.sampleRate;
   if (ma_pcm_rb_init(ma_format_f32, 2, actual_rate * RING_SECONDS, NULL, NULL, &ring) != MA_SUCCESS) {
     say_error("There was no memory for the sound.");
-    ma_device_uninit(&device);
+    if (!test) ma_device_uninit(&device);
     return 1;
   }
 
@@ -245,7 +305,16 @@ static int record(ma_context *context, const char *device_text, ma_uint32 a, ma_
   pthread_detach(watcher);
 #endif
 
-  if (ma_device_start(&device) != MA_SUCCESS) {
+  if (test) {
+    generating = 1;
+#ifdef _WIN32
+    CreateThread(NULL, 0, generate, NULL, 0, NULL);
+#else
+    pthread_t generator;
+    pthread_create(&generator, NULL, generate, NULL);
+    pthread_detach(generator);
+#endif
+  } else if (ma_device_start(&device) != MA_SUCCESS) {
     say_error("The input could not be started.");
     ma_device_uninit(&device);
     return 1;
@@ -266,7 +335,7 @@ static int record(ma_context *context, const char *device_text, ma_uint32 a, ma_
     ma_uint32 frames = ma_pcm_rb_available_read(&ring);
     if (frames == 0) {
       if (stopping) break;
-      if (ma_device_get_state(&device) != ma_device_state_started) {
+      if (!test && ma_device_get_state(&device) != ma_device_state_started) {
         say_error("The input went away.");
         failed = 1;
         break;
@@ -307,7 +376,8 @@ static int record(ma_context *context, const char *device_text, ma_uint32 a, ma_
     }
   }
   if (to_stdout) fflush(stdout);
-  ma_device_uninit(&device);
+  if (test) generating = 0;
+  else ma_device_uninit(&device);
   ma_pcm_rb_uninit(&ring);
   return failed;
 }
@@ -320,18 +390,20 @@ int main(int argc, char **argv) {
   signal(SIGPIPE, SIG_IGN);
 #endif
   if (argc < 2 || (strcmp(argv[1], "list") != 0 && strcmp(argv[1], "record") != 0)) {
-    fputs("Usage: djm-capture list\n       djm-capture record --device <id> --channels <a>,<b> [--rate <hz>] [--no-output]\n", stderr);
+    fputs("Usage: djm-capture list [--test]\n       djm-capture record --device <id> --channels <a>,<b> [--rate <hz>] [--no-output]\n", stderr);
     return 2;
   }
   const char *device = NULL;
   ma_uint32 a = 1, b = 2, rate = 0;
   int to_stdout = 1;
+  int with_test = 0;
   for (int i = 2; i < argc; i++) {
     if (strcmp(argv[i], "--device") == 0 && i + 1 < argc) device = argv[++i];
     else if (strcmp(argv[i], "--channels") == 0 && i + 1 < argc) {
       if (sscanf(argv[++i], "%u,%u", &a, &b) != 2) a = b = 0;
     } else if (strcmp(argv[i], "--rate") == 0 && i + 1 < argc) rate = (ma_uint32)strtoul(argv[++i], NULL, 10);
     else if (strcmp(argv[i], "--no-output") == 0) to_stdout = 0;
+    else if (strcmp(argv[i], "--test") == 0) with_test = 1;
     else {
       say_error("An option was not understood.");
       return 2;
@@ -344,7 +416,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   int result;
-  if (strcmp(argv[1], "list") == 0) result = list(&context);
+  if (strcmp(argv[1], "list") == 0) result = list(&context, with_test);
   else if (!device) {
     say_error("No device was named.");
     result = 2;

@@ -90,7 +90,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/worker.ts` | Runs one measure or render job off the main thread |
 | `src/app/recording.ts` | Recording from an input: the arguments of the ffmpeg that writes the parts, their names, the channels taken, levels, repairing a WAV header |
 | `src/app/recorder.ts` | The Record view's input and recordings: monitoring, writing through ffmpeg, packing into FLAC, a lock file to find a recording a crash cut short |
-| `native/capture/capture.c` | A capture helper of our own on miniaudio, not used by the app yet (TASKS.md); `node scripts/build-capture.mjs` builds it |
+| `native/capture/capture.c` | The capture helper for recording, on miniaudio: lists inputs and records any two channels; `node scripts/build-capture.mjs` builds it, as `npm run build` does |
 | `src/app/parts.ts` | The order and the name of a recording that came in several files |
 | `src/app/playback.ts` | Decides whether a recording must be streamed for playback |
 | `src/app/video-files.ts` | Which files are videos, and the container an export keeps their picture in |
@@ -187,8 +187,9 @@ environment variables switch on:
 | `DJMASTER_SHOT_SCALE=2` | Draw at this many pixels per point, for sharp pictures |
 | `DJMASTER_PROFILE=stages` | A video export prints where each frame's time went: the clips' frames, drawing, encoding, sending to ffmpeg. Works outside check mode too |
 | `DJMASTER_DECODER=ffmpeg` | A video export has ffmpeg decode every clip, as it does those the browser's decoder cannot take: to compare the two, and to test that. Works outside check mode too |
-| `DJMASTER_PART_SECONDS=2` | A recording's parts are this many seconds long rather than half an hour. In check mode the only device to record from is a generated test signal, a tone on each side, the left at half of full scale and the right at a quarter, and the same in mono (`capture.ts`), and nothing asks for permission to use inputs |
+| `DJMASTER_PART_SECONDS=2` | A recording's parts are this many seconds long rather than half an hour. In check mode the only device to record from is a generated test signal, a tone on each side, the left at half of full scale and the right at a quarter, and the same in mono (`capture.ts`), and, where the helper is built, its test interface of four channels at half of full scale and each next one half as loud, and nothing asks for permission to use inputs |
 | `DJMASTER_REAL_INPUTS=1` | In check mode, list the computer's real inputs to record from as well, for trying one by hand |
+| `DJMASTER_CAPTURE=<file>` | The capture helper to record with, in place of the one beside the app or built in the project. Works outside check mode too |
 | `DJMASTER_STORE=1` | Act as a copy from the Microsoft Store: no update check of its own, and Settings says the Store keeps it up to date |
 | `DJMASTER_PROFILE=layers` | As `stages`, and the time of each layer. Each layer is waited for on the graphics card, so drawing is slower while it is on |
 
@@ -253,7 +254,7 @@ Linux), the same for `npm start` and the packaged app.
 | `recordings/` | Lists that join a recording which came in several files, one per set of files (see below) |
 | `last-recording.json` | The recording open last, which is opened again at the next start if it is still there |
 | `recent-recordings.json` | The ten recordings opened most recently, for File > Open Recent |
-| `recording.json` | While recording: which ffmpeg process writes it and what it records, so that the next start finds a recording a crash cut short. Gone when it stops |
+| `recording.json` | While recording: which ffmpeg process writes it, and which helper captures it, and what it records, so that the next start finds it still going, or cut short by a crash. Gone when it stops |
 | `recording.log` | What the last recording's ffmpeg said, read when it stops by itself |
 | `updates.json` | Whether to check for updates, when it was last done, and what was found |
 
@@ -357,25 +358,36 @@ Do not write test data there.
   and undone with it. The drawer measures sizes against the picture's short
   side (`#unit` in `draw.ts`), so a template works in any shape, and one made
   for landscape draws exactly as it did.
-- **A recording's sound is captured by Chromium** in a hidden page
-  (`capture.ts`, with `capture-worklet.ts` in its audio thread), its own
-  process, as soon as a device is chosen in the Record view: that is
-  monitoring, for setting the level. The samples go to the main process
-  (`recorder.ts`), which measures them for the meters and, while recording,
-  writes them to an ffmpeg that turns them into parts of half an hour through
-  a segment muxer (`writerArgs`). ffmpeg's own capture is not used: on macOS
-  (AVFoundation) it keeps one buffer of sound waiting and drops it whenever it
-  is read late, about a tenth of everything, heard as crackle. Chromium gives
-  at most two channels of a device, so the channels to record are 1 and 2, or
-  one of them on both sides; a capture helper of our own would give the rest
-  (TASKS.md). ffmpeg ends when its stdin closes, finishing its part, so a
-  crash of the app leaves sound parts; `repairWav` puts right one whose
-  ffmpeg was itself cut short. Parts are always written as WAV: a FLAC
-  recording has each part packed into FLAC once `wavFinished` says ffmpeg has
-  closed it, and the WAV removed once the FLAC is as long, as FLAC written
-  through the segments has no length in it. On stop the parts go to the
-  window as files opened together, so they open as a recording in several
-  files. Only macOS has been tried.
+- **A recording's sound is captured in one of two ways** (`recorder.ts`), as
+  soon as a device is chosen in the Record view: that is monitoring, for
+  setting the level. ffmpeg's own capture is not used: on macOS
+  (AVFoundation) it drops about a tenth of the sound, heard as crackle.
+  - **The capture helper** (`native/capture/capture.c`, on miniaudio) lists
+    the inputs with all their channels and records any two. Monitoring runs
+    it with `--no-output`; recording runs another, detached, whose stdout is
+    the writing ffmpeg's stdin, so the sound never passes through the app and
+    a recording carries on if the app goes down. Only its level comes back,
+    as JSON on stderr. It stops on a `q`; one picked up after a restart
+    (`adopt`, both process ids in the lock file) is ended by signals, and
+    ffmpeg finishes its part as its input ends. It is found through
+    `DJMASTER_CAPTURE`, then beside the packaged app, then in
+    `native/capture/build/`, which `npm run build` fills where there is a C
+    compiler. Never ask it for a rate other than the device's own: miniaudio
+    would resample, linearly.
+  - **Chromium**, in a hidden page (`capture.ts`, with `capture-worklet.ts`
+    in its audio thread), where there is no helper or it cannot open a
+    device: two channels at most, its samples sent to the main process for
+    the meters and the writing ffmpeg, and ended with the app.
+
+  The writing ffmpeg turns the sound into parts of half an hour through a
+  segment muxer (`writerArgs`), and ends when its stdin does, finishing its
+  part; `repairWav` puts right one cut short. Parts are always written as WAV:
+  a FLAC recording has each part packed into FLAC once `wavFinished` says
+  ffmpeg has closed it, and the WAV removed once the FLAC is as long, as FLAC
+  written through the segments has no length in it. On stop the parts go to
+  the window as files opened together, so they open as a recording in
+  several files. Only macOS has been tried, and the packaged app does not
+  carry the helper yet (TASKS.md).
 - **A recording can be several files.** Recorders split long recordings at
   2 or 4 GB. Chosen together, the parts are put in order (`parts.ts`: by
   their numbers, or else by when each was written) and listed in

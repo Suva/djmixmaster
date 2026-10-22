@@ -5,13 +5,14 @@
 // long. See window.test.ts for how these run.
 
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { ffmpeg } from '../src/audio-io.ts';
-import { TEST_SIGNAL } from '../src/app/recording.ts';
+import { TEST_SIGNAL, writerArgs } from '../src/app/recording.ts';
 import { dataFolder, electronPath, runApp, workFolder } from './window-app.ts';
 
 const skip = process.env.DJMASTER_SKIP_WINDOW_TESTS
@@ -20,6 +21,9 @@ const skip = process.env.DJMASTER_SKIP_WINDOW_TESTS
 
 let work: string;
 const PARTS = { DJMASTER_PART_SECONDS: '2' };
+/** The capture helper, built with the app where there is a C compiler (scripts/build.mjs). */
+const HELPER = join('native/capture/build', process.platform === 'win32' ? 'djm-capture.exe' : 'djm-capture');
+const noHelper = skip || (existsSync(HELPER) ? false : 'The capture helper is not built here');
 
 before(async () => {
   if (!skip) work = await workFolder();
@@ -49,6 +53,9 @@ test('the input is heard as soon as it is chosen, recorded only from Start, and 
   const seen = await runApp({ data, exportFolder: folder, env: PARTS, timeoutMs: 60_000 }, async (page) => {
     page.click('view-record');
     await page.until(() => page.text('record-device-note').includes('channels'), 'the device to be opened');
+    // Chromium's test signal, as where there is no helper; the helper's own comes first when there is one.
+    page.choose('record-device', 'Test signal');
+    await page.until(() => page.text('record-device-note') === '2 channels, 48 kHz.', 'the test signal to be opened');
     const note = page.text('record-device-note');
     const meter = page.element('record-meter');
     await page.until(() => Boolean(meter.dataset.level), 'the level to show before recording');
@@ -195,4 +202,71 @@ test('a recording a crash cut short is put right and offered to be opened', { sk
   assert.equal(seen.file, 'Lost night part 00*.wav (2 files)');
   assert.ok(Math.abs(duration(broken) - 2) < 0.05, 'the broken header put right');
   assert.equal(readFileSync(broken).readUInt32LE(4), bytes.length - 8);
+});
+
+test('the helper records any two channels of an input, straight into the parts', { skip: noHelper }, async () => {
+  const folder = join(work, 'through the helper');
+  await mkdir(folder);
+  const seen = await runApp({ data: await dataFolder(work), exportFolder: folder, env: PARTS, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-record');
+    await page.until(() => page.element<HTMLSelectElement>('record-device').options.length > 0, 'the devices to be listed');
+    page.choose('record-device', 'Test interface');
+    await page.until(() => page.text('record-device-note') === '4 channels, 48 kHz.', 'the test interface to be opened');
+    const channels = [...page.element<HTMLSelectElement>('record-channels').options].map((option) => option.text);
+    page.choose('record-channels', '2,3');
+    const meter = page.element('record-meter');
+    await page.until(() => meter.dataset.level === '-18.1,-24.1', 'the level of channels 3 and 4');
+    page.click('record-folder-change');
+    await page.wait(200);
+    page.type('record-name', 'Helper night');
+    page.click('record-go');
+    await page.until(() => page.text('record-written').includes('parts'), 'a second part', 15_000);
+    page.click('record-go');
+    page.click('record-go');
+    await page.until(() => page.text('file-name').includes('Helper night'), 'the recording to open', 20_000);
+    return { channels, file: page.text('file-name') };
+  });
+  assert.deepEqual(seen.channels.slice(0, 2), ['1 and 2', '3 and 4']);
+  const files = (await readdir(folder)).sort();
+  assert.match(seen.file, new RegExp(`^Helper night part 00\\*\\.wav \\(${files.length} files\\)$`));
+  // Channels 3 and 4 of the test interface: an eighth and a sixteenth of full scale.
+  const [left, right] = peaks(join(folder, files[0]));
+  assert.ok(Math.abs(left - -18.06) < 0.2 && Math.abs(right - -24.08) < 0.2, `peaks ${left}, ${right}`);
+});
+
+test('a recording the helper goes on with after the app is gone is picked up, stopped and opened', { skip: noHelper }, async () => {
+  const folder = join(work, 'carried on');
+  await mkdir(folder);
+  const data = await dataFolder(work);
+  // As an app that went down leaves it: the helper recording into ffmpeg on their own, and the lock file.
+  const plan = { device: 'Test interface', channels: [0, 1] as [number, number], format: 'wav' as const, folder, name: 'Long night' };
+  const helper = spawn(HELPER, ['record', '--device', 'test', '--channels', '1,2'], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  const writer = spawn(ffmpeg(), writerArgs(plan, 48000, 2), { detached: true, stdio: [helper.stdout!, 'ignore', 'ignore'] });
+  helper.stdout!.destroy();
+  helper.unref();
+  writer.unref();
+  await writeFile(join(data, 'recording.json'), JSON.stringify({ pid: writer.pid, helperPid: helper.pid, plan, input: { channels: 4, sampleRate: 48000 }, started: Date.now() }));
+  try {
+    const seen = await runApp({ data, env: PARTS, timeoutMs: 60_000 }, async (page) => {
+      await page.until(() => document.body.classList.contains('record') && page.text('record-state').startsWith('Recording'), 'the recording to be shown, still going');
+      const shown = { state: page.text('record-state'), problem: page.text('record-problem') };
+      await page.wait(2500);
+      page.click('record-go');
+      page.click('record-go');
+      await page.until(() => page.text('file-name').includes('Long night'), 'the recording to open', 30_000);
+      return { ...shown, file: page.text('file-name') };
+    });
+    assert.equal(seen.state, 'Recording “Long night”');
+    assert.match(seen.problem, /started before the app was last closed/);
+    assert.match(seen.file, /^Long night part 00/);
+    const files = (await readdir(folder)).sort();
+    assert.ok(files.length >= 2, files.join(', '));
+    // Ended by its input ending, ffmpeg finished every part as it should.
+    for (const file of files) assert.ok(duration(join(folder, file)) > 0, file);
+    for (const pid of [helper.pid!, writer.pid!]) {
+      assert.throws(() => process.kill(pid, 0), `process ${pid} has stopped`);
+    }
+  } finally {
+    for (const child of [helper, writer]) child.kill('SIGKILL');
+  }
 });

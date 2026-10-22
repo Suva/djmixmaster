@@ -1258,11 +1258,28 @@ function captureWindowReady(): Promise<BrowserWindow> {
   return captureReady;
 }
 
+/**
+ * The capture helper (native/capture/capture.c): named by DJMASTER_CAPTURE,
+ * else the one packaged with the app, else the one built in the project.
+ * Without one, Chromium captures, two channels at most.
+ */
+function captureHelper(): string | null {
+  const name = process.platform === 'win32' ? 'djm-capture.exe' : 'djm-capture';
+  const candidates = [process.env.DJMASTER_CAPTURE, join(process.resourcesPath ?? '', 'bin', name), join(app.getAppPath(), 'native', 'capture', 'build', name)];
+  return candidates.find((path): path is string => Boolean(path) && existsSync(path!)) ?? null;
+}
+
 const recorder = new Recorder({
   folder: app.getPath('userData'),
   // In check mode parts can be made short.
   ...(SCREENSHOT && process.env.DJMASTER_PART_SECONDS ? { partSeconds: Number(process.env.DJMASTER_PART_SECONDS) } : {}),
+  helper: captureHelper(),
+  testing: Boolean(SCREENSHOT),
   capture: {
+    // In check mode Chromium's stand-ins are test signals, unless real inputs are asked for.
+    list: async () => (SCREENSHOT && !process.env.DJMASTER_REAL_INPUTS
+      ? [{ name: TEST_SIGNAL }, { name: TEST_SIGNAL_MONO }]
+      : (await captureWindowReady()).webContents.executeJavaScript('window.capture.devices()')),
     // In check mode the test signal stands in for every device.
     start: async (device) => {
       const test = device === TEST_SIGNAL ? 'stereo' : device === TEST_SIGNAL_MONO ? 'mono' : false;
@@ -1288,7 +1305,7 @@ const recordSettings = (): RecordSettings =>
 
 /** macOS asks once whether the app may use audio inputs, in the app's name. */
 async function mayRecord(device: string) {
-  if (device === TEST_SIGNAL || device === TEST_SIGNAL_MONO || process.platform !== 'darwin') return;
+  if (device === TEST_SIGNAL || device === TEST_SIGNAL_MONO || device === 'Test interface' || process.platform !== 'darwin') return;
   if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return;
   if (!(await systemPreferences.askForMediaAccess('microphone'))) {
     throw new Error('DJ Mix Master may not use audio inputs. Allow it in System Settings, under Privacy & Security, Microphone, and try again.');
@@ -1297,10 +1314,8 @@ async function mayRecord(device: string) {
 
 ipcMain.handle('record-setup', async (): Promise<RecordSetup> => {
   const settings = recordSettings();
-  if (SCREENSHOT && !process.env.DJMASTER_REAL_INPUTS) return { devices: [{ name: TEST_SIGNAL }, { name: TEST_SIGNAL_MONO }], settings, status: recorder.status };
   try {
-    const devices = await (await captureWindowReady()).webContents.executeJavaScript('window.capture.devices()');
-    return { devices, settings, status: recorder.status };
+    return { devices: await recorder.devices(), settings, status: recorder.status };
   } catch (error) {
     return { devices: [], problem: error instanceof Error ? error.message : String(error), settings, status: recorder.status };
   }
@@ -1316,7 +1331,7 @@ ipcMain.handle('record-monitor', async (_event, device: string | null) => {
   return status;
 });
 ipcMain.on('record-channels', (_event, channels: [number, number]) => {
-  recorder.setChannels(channels);
+  void recorder.setChannels(channels);
   if (recorder.recording) return;
   preferences = { ...preferences, recording: { ...recordSettings(), channels } };
   void savePreferences();
