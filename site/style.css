@@ -7,6 +7,7 @@
   --muted: #9aa2b1;
   --accent: #3ddc97;
   --accent-ink: #06281a;
+  --heart: #e86a8a;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -44,6 +45,12 @@ h1 { margin: 0 0 16px; font-size: clamp(32px, 6vw, 52px); line-height: 1.1; lett
 }
 .button:hover { background: #5be6ab; }
 .button small { font-weight: 500; font-size: 13px; opacity: 0.8; }
+/* A button that asks for less than a download does: outlined, in the colour of a heart. */
+.button.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.button.secondary:hover { background: var(--panel); border-color: var(--heart); }
+.sponsor { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; }
+.sponsor .note { margin: 0; flex: 1 1 420px; }
+header a.sponsor-link, .heart { color: var(--heart); }
 .version { margin: 0; font-size: 14px; color: var(--muted); }
 
 .screenshot { display: block; width: 100%; height: auto; margin: 20px 0 8px; border: 1px solid var(--border); border-radius: 12px; }

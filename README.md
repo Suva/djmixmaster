@@ -7,8 +7,9 @@ the tool evens out the loudness from track to track: louder tracks are turned
 down and quieter ones up, while breakdowns keep their natural dip instead of
 being pumped up.
 
-It comes as a desktop app for macOS and Windows, and as a command-line tool
-that shares the same processing.
+It comes as a desktop app for macOS, Windows and Linux, and as a
+command-line tool that shares the same processing. It is free, and will stay
+free; if it helps you, you can [sponsor it](https://github.com/sponsors/Suva).
 
 ![The app with two mixes marked in a recording](site/screenshot.png)
 
@@ -194,6 +195,16 @@ npm run typecheck
 
 [AGENTS.md](AGENTS.md) explains how the code is organised and how to check
 changes; [TASKS.md](TASKS.md) lists what could be done next.
+
+## Supporting it
+
+DJ Mix Master is free, and it always will be: every feature, for everyone,
+with no accounts, no advertising and no paid version. It is made in spare time,
+by one person. If it saves you hours on your recordings and you would like to
+say thanks, you can [sponsor its development on GitHub](https://github.com/sponsors/Suva),
+once or every month. It helps pay for the time, and for testing on more sound
+cards and systems. Telling others about it, and reporting what does not work on
+the [issues page](https://github.com/Suva/djmixmaster/issues), helps as much.
 
 ## Licence
 

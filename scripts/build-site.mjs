@@ -47,6 +47,9 @@ const values = {
   LINUX_DETAIL: linux ? `AppImage · ${megabytes(linux.size)}` : 'AppImage',
   RELEASES_URL: release?.html_url ?? releasesUrl,
   REPOSITORY_URL: `https://github.com/${repository}`,
+  // The owner's page on GitHub Sponsors. A plain link, not GitHub's embedded button, which would have every
+  // visitor's browser contact GitHub just by opening the page.
+  SPONSOR_URL: `https://github.com/sponsors/${repository.split('/')[0]}`,
   // The rest of the website, as the manual's pages link to it: beside them here; by its address in the copy the app carries.
   SITE: '../',
 };
