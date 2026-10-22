@@ -4,7 +4,7 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
-## Not released yet
+## 0.12.0 — 22 October 2026
 
 - **Record the night in the app.** A new Record view, beside Mastering and
   Video, records from a DJ mixer's sound card or any other input. It has been
