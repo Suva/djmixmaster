@@ -7,14 +7,15 @@ are under "Not released yet" and appear there once they are.
 ## Not released yet
 
 - **Record the night in the app.** A new Record view, beside Mastering and
-  Video, records from a DJ mixer's sound card or any other input, on macOS
-  for now. Choosing the device starts listening, so you can set the level
-  before you press Start; then watch the level, the time and the room left on
-  the drive. Any two of a sound card's inputs can be recorded, such as a
-  mixer's record output on 3 and 4. The sound goes to files in parts of half
-  an hour by a program of its own, so the recording carries on even if the
-  app closes or crashes, and is picked up again when it is opened. When you
-  stop, it opens as one recording, ready to master.
+  Video, records from a DJ mixer's sound card or any other input. It has been
+  tried most on macOS; on Windows and Linux, make a test recording before a
+  night that matters. Choosing the device starts listening, so you can set the
+  level before you press Start; then watch the level, the time and the room
+  left on the drive. Any two of a sound card's inputs can be recorded, such as
+  a mixer's record output on 3 and 4. The sound goes to files in parts of half
+  an hour by a program of its own, so the recording carries on even if the app
+  closes or crashes, and is picked up again when it is opened. When you stop,
+  it opens as one recording, ready to master.
 - **Choose where you hear it.** Settings has a Sound output choice:
   headphones, speakers, an audio interface, or the system's default. It is
   kept for next time; if that output is not plugged in, you hear the default

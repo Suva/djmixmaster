@@ -2412,7 +2412,9 @@ test('the sound output is chosen in Settings, kept, and stood in for while it is
     return { options, chosen: other?.text ?? null };
   });
   assert.match(first.options[0], /^System default/);
-  const preferences = () => JSON.parse(readFileSync(join(data, 'preferences.json'), 'utf8'));
+  // A machine with no output but the default, as GitHub's Windows one, chose nothing, and wrote none.
+  const file = join(data, 'preferences.json');
+  const preferences = () => (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {});
   if (first.chosen) {
     assert.equal(preferences().output.name, first.chosen);
     const again = await runApp({ recording: mix, data }, async (page) => {

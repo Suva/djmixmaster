@@ -1,6 +1,6 @@
 # Recording a night
 
-The app can record the night itself, from a DJ mixer's USB sound card or any other audio input, so that no other program is needed. Click **Record** in the bar at the bottom of the window. Recording works on macOS so far.
+The app can record the night itself, from a DJ mixer's USB sound card or any other audio input, so that no other program is needed. Click **Record** in the bar at the bottom of the window. Recording has been tried most on macOS; on Windows and Linux it is new, so make a test recording with your own sound card before a night that matters.
 
 ## Before you start
 

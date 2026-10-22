@@ -167,6 +167,10 @@
         "en-US"
       ],
       "showNameOnTiles": true,
+      "capabilities": [
+        "runFullTrust",
+        "microphone"
+      ],
       "artifactName": "${productName}-${version}-Microsoft-Store.msix"
     },
     "linux": {
