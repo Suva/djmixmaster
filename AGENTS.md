@@ -90,6 +90,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/worker.ts` | Runs one measure or render job off the main thread |
 | `src/app/recording.ts` | Recording from an input: the arguments of the ffmpeg that writes the parts, their names, the channels taken, levels, repairing a WAV header |
 | `src/app/recorder.ts` | The Record view's input and recordings: monitoring, writing through ffmpeg, packing into FLAC, a lock file to find a recording a crash cut short |
+| `native/capture/capture.c` | A capture helper of our own on miniaudio, not used by the app yet (TASKS.md); `node scripts/build-capture.mjs` builds it |
 | `src/app/parts.ts` | The order and the name of a recording that came in several files |
 | `src/app/playback.ts` | Decides whether a recording must be streamed for playback |
 | `src/app/video-files.ts` | Which files are videos, and the container an export keeps their picture in |

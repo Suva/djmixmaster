@@ -198,12 +198,41 @@ dropouts, while recording; and let M mark a track while recording.
 
 Recordings are captured by Chromium (`capture.ts`), which gives at most two
 channels of a device: a mixer's record output on its channels 3 and 4 cannot
-be recorded. ffmpeg's capture would take any channels but drops a tenth of the
-sound on macOS. A small program of our own per system (Core Audio on macOS,
-WASAPI on Windows, ALSA or PulseAudio on Linux) would capture every channel,
-complete, and hand the sound to the writing ffmpeg directly, so that a
-recording would also carry on if the app crashed. It would be built when
-packaging and shipped beside ffmpeg.
+be recorded, and a crash of the app ends the recording. `native/capture/`
+holds a helper of our own that does neither: `capture.c`, on miniaudio 0.11.25
+(vendored, public domain or MIT-0), which reaches Core Audio, WASAPI, ALSA,
+PulseAudio and JACK. `node scripts/build-capture.mjs` builds it; `list` prints
+the inputs with their channels and rates, and `record --device <id> --channels
+3,4` writes those two as 32-bit floats to stdout, its level as JSON lines on
+stderr, and stops on a `q` on stdin, not on stdin closing. The device's
+callback only fills a ring buffer of 10 s; anything that would not fit is
+reported as `lost`, never dropped without a word.
+
+Tried on macOS with BlackHole as a loopback: tones played into its channels 3
+and 4 at its own rate came back for 60 s with not one sample missing or
+repeated, checked sample by sample; piped into the writing ffmpeg (`writerArgs`)
+and stopped with `q`, both ended within 50 ms with their parts whole. Never ask
+it for a rate other than the device's own: miniaudio then resamples, linearly.
+
+What is left:
+
+1. Use it in the app as a second `Capture` in `recorder.ts`, with Chromium as
+   the fallback where the helper is missing or fails: its stdout given to the
+   writing ffmpeg's stdin directly, both detached, so that a recording carries
+   on if the app goes down; monitoring as the helper with `--no-output`; every
+   pair of a device's channels offered.
+2. Ship it: built by the release workflow on each system and packaged beside
+   ffmpeg (`extraResources`), found through a `DJMASTER_CAPTURE` variable as
+   ffmpeg is through `DJMASTER_FFMPEG`. It needs no certificate of its own: on
+   macOS the linker signs it ad hoc and electron-builder signs it with the app;
+   on Windows only downloads are judged, and the Store signs its package whole.
+   With a Developer ID later, it needs the audio-input entitlement, as the app.
+3. An hour with a real interface (the Komplete Audio 6, its inputs 3 and 4) on
+   macOS, and the same on Windows and Linux. On Windows, try first whether its
+   pairs of inputs show as devices of their own ("Line 3/4"), which Chromium
+   could record already.
+4. ASIO on Windows only if an interface turns out to need it: miniaudio has
+   none, and Steinberg's SDK is under GPLv3 since 2023.
 
 ### Recording on Windows and Linux
 
