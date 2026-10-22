@@ -2,6 +2,8 @@
 
 The app can record the night itself, from a DJ mixer's USB sound card or any other audio input, so that no other program is needed. Click **Record** in the bar at the bottom of the window. Recording has been tried most on macOS; on Windows and Linux it is new, so make a test recording with your own sound card before a night that matters.
 
+![The Record view, listening to a sound card's inputs 3 and 4 before recording](pictures/window-record.png)
+
 ## Before you start
 
 - **Device**: the input to record from. Once chosen, it is listened to straight away: the meters show its level, and nothing is written yet, so you can set the level on the mixer before you start. The first time, macOS asks whether DJ Mix Master may use audio inputs. The input is let go again when you leave the Record view without recording.

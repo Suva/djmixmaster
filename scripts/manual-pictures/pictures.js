@@ -63,6 +63,40 @@
   await shot('settings.png', $('settings-dialog'));
   $('settings-close').click();
 
+  // The EQ, set as for a dull phono stage, over the spectra of this mix and the other one.
+  const slide = (id, value) => {
+    $(id).value = String(value);
+    $(id).dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  slide('eq-high-pass', 25);
+  slide('eq-low', -1.5);
+  slide('eq-high', 3);
+  slide('eq-high-hz', 0.4);
+  $('eq-curve').scrollIntoView({ block: 'start' });
+  await w(600);
+  await shot('eq.png', [$('eq-curve'), $('eq-copy')]);
+  $('eq-flat').click();
+  $('settings').scrollTop = 0;
+
+  // The Record view, listening to the input before recording. The test interface of check mode is shown
+  // under a name such as a sound card has, as the recording is shown under a name made up for the website.
+  $('view-record').click();
+  await until(() => $('record-device-note').textContent.includes('channels'), 20_000);
+  const devices = $('record-device');
+  devices.value = 'Test interface';
+  devices.dispatchEvent(new Event('change', { bubbles: true }));
+  await until(() => $('record-device-note').textContent === '4 channels, 48 kHz.', 20_000);
+  const channels = $('record-channels');
+  channels.value = '2,3';
+  channels.dispatchEvent(new Event('change', { bubbles: true }));
+  await until(() => $('record-meter').dataset.level === '-18.1,-24.1', 20_000);
+  devices.selectedOptions[0].text = 'USB sound card';
+  $('record-name').value = 'Saturday night';
+  $('record-folder').textContent = '\u200e~/Music/Recordings\u200e';
+  await shot('window-record.png');
+  $('view-mastering').click();
+  await w(400);
+
   // The Video view, with a template of the app's, once the music has been listened to.
   $('view-video').click();
   const select = $('template');

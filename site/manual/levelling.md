@@ -32,6 +32,8 @@ It levels track against track, not moment against moment. A slow gain curve foll
 
 Under the levelling settings is an EQ, for putting right how a mix was recorded before it is levelled: a turntable's phono stage that makes records sound dull or harsh, a PA mixer's EQ left on, rumble from a turntable. The levelling measures the mix as the EQ makes it sound, so the loudness figures and the curves follow it.
 
+![The EQ over the spectra of this mix and the other mixes](pictures/eq.png)
+
 - **Rumble filter** takes out what lies below the frequency you set.
 - **Bass, Low mids, High mids, Treble** each raise or lower their part of the sound by up to 6 dB. The left slider sets how much, the right one where: where the bass ends, where each middle band is centred, where the treble starts. The drawing above them shows what they add up to.
 - **Behind the curve** are three spectra, lined up on its middle line: this mix's average (white), the other mixes' average (dashed), and what is playing, averaged over a second or two (blue). The averages come from the analysis, so they are there while paused, and this mix's moves as you change its EQ. For a set that sounds unlike the rest of the night, such as one played on records through a different phono stage, move the EQ until its line follows the other mixes'.
