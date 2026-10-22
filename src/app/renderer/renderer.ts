@@ -676,6 +676,8 @@ function recompute() {
     setStats(null);
   }
   showAdjustments();
+  // The spectra behind the EQ follow the mix's edges and the other mixes; worked out again only when they change.
+  drawEqPanel();
   scheduleDraw();
 }
 

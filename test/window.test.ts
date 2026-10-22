@@ -2485,6 +2485,23 @@ test('an EQ belongs to one mix: heard as the export applies it, copied, undone, 
   assert.equal(again, '+6.0 dB above 2 kHz');
 });
 
+test('the EQ\'s spectrum of the mix follows its edges, without playing', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    const picture = () => page.element<HTMLCanvasElement>('eq-curve').toDataURL();
+    await page.wait(300);
+    const whole = picture();
+    // The mix ended 15 seconds in: its average is of the first track's start alone.
+    for (let i = 0; i < 3; i++) page.key('ArrowRight');
+    page.key('KeyO', { key: 'o' });
+    await page.saved();
+    await page.wait(100);
+    return { length: page.region().length, changed: picture() !== whole, playing: page.element('play').classList.contains('playing') };
+  });
+  assert.equal(seen.playing, false);
+  assert.match(seen.length, /^0:00:15/);
+  assert.ok(seen.changed, 'the spectrum drawn again for the new edges');
+});
+
 test('a double click on a slider puts it back to its default, as one step to undo', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     const twice = (id: string) => page.element(id).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
