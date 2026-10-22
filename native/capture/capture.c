@@ -41,6 +41,8 @@
 #define MA_NO_RESOURCE_MANAGER
 #define MA_NO_NODE_GRAPH
 #define MA_NO_ENGINE
+/* Its stand-in that hears nothing, used where no sound system answers, is no input to offer. */
+#define MA_NO_NULL
 #include "miniaudio/miniaudio.h"
 
 #include <math.h>

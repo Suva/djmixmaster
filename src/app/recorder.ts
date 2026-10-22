@@ -204,7 +204,8 @@ export class Recorder {
     try {
       const devices = JSON.parse(printed) as { id: string; name: string; channels: number }[];
       // In check mode nothing real is opened, unless asked for by DJMASTER_REAL_INPUTS (main.ts).
-      return devices.filter((device) => !this.#testing || device.id === 'test' || process.env.DJMASTER_REAL_INPUTS);
+      // A device with no channels is nothing to record from, whatever a sound system says.
+      return devices.filter((device) => device.channels > 0 && (!this.#testing || device.id === 'test' || process.env.DJMASTER_REAL_INPUTS));
     } catch {
       return [];
     }
