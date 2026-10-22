@@ -4,6 +4,12 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- The website has moved to [dmm.clysuva.com](https://dmm.clysuva.com/). The
+  app's links to it, and to the manual, go there now; the old address still
+  works.
+
 ## 0.12.0 — 22 October 2026
 
 - **Record the night in the app.** A new Record view, beside Mastering and

@@ -12,7 +12,7 @@ import { isNewer, parseVersion } from '../version.ts';
 
 /** GitHub's public list entry for the newest full release; pre-releases are not offered. */
 const FEED = process.env.DJMASTER_UPDATE_FEED ?? 'https://api.github.com/repos/Suva/djmixmaster/releases/latest';
-export const DOWNLOAD_PAGE = 'https://suva.github.io/djmixmaster/';
+export const DOWNLOAD_PAGE = 'https://dmm.clysuva.com/';
 
 /**
  * Whether this copy came from the Microsoft Store, which brings its updates

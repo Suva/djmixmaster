@@ -99,7 +99,7 @@ Silicon Macs and for Windows. Neither is signed for distribution.
 ### Keep the website current — small, ongoing
 
 The repository is public and the website is live at
-https://suva.github.io/djmixmaster/, republished after every release.
+https://dmm.clysuva.com/, republished after every release.
 
 - Decide whether releases are still marked as pre-releases. The page shows
   the newest release either way and says when it is a pre-release.

@@ -16,13 +16,13 @@ free; if it helps you, you can [sponsor it](https://github.com/sponsors/Suva).
 ## Download and install
 
 Installers for macOS (Apple Silicon), Windows and Linux are on the
-[website](https://suva.github.io/djmixmaster/) and the
+[website](https://dmm.clysuva.com/) and the
 [releases page](https://github.com/Suva/djmixmaster/releases); on Windows it
 is also in the
 [Microsoft Store](https://apps.microsoft.com/detail/9PCL3QKW3G4N). Nothing else
 needs to be installed; the app carries everything it uses. The installers
 are not signed, so each system warns about them the first time; the manual's
-[Installing](https://suva.github.io/djmixmaster/manual/install.html) page
+[Installing](https://dmm.clysuva.com/manual/install.html) page
 says how to get past that. What changed in each release is in
 [CHANGELOG.md](CHANGELOG.md).
 
@@ -31,7 +31,7 @@ There is no build for Intel Macs yet. On those, the tool can be run
 
 ## The manual
 
-The [manual](https://suva.github.io/djmixmaster/manual/) covers every part
+The [manual](https://dmm.clysuva.com/manual/) covers every part
 of the app, with pictures: opening a recording and marking its mixes, the
 check-up, levelling, tracks, exporting, and the videos, down to every kind of
 layer and every function a template's formulas can use. Its pages are in

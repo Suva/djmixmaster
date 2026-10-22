@@ -9,7 +9,7 @@ import { join, resolve } from 'node:path';
 import { MANUAL, manualPages } from './site/manual.mjs';
 
 /** The website, where the manual's links to the rest of it go. */
-export const SITE = 'https://suva.github.io/djmixmaster/';
+export const SITE = 'https://dmm.clysuva.com/';
 const REPOSITORY_URL = 'https://github.com/Suva/djmixmaster';
 
 const root = join(import.meta.dirname, '..');

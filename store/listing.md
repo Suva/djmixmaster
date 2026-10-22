@@ -46,7 +46,7 @@ EXPORT
 YOUR WORK STAYS YOURS
 Your recordings are never changed and never leave your computer. The app collects nothing, and has no accounts and no advertising. It is free and open-source software, under the GNU General Public License.
 
-A manual, with pictures of every part of the app, is at https://suva.github.io/djmixmaster/manual/
+A manual, with pictures of every part of the app, is at https://dmm.clysuva.com/manual/
 
 ## What's new in this version
 
@@ -107,7 +107,7 @@ Jaan Pullerits
 
 ## Website
 
-https://suva.github.io/djmixmaster/
+https://dmm.clysuva.com/
 
 ## Support contact info
 
@@ -115,7 +115,7 @@ https://github.com/Suva/djmixmaster/issues
 
 ## Privacy policy URL
 
-https://suva.github.io/djmixmaster/privacy.html
+https://dmm.clysuva.com/privacy.html
 
 ## System requirements
 
