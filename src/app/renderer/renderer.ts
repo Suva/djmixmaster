@@ -1,5 +1,6 @@
 import { shortcuts } from '../shortcuts.ts';
 import { settingsDialog } from './settings.ts';
+import { OutputFollower } from './output.ts';
 import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
 import { isLossy, LOSSY_HEADROOM_DB, type EncodeOptions } from '../../encode-options.ts';
 import { fadeGain } from '../../fade.ts';
@@ -2862,7 +2863,7 @@ $('help').addEventListener('click', showHelp);
 $('help-close').addEventListener('click', () => helpDialog.close());
 $('help-manual').addEventListener('click', () => api.openManual());
 
-const settings = settingsDialog(api);
+const settings = settingsDialog(api, new OutputFollower((id) => player.setOutput(id), (text) => ($('readout').textContent = text)));
 onThemeChange(scheduleDraw);
 settings.start();
 $('open-settings').title = `Settings (${COMMAND},)`;

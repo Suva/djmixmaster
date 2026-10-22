@@ -103,6 +103,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/theme.ts` | Dark and light: the colours canvases draw with, changed in place when the look changes. The CSS follows `data-theme` on the root element |
 | `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
 | `src/app/renderer/fader-reset.ts` | A double click on a slider puts it back to its default |
+| `src/app/renderer/output.ts` | The sound output chosen in Settings, found among the devices there are, with the default while it is not plugged in |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
 | `src/app/renderer/saving.ts` | Saves made a moment after the last change, counted for scripted checks |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
@@ -238,7 +239,7 @@ Linux), the same for `npm start` and the packaged app.
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
 | `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
 | `media/` | Videos up to 25 MB added to templates, and those in template files imported, named by their fingerprint; Settings can put them elsewhere |
-| `preferences.json` | Choices that belong to the app rather than a recording: the folder for template videos and the LUT folder, and `theme` (kept only when `light`; dark is the default whatever the system says), chosen in Settings, and the view the window was left in (`mastering`, `video` or `editing`), to start in next time |
+| `preferences.json` | Choices that belong to the app rather than a recording: the folder for template videos and the LUT folder, `theme` (kept only when `light`; dark is the default whatever the system says) and `output`, the sound output by the window's id for it and its name (absent for the system's default), chosen in Settings, and the view the window was left in (`mastering`, `video` or `editing`), to start in next time |
 | `luts/` | The LUT folder, unless Settings chose another: .cube files the user puts there, offered wherever a LUT is chosen |
 | `video-clips/` | Copies of videos made for the app's own use: ping-pong clips there and back, and playable copies of videos the window cannot play; the 20 most recently used are kept |
 | `visual-features/` | What the visuals move to, per recording, worked out the first time it is asked for; the 20 most recently used are kept |

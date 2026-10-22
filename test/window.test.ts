@@ -2395,6 +2395,50 @@ test('a recording\'s channels put right from the check-up: heard, levelled, expo
   assert.equal(again, 2);
 });
 
+test('the sound output is chosen in Settings, kept, and stood in for while it is not connected', { skip }, async () => {
+  const data = await fresh();
+  const first = await runApp({ recording: mix, data }, async (page) => {
+    page.click('open-settings');
+    const list = page.element<HTMLSelectElement>('settings-output');
+    await page.until(() => list.options.length > 0, 'the outputs to be listed');
+    const options = [...list.options].map((option) => option.text);
+    // A computer with no output but the default has nothing else to choose.
+    const other = [...list.options].find((option) => option.value !== '');
+    if (other) {
+      page.choose('settings-output', other.value);
+      await page.until(() => list.value === other.value, 'the choice to be shown');
+    }
+    await page.wait(300);
+    return { options, chosen: other?.text ?? null };
+  });
+  assert.match(first.options[0], /^System default/);
+  const preferences = () => JSON.parse(readFileSync(join(data, 'preferences.json'), 'utf8'));
+  if (first.chosen) {
+    assert.equal(preferences().output.name, first.chosen);
+    const again = await runApp({ recording: mix, data }, async (page) => {
+      page.click('open-settings');
+      const list = page.element<HTMLSelectElement>('settings-output');
+      await page.until(() => list.options.length > 0, 'the outputs to be listed');
+      return list.selectedOptions[0].text;
+    });
+    assert.equal(again, first.chosen, 'kept for the next start');
+  }
+
+  // An interface that is not plugged in: the default meanwhile, and said so.
+  await writeFile(join(data, 'preferences.json'), JSON.stringify({ ...preferences(), output: { id: 'gone', name: 'Ghost interface' } }));
+  const missing = await runApp({ recording: mix, data }, async (page) => {
+    await page.until(() => page.text('readout').includes('Ghost interface'), 'the missing output to be told');
+    const told = page.text('readout');
+    page.click('open-settings');
+    const list = page.element<HTMLSelectElement>('settings-output');
+    await page.until(() => list.options.length > 0, 'the outputs to be listed');
+    return { told, shown: list.selectedOptions[0].text, note: page.text('settings-output-note') };
+  });
+  assert.equal(missing.told, '“Ghost interface” is not connected. Playing through the system\'s default output until it is.');
+  assert.equal(missing.shown, 'Ghost interface (not connected)');
+  assert.match(missing.note, /not connected/);
+});
+
 test('an EQ belongs to one mix: heard as the export applies it, copied, undone, exported and kept', { skip }, async () => {
   const out = join(work, 'equalised');
   await mkdir(out);

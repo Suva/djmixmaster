@@ -4,12 +4,43 @@
 
 import type { Api, AppSettings, FolderKind } from '../api.ts';
 import { setTheme } from './theme.ts';
+import { defaultOutputName, deviceFor, outputDevices, type OutputFollower } from './output.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
-export function settingsDialog(api: Api): { open(): void; start(): Promise<void>; readonly element: HTMLDialogElement } {
+const OUTPUT_NOTE = 'Where you hear playback: headphones, speakers, an audio interface. Exports are not affected.';
+
+export function settingsDialog(api: Api, output: OutputFollower): { open(): void; start(): Promise<void>; readonly element: HTMLDialogElement } {
   const dialog = $<HTMLDialogElement>('settings-dialog');
   const updates = $<HTMLInputElement>('settings-updates');
+  const outputs = $<HTMLSelectElement>('settings-output');
+
+  /** The outputs there are now, the one chosen among them; one chosen but not plugged in is listed too, as such. */
+  const showOutputs = async () => {
+    const devices = await outputDevices();
+    const standing = await defaultOutputName();
+    const choice = output.choice;
+    const found = choice ? deviceFor(choice, devices) : null;
+    outputs.replaceChildren(
+      new Option(standing ? `System default (${standing})` : 'System default', ''),
+      ...devices.map((device) => new Option(device.name, device.id)),
+      ...(choice && !found ? [new Option(`${choice.name} (not connected)`, choice.id)] : []),
+    );
+    outputs.value = choice ? (found?.id ?? choice.id) : '';
+    $('settings-output-note').textContent =
+      choice && !found ? `${choice.name} is not connected, so you hear the system's default output until it is.` : OUTPUT_NOTE;
+  };
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    if (dialog.open) void showOutputs();
+  });
+  outputs.addEventListener('change', async () => {
+    const id = outputs.value;
+    const name = outputs.selectedOptions[0]?.text.replace(/ \(not connected\)$/, '') ?? '';
+    const choice = id ? { id, name } : null;
+    await api.setOutput(choice);
+    await output.choose(choice);
+    await showOutputs();
+  });
 
   const show = (settings: AppSettings) => {
     for (const [which, prefix, folder, chosen] of [
@@ -54,10 +85,13 @@ export function settingsDialog(api: Api): { open(): void; start(): Promise<void>
     element: dialog,
     /** Puts the window in the look last chosen; before anything is shown, so that it never flashes the other. */
     async start() {
-      setTheme((await api.settings()).theme);
+      const settings = await api.settings();
+      setTheme(settings.theme);
+      await output.choose(settings.output);
     },
     async open() {
       show(await api.settings());
+      await showOutputs();
       if (!dialog.open) dialog.showModal();
     },
   };

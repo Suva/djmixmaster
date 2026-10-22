@@ -157,6 +157,14 @@ export interface AppSettings {
   updatesFromStore: boolean;
   version: string;
   theme: AppTheme;
+  /** Where playback is heard; null is the system's default output, whatever that is at the time. */
+  output: AudioOutput | null;
+}
+
+/** A sound output chosen in Settings: the window's id for it, and its name, to know it again if the id changes. */
+export interface AudioOutput {
+  id: string;
+  name: string;
 }
 
 /** What the window may ask the main process to do. */
@@ -213,6 +221,8 @@ export interface Api {
   setCheckUpdates(on: boolean): Promise<AppSettings>;
   /** Chooses the window's look, kept for the next start. */
   setTheme(theme: AppTheme): Promise<AppSettings>;
+  /** Chooses where playback is heard, kept for the next start; null is the system's default. */
+  setOutput(output: AudioOutput | null): Promise<AppSettings>;
   /** Looks for a newer version now, and says what was found. */
   checkUpdatesNow(): void;
   /** The view the window was in when last used. */

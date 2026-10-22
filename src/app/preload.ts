@@ -32,6 +32,7 @@ const api: Api = {
   showFolder: (which) => ipcRenderer.send('show-folder', which),
   setCheckUpdates: (on) => ipcRenderer.invoke('set-check-updates', on),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
+  setOutput: (output) => ipcRenderer.invoke('set-output', output),
   checkUpdatesNow: () => ipcRenderer.send('check-updates-now'),
   view: () => ipcRenderer.invoke('view'),
   setView: (view) => ipcRenderer.send('set-view', view),

@@ -15,7 +15,7 @@ import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
-import type { AppSettings, AppTheme, AppView, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import type { AppSettings, AppTheme, AppView, AudioOutput, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
 import { clipStreamArgs, VIDEO_EXTENSIONS } from './video-files.ts';
@@ -1140,6 +1140,8 @@ interface Preferences {
   lutFolder?: string;
   view?: AppView;
   theme?: AppTheme;
+  /** Where playback is heard; absent is the system's default. */
+  output?: AudioOutput;
 }
 const VIEWS: AppView[] = ['mastering', 'video', 'editing'];
 let preferences: Preferences = {};
@@ -1152,6 +1154,8 @@ async function loadPreferences() {
   if (typeof saved?.lutFolder === 'string' && saved.lutFolder) preferences.lutFolder = saved.lutFolder;
   if (VIEWS.includes(saved?.view as AppView)) preferences.view = saved!.view as AppView;
   if (saved?.theme === 'light') preferences.theme = 'light';
+  const output = saved?.output as Partial<AudioOutput> | undefined;
+  if (typeof output?.id === 'string' && output.id && typeof output.name === 'string') preferences.output = { id: output.id, name: output.name };
 }
 
 const savePreferences = () => writeStored(preferencesFile(), JSON.stringify(preferences));
@@ -1166,6 +1170,7 @@ const settingsNow = (): AppSettings => ({
   updatesFromStore: UPDATES_FROM_STORE,
   version: app.getVersion(),
   theme: preferences.theme ?? 'dark',
+  output: preferences.output ?? null,
 });
 ipcMain.handle('settings', () => settingsNow());
 ipcMain.handle('choose-folder', async (_event, which: FolderKind) => {
@@ -1198,6 +1203,13 @@ ipcMain.handle('set-theme', async (_event, theme: AppTheme) => {
   const { theme: _was, ...kept } = preferences;
   preferences = theme === 'light' ? { ...kept, theme } : kept;
   window?.setBackgroundColor(groundColour());
+  await savePreferences();
+  return settingsNow();
+});
+ipcMain.handle('set-output', async (_event, output: AudioOutput | null) => {
+  const { output: _was, ...kept } = preferences;
+  const valid = typeof output?.id === 'string' && output.id && typeof output.name === 'string';
+  preferences = valid ? { ...kept, output: { id: output.id, name: output.name } } : kept;
   await savePreferences();
   return settingsNow();
 });

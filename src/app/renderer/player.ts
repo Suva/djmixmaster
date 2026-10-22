@@ -10,6 +10,9 @@ import { eqFilters, FLAT_EQ, type Eq } from '../../eq.ts';
 import type { MediaSource } from '../api.ts';
 import type { LimiterReport, LimiterSettings } from './limiter-worklet.ts';
 
+/** An AudioContext that can be moved to another output device, as Chromium's can; TypeScript's types do not have it yet. */
+type SinkContext = AudioContext & { setSinkId(id: string | { type: 'none' }): Promise<void> };
+
 /** How long after the last jump a streamed recording starts playing again from the new place. */
 const STREAM_RESTART_MS = 150;
 
@@ -45,6 +48,8 @@ export class Player {
   /** Listens in after the EQ, for the analyser drawn behind it: what the EQ has made of the sound, before the levelling moves it. */
   #rta: AnalyserNode | null = null;
   #rtaData: Float32Array<ArrayBuffer> | null = null;
+  /** The output device heard through, by the window's id for it; empty is the system's default. */
+  #output = '';
   readonly #heard = new Float32Array(2048);
   #settings: Required<LimiterSettings> = { ceilingDb: -1, bypass: false };
 
@@ -152,6 +157,22 @@ export class Player {
     for (const key of ['ll', 'lr', 'rl', 'rr'] as const) this.#channels[key].gain.value = mix[key];
   }
 
+  /**
+   * Plays through another output device, by its id from the window's list of
+   * devices; empty is the system's default. Takes effect at once, also while
+   * playing. In check mode nothing is heard whatever is chosen.
+   */
+  async setOutput(id: string) {
+    if (id === this.#output) return;
+    this.#output = id;
+    if (this.#context && !this.#silent) await (this.#context as SinkContext).setSinkId(id);
+  }
+
+  /** The output device chosen, by its id; empty is the system's default. */
+  get output(): string {
+    return this.#output;
+  }
+
   /** The EQ heard, the one the export applies after the channel fix; undefined is flat. */
   setEq(eq: Eq | undefined) {
     const next = eq ?? FLAT_EQ;
@@ -221,7 +242,7 @@ export class Player {
   }
 
   async #build() {
-    const context = new AudioContext(this.#silent ? ({ sinkId: { type: 'none' } } as AudioContextOptions) : {});
+    const context = new AudioContext({ sinkId: this.#silent ? { type: 'none' } : this.#output } as AudioContextOptions);
     await context.audioWorklet.addModule('limiter-worklet.js');
     const source = context.createMediaElementSource(this.#audio);
     const gain = context.createGain();

@@ -6,6 +6,10 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Choose where you hear it.** Settings has a Sound output choice:
+  headphones, speakers, an audio interface, or the system's default. It is
+  kept for next time; if that output is not plugged in, you hear the default
+  until it is, and the app goes back to it by itself.
 - **Start a template from nothing.** The ⋯ menu beside the templates in the
   Video view has Create new, which makes an empty template of your own, with
   no layers, and opens it in the editor.
