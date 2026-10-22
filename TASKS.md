@@ -186,6 +186,31 @@ from Mixcloud was found either way. A test would settle it: upload the same
 minute at -9 and at -14 as private tracks and compare. Adjust the preset
 descriptions in `renderer.ts` to match what is found.
 
+### Recording: analysis while it records
+
+The recorder sends every sample to the main process for its meters. Run the
+analysis's meters on them as they come (`BlockEnergyMeter`, `BandMeter`,
+`RecordingExaminer`), so that the recording is analysed the moment it stops
+and opens without a second pass; show the check-up's warnings, clipping and
+dropouts, while recording; and let M mark a track while recording.
+
+### A capture helper for recording
+
+Recordings are captured by Chromium (`capture.ts`), which gives at most two
+channels of a device: a mixer's record output on its channels 3 and 4 cannot
+be recorded. ffmpeg's capture would take any channels but drops a tenth of the
+sound on macOS. A small program of our own per system (Core Audio on macOS,
+WASAPI on Windows, ALSA or PulseAudio on Linux) would capture every channel,
+complete, and hand the sound to the writing ffmpeg directly, so that a
+recording would also carry on if the app crashed. It would be built when
+packaging and shipped beside ffmpeg.
+
+### Recording on Windows and Linux
+
+Recording has been tried on macOS only. Chromium's capture should work on the
+others; try it, and declare the microphone capability in the Microsoft Store
+package.
+
 ### A suggested EQ correction
 
 Each mix has a corrective EQ (`eq.ts`), and the analysis measures how every

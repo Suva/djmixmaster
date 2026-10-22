@@ -1,6 +1,27 @@
 import type { MediaFile, Template } from '../visuals/template.ts';
 import type { ChannelMix } from '../channels.ts';
 import type { Eq } from '../eq.ts';
+import type { RecordStatus } from './recorder.ts';
+import type { Levels, RecordDevice, RecordFormat, RecordInput, RecordPlan } from './recording.ts';
+
+export type { Levels, RecordDevice, RecordFormat, RecordInput, RecordPlan, RecordStatus };
+
+/** The choices of the Record view last used, kept for next time. */
+export interface RecordSettings {
+  device: string | null;
+  channels: [number, number];
+  format: RecordFormat;
+  folder: string;
+}
+
+/** What the Record view starts from. */
+export interface RecordSetup {
+  devices: RecordDevice[];
+  /** Why no devices could be listed, such as a system recording does not work on yet. */
+  problem?: string;
+  settings: RecordSettings;
+  status: RecordStatus;
+}
 import type { Shape } from '../visuals/shape.ts';
 import type { EncodeOptions, VideoInfo } from '../audio-io.ts';
 
@@ -223,6 +244,28 @@ export interface Api {
   setTheme(theme: AppTheme): Promise<AppSettings>;
   /** Chooses where playback is heard, kept for the next start; null is the system's default. */
   setOutput(output: AudioOutput | null): Promise<AppSettings>;
+  /** The devices to record from, the choices last used, and any recording running. */
+  recordSetup(): Promise<RecordSetup>;
+  /** Opens a device for its level, without recording, closing the one before; null closes it. Asks for permission to use inputs first. */
+  recordMonitor(device: string | null): Promise<RecordStatus>;
+  /** Which two of the input's channels the meters show, and a recording takes, as left and right. */
+  recordChannels(channels: [number, number]): void;
+  /** Closes the input, unless it is being recorded. */
+  recordClose(): Promise<void>;
+  /** Asks for the folder recordings go in; null if none was chosen. */
+  recordChooseFolder(): Promise<string | null>;
+  recordStart(plan: RecordPlan): Promise<RecordStatus>;
+  /** Stops the recording, and opens it. */
+  recordStop(): Promise<void>;
+  /** Opens a recording that a crash stopped, or puts it aside. */
+  recordOpenInterrupted(): Promise<void>;
+  recordDismiss(): void;
+  /** For the capture page: the input's samples, its channels interleaved. */
+  captureSamples(samples: Float32Array): void;
+  /** For the capture page: the input went away. */
+  captureEnded(reason: string): void;
+  onRecordStatus(listener: (status: RecordStatus) => void): void;
+  onRecordLevels(listener: (levels: Levels) => void): void;
   /** Looks for a newer version now, and says what was found. */
   checkUpdatesNow(): void;
   /** The view the window was in when last used. */

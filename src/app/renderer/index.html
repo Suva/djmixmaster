@@ -119,6 +119,62 @@
       </div>
     </section>
 
+    <section id="record-view" hidden aria-label="Record">
+      <div class="record-main">
+        <div class="record-head">
+          <span id="record-light" aria-hidden="true"></span>
+          <span id="record-state">Not recording</span>
+          <span id="record-time">0:00:00</span>
+        </div>
+        <canvas id="record-meter" role="img" aria-label="The level of what comes in, left and right"></canvas>
+        <dl id="record-stats">
+          <dt>Written</dt><dd id="record-written">–</dd>
+          <dt>Room left</dt><dd id="record-room">–</dd>
+          <dt>Recording as</dt><dd id="record-as">–</dd>
+        </dl>
+        <p id="record-problem" role="alert" hidden></p>
+        <div id="record-interrupted" hidden>
+          <p id="record-interrupted-text"></p>
+          <div class="settings-buttons">
+            <button id="record-open-interrupted" class="primary">Open it</button>
+            <button id="record-dismiss">Not now</button>
+          </div>
+        </div>
+        <button id="record-go" class="record-go">Start recording</button>
+        <p class="note" id="record-go-note">Choosing the device starts listening, so the level shows before anything is written. Recording goes straight to files, in parts of half an hour; when you stop, the recording opens here to be mastered.</p>
+      </div>
+      <div class="record-settings">
+        <h2>Input</h2>
+        <div class="control">
+          <div class="control-head"><label for="record-device">Device</label></div>
+          <select id="record-device"></select>
+          <p class="note" id="record-device-note"></p>
+        </div>
+        <div class="control">
+          <div class="control-head"><label for="record-channels">Channels</label></div>
+          <select id="record-channels" title="Which of the device's inputs to record, as left and right"></select>
+        </div>
+        <h2>Files</h2>
+        <div class="control">
+          <div class="control-head"><label for="record-name">Name</label></div>
+          <input id="record-name" class="field-text" type="text" spellcheck="false">
+        </div>
+        <div class="control">
+          <div class="control-head"><label>Folder</label></div>
+          <div class="record-folder-row">
+            <span id="record-folder" class="folder-path"></span>
+            <button id="record-folder-change">Change…</button>
+          </div>
+        </div>
+        <div class="control">
+          <div class="control-head"><label>Format</label></div>
+          <div class="toggle" id="record-format" role="group" aria-label="Format">
+            <button id="record-format-wav" data-format="wav" title="24-bit WAV: plays everywhere; about 1 GB an hour">WAV</button>
+            <button id="record-format-flac" data-format="flac" title="FLAC: just as exact as WAV, at about half the size">FLAC</button>
+          </div>
+        </div>
+      </div>
+    </section>
     <aside id="settings" inert>
       <p id="settings-for"></p>
       <div id="video-settings">
@@ -360,7 +416,9 @@
     <div class="toggle" role="group" aria-label="View">
       <button id="view-mastering" class="on" title="The curves and the levelling (Tab switches)">Mastering</button>
       <button id="view-video" title="The mix's video as it will look (Tab switches)">Video</button>
+      <button id="view-record" title="Record from an audio input, such as a DJ mixer">Record</button>
     </div>
+    <button id="record-indicator" hidden title="A recording is running: show it"></button>
     <div id="readout">&nbsp;</div>
   </footer>
   <dialog id="tracks-dialog">

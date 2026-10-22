@@ -17,7 +17,7 @@ await build({
 });
 
 await build({
-  entryPoints: ['src/app/renderer/renderer.ts', 'src/app/renderer/limiter-worklet.ts', 'src/app/renderer/exporter.ts'],
+  entryPoints: ['src/app/renderer/renderer.ts', 'src/app/renderer/limiter-worklet.ts', 'src/app/renderer/exporter.ts', 'src/app/renderer/capture.ts', 'src/app/renderer/capture-worklet.ts'],
   outdir: 'dist',
   bundle: true,
   platform: 'browser',
@@ -25,7 +25,7 @@ await build({
   sourcemap: true,
 });
 
-for (const file of ['index.html', 'styles.css', 'exporter.html']) {
+for (const file of ['index.html', 'styles.css', 'exporter.html', 'capture.html']) {
   await copyFile(`src/app/renderer/${file}`, `dist/${file}`);
 }
 

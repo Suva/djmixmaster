@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, protocol, shell, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, net, powerSaveBlocker, protocol, shell, systemPreferences, type MenuItemConstructorOptions } from 'electron';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync } from 'node:fs';
@@ -15,9 +15,11 @@ import { ANALYSIS_VERSION } from '../loudness.ts';
 import { Worker } from 'node:worker_threads';
 import { FEATURES_VERSION, type Features } from '../features.ts';
 import type { Examination } from '../master.ts';
-import type { AppSettings, AppTheme, AppView, AudioOutput, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
+import type { AppSettings, AppTheme, AppView, AudioOutput, RecordPlan, RecordSettings, RecordSetup, FineWave, FolderKind, Job, JobMessage, MediaSource, MenuCommand, PreviewPart, RecentRecording, Remembered, RenderRequest } from './api.ts';
 import type { MediaFile } from '../visuals/template.ts';
 import { nameForParts, orderParts } from './parts.ts';
+import { Recorder } from './recorder.ts';
+import { NAME_FORBIDDEN, TEST_SIGNAL, TEST_SIGNAL_MONO } from './recording.ts';
 import { clipStreamArgs, VIDEO_EXTENSIONS } from './video-files.ts';
 import { PING_PONG_MOST_SECONDS } from '../visuals/clip.ts';
 import { extractZipEntry, isZip, readZip, readZipEntry, writeZip } from './zip.ts';
@@ -49,7 +51,7 @@ if (SCREENSHOT) app.setPath('userData', process.env.DJMASTER_SHOT_DATA ?? join(t
  */
 const SCHEME = 'djm';
 const ORIGIN = `${SCHEME}://app`;
-const APP_FILES = ['index.html', 'styles.css', 'renderer.js', 'limiter-worklet.js', 'exporter.html', 'exporter.js'];
+const APP_FILES = ['index.html', 'styles.css', 'renderer.js', 'limiter-worklet.js', 'exporter.html', 'exporter.js', 'capture.html', 'capture.js', 'capture-worklet.js'];
 const MEDIA_TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.m4a': 'audio/mp4',
   '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.aif': 'audio/aiff', '.aiff': 'audio/aiff',
@@ -1142,6 +1144,8 @@ interface Preferences {
   theme?: AppTheme;
   /** Where playback is heard; absent is the system's default. */
   output?: AudioOutput;
+  /** The Record view's choices last used. */
+  recording?: RecordSettings;
 }
 const VIEWS: AppView[] = ['mastering', 'video', 'editing'];
 let preferences: Preferences = {};
@@ -1156,6 +1160,17 @@ async function loadPreferences() {
   if (saved?.theme === 'light') preferences.theme = 'light';
   const output = saved?.output as Partial<AudioOutput> | undefined;
   if (typeof output?.id === 'string' && output.id && typeof output.name === 'string') preferences.output = { id: output.id, name: output.name };
+  const recording = saved?.recording as Partial<RecordSettings> | undefined;
+  if (recording && typeof recording.folder === 'string' && recording.folder) {
+    const channels = Array.isArray(recording.channels) && recording.channels.length === 2 && recording.channels.every((c) => Number.isInteger(c) && c >= 0)
+      ? recording.channels as [number, number] : [0, 1] as [number, number];
+    preferences.recording = {
+      device: typeof recording.device === 'string' ? recording.device : null,
+      channels,
+      format: recording.format === 'flac' ? 'flac' : 'wav',
+      folder: recording.folder,
+    };
+  }
 }
 
 const savePreferences = () => writeStored(preferencesFile(), JSON.stringify(preferences));
@@ -1214,6 +1229,146 @@ ipcMain.handle('set-output', async (_event, output: AudioOutput | null) => {
   return settingsNow();
 });
 ipcMain.on('check-updates-now', () => checkForUpdatesNow());
+
+// ---------------------------------------------------------------------------
+// Recording from an audio input (recorder.ts)
+
+/**
+ * The hidden page that captures the Record view's input (capture.ts), made
+ * when first needed. Its own process, so that the main window being busy, or
+ * crashing, does not touch what is being recorded.
+ */
+let captureWindow: BrowserWindow | null = null;
+let captureReady: Promise<BrowserWindow> | null = null;
+
+function captureWindowReady(): Promise<BrowserWindow> {
+  captureReady ??= new Promise((done) => {
+    const page = new BrowserWindow({ show: false, webPreferences: { preload: join(__dirname, 'preload.cjs'), backgroundThrottling: false } });
+    if (SCREENSHOT) page.webContents.on('console-message', (event) => console.log(`[capture] ${event.message}`));
+    page.webContents.once('did-finish-load', () => done(page));
+    page.webContents.on('render-process-gone', () => {
+      captureWindow = null;
+      captureReady = null;
+      page.destroy();
+      void recorder.inputEnded('The capture of the input stopped working.');
+    });
+    page.loadURL(`${ORIGIN}/capture.html`);
+    captureWindow = page;
+  });
+  return captureReady;
+}
+
+const recorder = new Recorder({
+  folder: app.getPath('userData'),
+  // In check mode parts can be made short.
+  ...(SCREENSHOT && process.env.DJMASTER_PART_SECONDS ? { partSeconds: Number(process.env.DJMASTER_PART_SECONDS) } : {}),
+  capture: {
+    // In check mode the test signal stands in for every device.
+    start: async (device) => {
+      const test = device === TEST_SIGNAL ? 'stereo' : device === TEST_SIGNAL_MONO ? 'mono' : false;
+      return (await captureWindowReady()).webContents.executeJavaScript(`window.capture.start(${JSON.stringify(device)}, ${JSON.stringify(test)})`);
+    },
+    stop: async () => {
+      if (captureWindow) await captureWindow.webContents.executeJavaScript('window.capture.stop()').catch(() => {});
+    },
+  },
+  send: (channel, value) => window?.webContents.send(channel, value),
+  awake: { start: () => powerSaveBlocker.start('prevent-app-suspension'), stop: (id) => powerSaveBlocker.stop(id) },
+});
+
+ipcMain.on('capture-samples', (event, samples: Float32Array) => {
+  if (event.sender === captureWindow?.webContents) recorder.samples(samples);
+});
+ipcMain.on('capture-ended', (event, reason: string) => {
+  if (event.sender === captureWindow?.webContents) void recorder.inputEnded(reason);
+});
+
+const recordSettings = (): RecordSettings =>
+  preferences.recording ?? { device: null, channels: [0, 1], format: 'wav', folder: app.getPath('music') };
+
+/** macOS asks once whether the app may use audio inputs, in the app's name. */
+async function mayRecord(device: string) {
+  if (device === TEST_SIGNAL || device === TEST_SIGNAL_MONO || process.platform !== 'darwin') return;
+  if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return;
+  if (!(await systemPreferences.askForMediaAccess('microphone'))) {
+    throw new Error('DJ Mix Master may not use audio inputs. Allow it in System Settings, under Privacy & Security, Microphone, and try again.');
+  }
+}
+
+ipcMain.handle('record-setup', async (): Promise<RecordSetup> => {
+  const settings = recordSettings();
+  if (SCREENSHOT && !process.env.DJMASTER_REAL_INPUTS) return { devices: [{ name: TEST_SIGNAL }, { name: TEST_SIGNAL_MONO }], settings, status: recorder.status };
+  try {
+    const devices = await (await captureWindowReady()).webContents.executeJavaScript('window.capture.devices()');
+    return { devices, settings, status: recorder.status };
+  } catch (error) {
+    return { devices: [], problem: error instanceof Error ? error.message : String(error), settings, status: recorder.status };
+  }
+});
+// The device and channels are kept as soon as they are chosen, so that the view comes back to them.
+ipcMain.handle('record-monitor', async (_event, device: string | null) => {
+  if (device) await mayRecord(device);
+  const status = await recorder.monitor(device);
+  if (device && !recorder.recording) {
+    preferences = { ...preferences, recording: { ...recordSettings(), device } };
+    await savePreferences();
+  }
+  return status;
+});
+ipcMain.on('record-channels', (_event, channels: [number, number]) => {
+  recorder.setChannels(channels);
+  if (recorder.recording) return;
+  preferences = { ...preferences, recording: { ...recordSettings(), channels } };
+  void savePreferences();
+});
+ipcMain.handle('record-close', () => recorder.close());
+ipcMain.handle('record-choose-folder', async () => {
+  if (SCREENSHOT) return process.env.DJMASTER_SHOT_FOLDER ?? null;
+  if (!window) return null;
+  const result = await dialog.showOpenDialog(window, { properties: ['openDirectory', 'createDirectory'], defaultPath: recordSettings().folder, buttonLabel: 'Record here' });
+  if (result.canceled) return null;
+  preferences = { ...preferences, recording: { ...recordSettings(), folder: result.filePaths[0] } };
+  await savePreferences();
+  return result.filePaths[0];
+});
+ipcMain.handle('record-start', async (_event, plan: RecordPlan) => {
+  if (!plan.name.trim() || NAME_FORBIDDEN.test(plan.name)) throw new Error('A recording\'s name cannot have any of \\ / : * ? " < > | % in it.');
+  await mayRecord(plan.device);
+  await mkdir(plan.folder, { recursive: true });
+  preferences = { ...preferences, recording: { device: plan.device, channels: plan.channels, format: plan.format, folder: plan.folder } };
+  await savePreferences();
+  return recorder.start(plan);
+});
+ipcMain.handle('record-stop', async () => {
+  const parts = await recorder.stop();
+  if (parts.length) window?.webContents.send('open-files', parts);
+});
+ipcMain.handle('record-open-interrupted', async () => {
+  const files = recorder.status.files ?? [];
+  recorder.dismiss();
+  if (files.length) window?.webContents.send('open-files', files);
+});
+ipcMain.on('record-dismiss', () => recorder.dismiss());
+
+/** Set once the person has said to stop the recording and quit, so that quitting goes ahead. */
+let quitWhileRecording = false;
+app.on('before-quit', (event) => {
+  if (!recorder.recording || quitWhileRecording) return;
+  event.preventDefault();
+  // In check mode nothing is asked: the recording is stopped as the app quits after its script.
+  const ask = {
+    type: 'warning' as const,
+    message: 'A recording is running.',
+    detail: 'Quitting stops it. What was recorded so far is kept.',
+    buttons: ['Stop recording and quit', 'Keep recording'],
+    defaultId: 1,
+    cancelId: 1,
+  };
+  const answer = SCREENSHOT ? 0 : window ? dialog.showMessageBoxSync(window, ask) : dialog.showMessageBoxSync(ask);
+  if (answer !== 0) return;
+  quitWhileRecording = true;
+  recorder.stop().finally(() => app.quit());
+});
 ipcMain.handle('view', () => preferences.view ?? 'mastering');
 ipcMain.on('set-view', (_event, view: AppView) => {
   if (!VIEWS.includes(view) || preferences.view === view) return;
@@ -1476,9 +1631,17 @@ function createWindow() {
   }
   // Automated checks run the audio chain without making any sound.
   window.loadURL(`${ORIGIN}/index.html${SCREENSHOT ? '?silent' : ''}`);
+  // Closing the window is quitting, whatever the hidden capture page: its question about a recording comes first.
+  window.on('close', (event) => {
+    if (!recorder.recording || quitWhileRecording) return;
+    event.preventDefault();
+    app.quit();
+  });
   window.on('closed', () => {
     window = null;
     running?.terminate();
+    captureWindow?.destroy();
+    app.quit();
   });
 }
 
@@ -1676,6 +1839,8 @@ app.whenReady().then(async () => {
   await loadPreferences();
   buildMenu();
   createWindow();
+  // A recording left by the last run: still going, or stopped by a crash and waiting to be opened.
+  window?.webContents.once('did-finish-load', () => void recorder.adopt());
   window?.webContents.once('did-finish-load', () => {
     setTimeout(async () => {
       const version = await checkQuietly();

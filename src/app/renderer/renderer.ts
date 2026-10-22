@@ -1,6 +1,7 @@
 import { shortcuts } from '../shortcuts.ts';
 import { settingsDialog } from './settings.ts';
 import { OutputFollower } from './output.ts';
+import { RecordView } from './record-view.ts';
 import { DEFAULT_LEVEL_OPTIONS, type Adjustment, type LevelOptions } from '../../gain-curve.ts';
 import { isLossy, LOSSY_HEADROOM_DB, type EncodeOptions } from '../../encode-options.ts';
 import { fadeGain } from '../../fade.ts';
@@ -211,12 +212,40 @@ const videoView = new VideoView({
 
 /** Switches between the Mastering and the Video view. */
 function showVideo(on: boolean) {
+  if (recordView.visible) showRecord(false);
   document.body.classList.toggle('video', on);
   $('view-video').classList.toggle('on', on);
   $('view-mastering').classList.toggle('on', !on);
   videoView.show(on);
   if (!on) scheduleDraw();
   rememberView();
+}
+
+const recordView = new RecordView(api, {
+  say: (text) => ($('readout').textContent = text || ' '),
+  // The recording just made has been opened: Mastering shows it.
+  done: () => showVideo(false),
+  reveal: () => showRecord(true),
+});
+
+/** Shows the Record view in place of the recording's views, or leaves it for the view that was there. */
+function showRecord(on: boolean) {
+  if (on === recordView.visible) return;
+  document.body.classList.toggle('record', on);
+  $('view-record').classList.toggle('on', on);
+  if (on) {
+    player.pause();
+    $('view-video').classList.remove('on');
+    $('view-mastering').classList.remove('on');
+    if (videoView.visible) videoView.show(false);
+  } else {
+    const video = document.body.classList.contains('video');
+    $('view-video').classList.toggle('on', video);
+    $('view-mastering').classList.toggle('on', !video);
+    if (video) videoView.show(true);
+    else scheduleDraw();
+  }
+  void recordView.show(on);
 }
 
 /** Whether the view the window starts in has been put back yet: until then, the one shown is not a choice to keep. */
@@ -1972,6 +2001,8 @@ const typingIn = (target: EventTarget | null) =>
 
 window.addEventListener('keydown', (event) => {
   if (typingIn(event.target)) return;
+  // The Record view has none of the recording's shortcuts: a key pressed by mistake must not play or delete anything there.
+  if (recordView.visible) return;
   // While a dialog is up, the keys belong to it.
   if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open || settings.element.open) return;
   // While a template is edited, as in an image editor: Shift+⌘N adds a layer, ⌘J duplicates one, ⌘G groups it, Shift+⌘G ungroups.
@@ -3353,6 +3384,7 @@ new ResizeObserver(scheduleDraw).observe(overview);
 
 $('view-mastering').addEventListener('click', () => showVideo(false));
 $('view-video').addEventListener('click', () => showVideo(true));
+$('view-record').addEventListener('click', () => showRecord(true));
 
 syncControls();
 initTooltips();

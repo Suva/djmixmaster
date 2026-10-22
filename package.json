@@ -100,6 +100,7 @@
         }
       ],
       "extendInfo": {
+        "NSMicrophoneUsageDescription": "DJ Mix Master records from the audio input you choose, such as a DJ mixer, to files on this computer. Nothing is sent anywhere.",
         "UTExportedTypeDeclarations": [
           {
             "UTTypeIdentifier": "com.djmixmaster.template",

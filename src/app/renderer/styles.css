@@ -767,3 +767,30 @@ textarea.about-input { resize: vertical; line-height: 1.45; }
 
 .editor-head-buttons { display: flex; gap: 6px; }
 .colour-picker input::-webkit-inner-spin-button, .colour-picker input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* The Record view: in place of the recording's views and their settings. */
+body.record #workspace, body.record #settings { display: none; }
+#record-view { flex: 1; display: flex; min-height: 0; }
+#record-view[hidden] { display: none; }
+.record-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 28px 32px; max-width: 760px; margin: 0 auto; }
+.record-head { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 600; }
+#record-light { width: 14px; height: 14px; border-radius: 50%; background: var(--border); flex: none; }
+body.recording #record-light { background: var(--problem); animation: record-pulse 1.6s ease-in-out infinite; }
+@keyframes record-pulse { 50% { opacity: 0.45; } }
+#record-time { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 28px; }
+#record-meter { width: 100%; height: 92px; display: block; }
+#record-stats { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
+#record-stats dt { color: var(--muted); }
+#record-stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+#record-problem { margin: 0; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--problem); color: var(--problem); }
+#record-interrupted { padding: 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); }
+#record-interrupted p { margin: 0 0 10px; }
+.record-go { align-self: flex-start; font-size: 15px; padding: 10px 22px; border-radius: 8px; background: var(--problem); border-color: var(--problem); color: var(--accent-ink); font-weight: 600; }
+.record-go:hover:not(:disabled) { filter: brightness(1.1); }
+.record-go.confirming { background: transparent; color: var(--problem); }
+.record-settings { flex: none; width: 300px; overflow-y: auto; padding: 14px 16px; border-left: 1px solid var(--border); }
+.record-settings select, .record-settings input[type="text"] { width: 100%; }
+.record-folder-row { display: flex; align-items: center; gap: 6px; }
+.record-folder-row .folder-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; color: var(--muted); }
+#record-indicator { font-size: 11px; padding: 2px 10px; color: var(--problem); border-color: var(--problem); font-variant-numeric: tabular-nums; }
+.record-settings input:disabled, .record-settings select:disabled { background: var(--panel); color: var(--muted); }
