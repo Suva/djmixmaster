@@ -22,6 +22,7 @@ import { BANDS } from '../../bands.ts';
 import { Rta } from './rta.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
+import { initFaderReset, resetsTo } from './fader-reset.ts';
 import { cancelSave, saveDue, saveLater } from './saving.ts';
 import { SHAPES, shapeOf } from '../../visuals/shape.ts';
 import { originalPictureExtension } from '../video-files.ts';
@@ -2095,6 +2096,8 @@ interface Slider {
   get: () => number;
   set: (value: number) => void;
   format: (value: number) => string;
+  /** Where a double click puts it back to. */
+  initial: number;
 }
 
 const sliders: Slider[] = [
@@ -2104,13 +2107,14 @@ const sliders: Slider[] = [
     set: (v) => (mix.options.windowSeconds = v),
     // Dips up to this share of the window are filled in; see fullEnergyEnvelope.
     format: (v) => `up to ${Math.round(v * mix.options.percentile)} s`,
+    initial: DEFAULT_LEVEL_OPTIONS.windowSeconds,
   },
-  { id: 'smooth', get: () => mix.options.smoothSeconds, set: (v) => (mix.options.smoothSeconds = v), format: (v) => `${v * 2} s` },
-  { id: 'bass', get: () => mix.options.bassCorrection, set: (v) => (mix.options.bassCorrection = v), format: (v) => (v === 0 ? 'off' : `${Math.round(v * 100)}%`) },
-  { id: 'bass-max', get: () => mix.options.maxBassDb, set: (v) => (mix.options.maxBassDb = v), format: (v) => `±${v.toFixed(1)} dB` },
-  { id: 'boost', get: () => mix.options.maxBoostDb, set: (v) => (mix.options.maxBoostDb = v), format: (v) => db(v) },
-  { id: 'cut', get: () => mix.options.maxCutDb, set: (v) => (mix.options.maxCutDb = v), format: (v) => db(-v) },
-  { id: 'ceiling', get: () => mix.ceilingDb, set: (v) => (mix.ceilingDb = v), format: (v) => `${v.toFixed(1)} dBTP` },
+  { id: 'smooth', get: () => mix.options.smoothSeconds, set: (v) => (mix.options.smoothSeconds = v), format: (v) => `${v * 2} s`, initial: DEFAULT_LEVEL_OPTIONS.smoothSeconds },
+  { id: 'bass', get: () => mix.options.bassCorrection, set: (v) => (mix.options.bassCorrection = v), format: (v) => (v === 0 ? 'off' : `${Math.round(v * 100)}%`), initial: DEFAULT_LEVEL_OPTIONS.bassCorrection },
+  { id: 'bass-max', get: () => mix.options.maxBassDb, set: (v) => (mix.options.maxBassDb = v), format: (v) => `±${v.toFixed(1)} dB`, initial: DEFAULT_LEVEL_OPTIONS.maxBassDb },
+  { id: 'boost', get: () => mix.options.maxBoostDb, set: (v) => (mix.options.maxBoostDb = v), format: (v) => db(v), initial: DEFAULT_LEVEL_OPTIONS.maxBoostDb },
+  { id: 'cut', get: () => mix.options.maxCutDb, set: (v) => (mix.options.maxCutDb = v), format: (v) => db(-v), initial: DEFAULT_LEVEL_OPTIONS.maxCutDb },
+  { id: 'ceiling', get: () => mix.ceilingDb, set: (v) => (mix.ceilingDb = v), format: (v) => `${v.toFixed(1)} dBTP`, initial: DEFAULT_CEILING_DB },
 ];
 
 /**
@@ -2158,6 +2162,7 @@ $<HTMLSelectElement>('loudness').replaceChildren(
 );
 
 for (const slider of sliders) {
+  resetsTo($<HTMLInputElement>(slider.id), slider.initial);
   $<HTMLInputElement>(slider.id).addEventListener('input', (event) => {
     const value = Number((event.target as HTMLInputElement).value);
     slider.set(value);
@@ -2184,6 +2189,15 @@ for (const id of ['target', 'gain']) {
     setByHand(Number((event.target as HTMLInputElement).value));
     syncControls();
     scheduleRecompute();
+  });
+}
+
+// The loudness has no one default value: put back, it goes back to working itself out.
+for (const id of ['target', 'gain']) {
+  resetsTo($<HTMLInputElement>(id), () => {
+    const loudness = $<HTMLSelectElement>('loudness');
+    loudness.value = 'auto';
+    loudness.dispatchEvent(new Event('change'));
   });
 }
 
@@ -2334,6 +2348,13 @@ function changeEq(change: Partial<Eq>) {
   else delete mix.eq;
   syncEq();
   scheduleRecompute();
+}
+
+resetsTo($<HTMLInputElement>('eq-high-pass'), FLAT_EQ.highPassHz);
+for (const band of EQ_BANDS) {
+  resetsTo($<HTMLInputElement>(`eq-${band.id}`), FLAT_EQ[band.gain]);
+  // Set as it is, since the slider's steps need not land on it exactly.
+  resetsTo($<HTMLInputElement>(`eq-${band.id}-hz`), () => changeEq({ [band.hz]: FLAT_EQ[band.hz] }));
 }
 
 $<HTMLInputElement>('eq-high-pass').addEventListener('input', (event) => {
@@ -3332,6 +3353,7 @@ $('view-video').addEventListener('click', () => showVideo(true));
 
 syncControls();
 initTooltips();
+initFaderReset();
 api.onOpenFiles(openFiles);
 showRecent();
 api.initialFile().then(async (files) => {

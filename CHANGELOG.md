@@ -6,6 +6,9 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Double-click a slider to reset it.** Any slider, in the settings, the EQ,
+  a video's fields or the template editor, goes back to its default when you
+  double-click it. Undo brings back where it was.
 - **A corrective EQ for each mix.** The settings have a new EQ section: a
   rumble filter, and bass, low mids, high mids and treble, each up or down by
   as much as 6 dB at a frequency you choose, with a drawing of what they add

@@ -102,6 +102,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the help sheet and the manual |
 | `src/app/renderer/theme.ts` | Dark and light: the colours canvases draw with, changed in place when the look changes. The CSS follows `data-theme` on the root element |
 | `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
+| `src/app/renderer/fader-reset.ts` | A double click on a slider puts it back to its default |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
 | `src/app/renderer/saving.ts` | Saves made a moment after the last change, counted for scripted checks |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
@@ -149,6 +150,8 @@ and curves in the code are block indexes unless a name says seconds.
   would. Give an icon button an `aria-label` as well, and name its shortcut
   in the tooltip.
 - **Colours come from the theme.** In CSS use the variables at the top of `styles.css`, which `[data-theme="light"]` redefines; on a canvas use `colours` from `theme.ts`. A new hard-coded colour would stay dark-looking in the light theme.
+- **Every slider has a default.** Give a new one its default with
+  `resetsTo` (`fader-reset.ts`), which a double click puts it back to.
 - **Clicks are not drags.** Pointer handlers ignore movement under
   `DRAG_START_PX`. New drag interactions should do the same.
 

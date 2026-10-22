@@ -23,6 +23,7 @@ import { colourInput } from './colour-input.ts';
 import { lutChoices } from './layer-settings.ts';
 import { colours } from './theme.ts';
 import { saveLater, written } from './saving.ts';
+import { resetsTo } from './fader-reset.ts';
 import { packLut, parseCube, unpackLut, type Lut, type PackedLut } from '../../visuals/lut.ts';
 import {
   checked, DEFAULT_TEMPLATE, drawVideoFrame, lutOf, pictureOf, TEMPLATES as templates, templateOf, USER_TEMPLATE, USER_TEMPLATES, type VideoMix,
@@ -862,6 +863,7 @@ export class VideoView {
       input.max = String(field.max ?? 1);
       input.step = String(((field.max ?? 1) - (field.min ?? 0)) / 100);
       input.value = String(value);
+      resetsTo(input, Number(field.default));
       const shown = document.createElement('output');
       shown.textContent = Number(value).toFixed(2);
       input.addEventListener('input', () => {

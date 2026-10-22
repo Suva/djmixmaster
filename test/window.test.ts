@@ -2461,6 +2461,29 @@ test('an EQ belongs to one mix: heard as the export applies it, copied, undone, 
   assert.equal(again, '+6.0 dB above 2 kHz');
 });
 
+test('a double click on a slider puts it back to its default, as one step to undo', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
+    const twice = (id: string) => page.element(id).dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    page.slide('cut', 4);
+    page.slide('eq-high', 4);
+    page.slide('eq-high-hz', 0.9);
+    page.slide('target', -8);
+    await page.saved();
+    const moved = [page.text('cut-value'), page.text('eq-high-value'), page.element<HTMLSelectElement>('loudness').value];
+    await page.wait(300);
+    for (const id of ['cut', 'eq-high', 'eq-high-hz', 'target']) twice(id);
+    await page.saved();
+    const reset = [page.text('cut-value'), page.text('eq-high-value'), page.element<HTMLSelectElement>('loudness').value];
+    page.click('undo');
+    await page.wait(200);
+    const undone = [page.text('cut-value'), page.text('eq-high-value'), page.element<HTMLSelectElement>('loudness').value];
+    return { moved, reset, undone };
+  });
+  assert.deepEqual(seen.moved, ['-4.0 dB', '+4.0 dB above 13 kHz', 'custom']);
+  assert.deepEqual(seen.reset, ['-12.0 dB', '0 dB above 8 kHz', 'auto']);
+  assert.deepEqual(seen.undone, seen.moved);
+});
+
 test('a silent channel is filled from the other, and the recording measures 3 dB louder for it', { skip }, async () => {
   const oneSided = join(work, 'One sided.wav');
   execFileSync(ffmpeg(), ['-v', 'error', '-y', '-i', mix, '-af', 'pan=stereo|c0=0*c0|c1=c1', '-c:a', 'pcm_s16le', oneSided]);

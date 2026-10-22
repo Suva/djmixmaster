@@ -37,7 +37,7 @@ Under the levelling settings is an EQ, for putting right how a mix was recorded 
 - **Behind the curve** are three spectra, lined up on its middle line: this mix's average (white), the other mixes' average (dashed), and what is playing, averaged over a second or two (blue). The averages come from the analysis, so they are there while paused, and this mix's moves as you change its EQ. For a set that sounds unlike the rest of the night, such as one played on records through a different phono stage, move the EQ until its line follows the other mixes'.
 - **Each mix has its own EQ**, as the DJs of one night may have played through different gear: records through a phono stage, then CDJs. A new mix starts flat. **Copy to** gives this EQ to another mix, or to every other one; **Flat** takes it off. Reset settings and Apply to all mixes leave the EQ alone.
 
-Bypass (A) turns the EQ off too, so you can compare.
+Bypass (A) turns the EQ off too, so you can compare. Double-click any slider, here or anywhere in the app, to put it back to its default.
 
 ## Adjusting by hand
 

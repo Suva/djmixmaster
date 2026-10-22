@@ -76,6 +76,7 @@ export function shortcuts({ command, option }: Modifiers): Shortcuts {
       [`${command},`, 'Settings: the folders for template videos and LUTs, and the check for updates'],
       ['Double-click a mix\'s tab', 'Rename it'],
       ['Rest the pointer on a control', 'See what it does'],
+      ['Double-click a slider', 'Put it back to its default; Loudness goes back to working itself out'],
     ]],
   ];
 }

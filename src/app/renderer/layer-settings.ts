@@ -23,6 +23,7 @@ import { scrubbableInput } from './scrub.ts';
 import { stopBar } from './stop-bar.ts';
 import { colourInput } from './colour-input.ts';
 import { STOP_COUNT } from '../../visuals/gradient-map.ts';
+import { resetsTo } from './fader-reset.ts';
 import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
 
 export interface LayerSettingsContext {
@@ -235,6 +236,8 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
       amount.max = String(span);
       amount.step = String(span / 200);
       amount.value = String(motion.amount);
+      // Back to what a new motion starts with.
+      resetsTo(amount, Number(shown(span / 10)));
       const amountShown = document.createElement('output');
       amountShown.textContent = shown(motion.amount);
       const speed = document.createElement('select');
@@ -411,6 +414,7 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
           range.max = String(param.max ?? 100);
           range.step = String(((param.max ?? 100) - (param.min ?? 0)) / 200);
           range.value = String(current);
+          if (typeof param.default === 'number') resetsTo(range, param.default);
           const number = document.createElement('input');
           number.type = 'number';
           number.step = 'any';
