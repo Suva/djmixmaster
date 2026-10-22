@@ -16,7 +16,7 @@ Pick one from the list under **Template**. These come with the app:
 - **Photo**: a photo of your own behind the names.
 - **Original video**: the recording's own picture, for a set that was filmed.
 
-What you choose is kept with the mix, and undone like any other change. The **⋯** button beside the list duplicates, imports, exports or deletes templates, and shows who made one.
+What you choose is kept with the mix, and undone like any other change. The **⋯** button beside the list creates a new, empty template, duplicates, imports, exports or deletes templates, and shows who made one.
 
 ## Filling it in
 

@@ -6,6 +6,9 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Start a template from nothing.** The ⋯ menu beside the templates in the
+  Video view has Create new, which makes an empty template of your own, with
+  no layers, and opens it in the editor.
 - **Double-click a slider to reset it.** Any slider, in the settings, the EQ,
   a video's fields or the template editor, goes back to its default when you
   double-click it. Undo brings back where it was.

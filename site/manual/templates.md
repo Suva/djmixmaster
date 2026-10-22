@@ -2,7 +2,7 @@
 
 A template is a stack of layers, drawn from the bottom up: a background, then perhaps glitter, a logo, the artist's name, and effects such as a glow over them. Anything can move with the music.
 
-Click the pencil beside the list of templates to open the editor beside the picture. The templates that come with the app stay as they are: editing one makes a copy of your own. Every change shows on the picture at once, and is saved as you go.
+Click the pencil beside the list of templates to open the editor beside the picture. The templates that come with the app stay as they are: editing one makes a copy of your own. To start from nothing instead, choose **Create new** in the **⋯** menu: an empty template of your own, with no layers, opens in the editor. Every change shows on the picture at once, and is saved as you go.
 
 ![The template editor beside the picture](pictures/window-editor.png)
 

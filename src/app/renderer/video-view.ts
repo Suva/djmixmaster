@@ -11,7 +11,7 @@ import { FrameDrawer } from '../../visuals/draw.ts';
 import { MUSIC_NAMES, MusicReader } from '../../visuals/music.ts';
 import { loadFonts } from '../../visuals/fonts.ts';
 import {
-  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, FOLDER_LUT_PREFIX, folderLutsOf, keepFolderLuts, LAYER_TYPES, LUT_PREFIX, lutsOf, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEXT_VARIABLES, upgradeTemplate,
+  ASSET_PREFIX, checkSetting, COMMON_PARAMS, settingsOf, fontsOf, imagesOf, FOLDER_LUT_PREFIX, folderLutsOf, keepFolderLuts, LAYER_TYPES, LUT_PREFIX, lutsOf, MEDIA_PREFIX, prepare, RECORDING_VIDEO, TEMPLATE_FORMAT, TEXT_VARIABLES, upgradeTemplate,
   type Field, type MediaFile, type PreparedLayer, type Template,
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
@@ -795,6 +795,13 @@ export class VideoView {
     });
     $('template-edit').addEventListener('click', () => this.#startEditing());
     $('editor-done').addEventListener('click', () => this.#stopEditing());
+    $('template-new').addEventListener('click', async () => {
+      const empty: Template = { format: TEMPLATE_FORMAT, name: this.#freeName('New template'), fields: [], layers: [] };
+      await this.#adopt(empty);
+      // Nothing to see in it yet: straight into the editor, to add the first layer.
+      await this.#startEditing();
+      this.#options.say(`${empty.name} is empty. Add a layer to start.`);
+    });
     $('template-duplicate').addEventListener('click', async () => {
       const copy: Template = structuredClone(this.#template());
       copy.name = this.#freeName(`${copy.name} copy`);

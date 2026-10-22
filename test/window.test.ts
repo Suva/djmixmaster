@@ -639,6 +639,30 @@ test('a track list from DJ software is spread over the mix, to be dragged into p
   assert.ok(JSON.parse(seen.drawn!).every((track: [number, string, boolean]) => track[2]), 'all marked as guesses');
 });
 
+test('Create new starts an empty template of your own, open in the editor', { skip }, async () => {
+  const data = await fresh();
+  const seen = await runApp({ recording: mix, data, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    await page.wait(300);
+    page.click('template-new');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    await page.saved();
+    const select = page.element<HTMLSelectElement>('template');
+    return {
+      chosen: select.selectedOptions[0].text,
+      user: select.value.startsWith('user:'),
+      layers: page.element('editor-layers').querySelectorAll('.layer-row').length,
+      note: page.element('editor-layers').querySelector('.editor-empty')?.textContent,
+      name: page.element<HTMLInputElement>('template-name').value,
+    };
+  });
+  assert.deepEqual(seen, { chosen: 'New template', user: true, layers: 0, note: 'No layers. Add one below.', name: 'New template' });
+  const stored = await readdir(join(data, 'templates'));
+  assert.equal(stored.length, 1);
+  const template = JSON.parse(readFileSync(join(data, 'templates', stored[0]), 'utf8'));
+  assert.deepEqual([template.layers, template.fields], [[], []]);
+});
+
 test('a template of your own: duplicated, renamed, kept, shared and deleted', { skip }, async () => {
   const data = await fresh();
   const shared = join(work, 'shared templates');
@@ -2162,7 +2186,7 @@ test('the ⋯ menu beside the templates opens, closes, and leaves Delete for tem
   });
   assert.deepEqual(seen, {
     opened: true,
-    items: ['Duplicate', 'Import…', 'Export…', 'Delete (off)'],
+    items: ['Create new', 'Duplicate', 'Import…', 'Export…', 'Delete (off)'],
     escaped: true,
     outside: true,
     pencil: 'Edit a copy of the template',
