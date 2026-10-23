@@ -937,7 +937,7 @@ function hit(event: MouseEvent): { kind: Drag['kind']; mix: Mix | null } {
 }
 
 overview.addEventListener('mousedown', (event) => {
-  if (!recording || busy) return;
+  if (event.button !== 0 || !recording || busy) return;
   const block = overviewBlock(event);
   const grabbed = hit(event);
   if (grabbed.mix && grabbed.mix !== mix) select(grabbed.mix);
@@ -952,7 +952,7 @@ overview.addEventListener('mousedown', (event) => {
 window.addEventListener('mousemove', (event) => {
   if (!recording) return;
   if (!drag) {
-    if (event.target === overview) {
+    if (event.target === overview && !panning) {
       const { kind } = hit(event);
       overview.style.cursor = kind === 'move' ? 'pointer' : kind === 'new' ? 'crosshair' : 'ew-resize';
     }
@@ -1175,6 +1175,42 @@ detailCanvas.addEventListener(
   { passive: false },
 );
 
+// Dragging with the right button pans either view, for a mouse with no
+// sideways scroll (most of them, on Windows): what is under the pointer
+// stays under it. The other buttons' handlers leave the right one alone.
+let panning: { canvas: HTMLElement; x: number; start: number; end: number; perPixel: number; moved: boolean } | null = null;
+
+function panWithRightButton(canvas: HTMLElement, shown: () => { start: number; end: number }, width: () => number) {
+  canvas.addEventListener('mousedown', (event) => {
+    if (event.button !== 2 || !recording || busy) return;
+    const { start, end } = shown();
+    panning = { canvas, x: event.clientX, start, end, perPixel: (end - start) / Math.max(1, width()), moved: false };
+    event.preventDefault();
+  });
+  // Right-dragging is the only use of the right button here; no menu.
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+}
+
+panWithRightButton(overview, () => overviewShown, () => overview.clientWidth);
+panWithRightButton(detailCanvas, () => view, () => detailCanvas.clientWidth - GUTTER);
+
+window.addEventListener('mousemove', (event) => {
+  if (!panning || !recording) return;
+  const moved = event.clientX - panning.x;
+  if (!panning.moved && Math.abs(moved) < DRAG_START_PX) return;
+  panning.moved = true;
+  panning.canvas.style.cursor = 'grabbing';
+  const by = -moved * panning.perPixel;
+  if (panning.canvas === overview) setOverview(panning.start + by, panning.end + by);
+  else setView(panning.start + by, panning.end + by);
+});
+
+window.addEventListener('mouseup', (event) => {
+  if (event.button !== 2 || !panning) return;
+  panning.canvas.style.cursor = '';
+  panning = null;
+});
+
 $('zoom-in').addEventListener('click', () => zoom(0.5, zoomCentre()));
 $('zoom-out').addEventListener('click', () => zoom(2, zoomCentre()));
 $('zoom-fit').addEventListener('click', () => setView(mix.region.start, mix.region.end));
@@ -1192,7 +1228,7 @@ detailCanvas.addEventListener('mousemove', (event) => {
     scheduleDraw();
     return;
   }
-  if (!grab) {
+  if (!grab && !panning) {
     detailCanvas.style.cursor = found ? (found.part === 'level' ? 'ns-resize' : 'ew-resize') : inGainLane(event) ? 'col-resize' : 'pointer';
   }
   if (detail && block !== null) {
@@ -1318,7 +1354,7 @@ function describeTrack(track: Track): string {
 }
 
 detailCanvas.addEventListener('mousedown', (event) => {
-  if (!recording || busy || fadeDrag) return;
+  if (event.button !== 0 || !recording || busy || fadeDrag) return;
   const track = markerAt(event);
   if (!track) return;
   trackDrag = track;
@@ -1586,6 +1622,7 @@ function adjustmentAt(event: MouseEvent): { adjustment: Adjustment; part: 'start
 }
 
 detailCanvas.addEventListener('mousedown', (event) => {
+  if (event.button !== 0) return;
   grabMoved = false;
   grabX = event.clientX;
   grabY = event.clientY;

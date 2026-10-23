@@ -4,6 +4,12 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- **Drag with the right mouse button to move along the recording** or the
+  mix, with any mouse. Before, only a sideways swipe or tilt of the wheel
+  did, which most mice on Windows do not have.
+
 ## 0.13.0 — 23 October 2026
 
 - The website has moved to [dmm.clysuva.com](https://dmm.clysuva.com/). The

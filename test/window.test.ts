@@ -522,6 +522,47 @@ test('the Photo template fills the picture with a chosen photo', { skip }, async
   assert.ok(seen.middle[0] > 150, `the middle of the picture is ${seen.middle}`);
 });
 
+test('dragging with the right button moves along the views, and edits nothing', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
+    await page.until(() => page.text('stat-out') !== '–', 'the levelling to be worked out');
+    const press = (target: EventTarget, type: string, x: number, y: number) =>
+      target.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, button: 2, buttons: 2, bubbles: true }));
+    const rightDrag = (id: string, from: number, to: number) => {
+      const box = page.element(id).getBoundingClientRect();
+      const y = box.top + box.height / 2;
+      press(page.element(id), 'mousedown', box.left + from * box.width, y);
+      press(window, 'mousemove', box.left + ((from + to) / 2) * box.width, y);
+      press(window, 'mousemove', box.left + to * box.width, y);
+      press(window, 'mouseup', box.left + to * box.width, y);
+    };
+    // The time the readout gives under the middle of the detail view.
+    const middle = () => {
+      const box = page.element('detail').getBoundingClientRect();
+      page.element('detail').dispatchEvent(new MouseEvent('mousemove', { clientX: box.left + box.width * 0.6, clientY: box.top + box.height / 2, bubbles: true }));
+      const [h, m, s] = page.text('readout').trim().split(/\s+/)[0].split(':').map(Number);
+      return h * 3600 + m * 60 + s;
+    };
+    for (let i = 0; i < 3; i++) page.click('zoom-in');
+    const before = { region: page.region(), tabs: page.tabs(), time: middle() };
+    rightDrag('detail', 0.7, 0.3);
+    const panned = middle();
+    rightDrag('detail', 0.3, 0.7);
+    const back = middle();
+    page.click('overview-in');
+    rightDrag('overview', 0.2, 0.8);
+    rightDrag('overview', 0.8, 0.2);
+    await page.wait(500);
+    return { before, panned, back, region: page.region(), tabs: page.tabs(), cursor: page.element('detail').style.cursor };
+  });
+  // Three zooms in show about a minute of the nine; dragging two fifths of the way moves about 25 seconds on.
+  const moved = seen.panned - seen.before.time;
+  assert.ok(moved > 15 && moved < 35, `moved ${moved} s: ${JSON.stringify(seen)}`);
+  assert.ok(Math.abs(seen.back - seen.before.time) <= 1, `back where it was: ${JSON.stringify(seen)}`);
+  assert.deepEqual(seen.region, seen.before.region, 'the mix kept its edges');
+  assert.deepEqual(seen.tabs, seen.before.tabs, 'no mix was added');
+  assert.notEqual(seen.cursor, 'grabbing');
+});
+
 test('the picture fades in from black with the mix', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
     // Drag the fade-in handle, in the top left corner of the mix, a quarter of the way in.

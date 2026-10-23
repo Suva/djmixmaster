@@ -11,7 +11,7 @@ Press **Space** to play. What you hear is the result, through the same limiter t
 - **Bypass** (the button left of the play controls, or A) plays the recording as it was, for comparison. It pulses while on.
 - **J, K and L** run the playhead backwards, stop it, and run it forwards, faster with each press.
 - **The meter** beside the curves shows what reaches each speaker, turning red above the ceiling, and how hard the limiter is working.
-- **Zoom in** with a scroll or a pinch, down to half a second across the window, where single beats can be seen.
+- **Zoom in** with a scroll or a pinch, down to half a second across the window, where single beats can be seen. **Move along** with a sideways swipe, or by dragging with the right mouse button, which works with any mouse.
 
 ## How it levels
 
