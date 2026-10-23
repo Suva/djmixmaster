@@ -463,8 +463,9 @@ Do not write test data there.
   package was built from, which it reads to know the app is an Electron one,
   and the folder the package is in),
   once the variable `STORE_PRODUCT_ID` and the four `PARTNER_CENTER_*`
-  secrets are set: as a draft, to be submitted in Partner Center, unless
-  `STORE_SUBMIT` is `true`. Partner Center accepts this only for an app
+  secrets are set, committed so that Microsoft certifies it (an uncommitted
+  upload is never attached to the submission, which keeps its old package).
+  Partner Center accepts this only for an app
   already live in the Store, so the first version goes up by hand. A failure
   there leaves the release alone, and the submission can be made again from
   the Actions tab (the "Microsoft Store" workflow, given the Release run's

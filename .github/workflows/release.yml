@@ -145,9 +145,8 @@ jobs:
   # Hands the Store package to Partner Center as a new submission, for version tags, once the Store is set up:
   # the app's Store ID as the variable STORE_PRODUCT_ID, and Partner Center's credentials for GitHub as the
   # secrets PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_SELLER_ID, PARTNER_CENTER_CLIENT_ID and
-  # PARTNER_CENTER_CLIENT_SECRET. The submission is left as a draft, to be looked at and submitted in Partner
-  # Center, unless the variable STORE_SUBMIT is "true". Microsoft certifies it either way. A failure here does
-  # not hold up the release: the package is still in the run's downloads, for uploading by hand.
+  # PARTNER_CENTER_CLIENT_SECRET. The submission is committed, so Microsoft certifies it without anything
+  # more done in Partner Center. A failure here does not hold up the release: the package is still in the run's downloads, for uploading by hand.
   # The Store package to Partner Center (store.yml), which can also be run again by hand for this run's package.
   # A failure there leaves the release alone: it is a job of its own, and does not mark this run failed.
   store:

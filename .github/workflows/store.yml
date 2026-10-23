@@ -1,8 +1,8 @@
 # Hands the Microsoft Store package a Release run built to Partner Center, as
-# a new submission: as a draft, to be looked over and submitted there, unless
-# the repository's variable STORE_SUBMIT is `true`. The Release workflow calls
-# it for each version tag. It can also be started by hand from the Actions
-# tab, with the number of a Release run, to submit what that run built again
+# a new submission, committed so that Microsoft certifies it. (Left uncommitted,
+# the upload is never attached to the submission, which keeps the package it
+# had before.) The Release workflow calls it for each version tag. It can also
+# be started by hand from the Actions tab, with the number of a Release run, to submit what that run built again
 # (the package is kept with the run as long as the repository keeps a run's
 # downloads: 90 days unless its settings say otherwise).
 #
@@ -90,16 +90,8 @@ jobs:
             exit 1
           }
           Write-Output "Submitting $($package.Name)."
-          if ($env:SUBMIT -eq 'true') {
-            msstore publish . -i package -id $env:PRODUCT_ID
-          } else {
-            msstore publish . -i package -id $env:PRODUCT_ID --noCommit
-          }
+          msstore publish . -i package -id $env:PRODUCT_ID
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($env:SUBMIT -ne 'true') {
-            Write-Output "::notice::The submission is a draft in Partner Center: look it over and submit it there."
-          }
         env:
           PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
-          SUBMIT: ${{ vars.STORE_SUBMIT }}
           RUN_ID: ${{ inputs.run-id }}
