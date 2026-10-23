@@ -10,6 +10,17 @@
   --heart: #e86a8a;
   color-scheme: dark;
 }
+/* The manual in the app's Help window, when the app is light; the website itself is always dark. */
+:root[data-theme="light"] {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --border: #c8ced8;
+  --text: #1c2028;
+  --muted: #5b6472;
+  --accent: #0e9060;
+  --accent-ink: #ffffff;
+  color-scheme: light;
+}
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -121,3 +132,10 @@ code { font: 0.92em ui-monospace, SFMono-Regular, Menlo, monospace; }
   .manual-nav { position: static; max-height: none; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
   .manual-nav summary { display: list-item; cursor: pointer; font-weight: 600; }
 }
+
+/* In the app's Help window: no header, as its toolbar leads home, and the words its search found marked. */
+.in-app header { display: none; }
+.in-app .manual { padding-top: 24px; }
+.in-app .manual-nav { top: 24px; max-height: calc(100vh - 48px); }
+::highlight(found) { background: rgba(61, 220, 151, 0.35); color: inherit; }
+:root[data-theme="light"]::highlight(found) { background: rgba(14, 144, 96, 0.25); }

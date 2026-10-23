@@ -102,8 +102,6 @@ header {
 #checkup { flex: none; font-size: 12px; padding: 4px 10px; color: var(--muted); }
 #checkup[hidden] { display: none; }
 #checkup.faults { color: var(--warn); border-color: var(--warn-line); }
-#help-content { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 32px; margin-bottom: 18px; }
-#help-dialog { width: 760px; }
 #settings-dialog { width: 620px; }
 #settings-dialog .setting-block { padding: 14px 0; border-top: 1px solid var(--border); }
 #settings-dialog .setting-block:first-of-type { border-top: none; padding-top: 0; }
@@ -114,10 +112,6 @@ header {
 #settings-dialog .check-row { display: flex; align-items: center; gap: 8px; }
 #settings-check-now { margin-top: 10px; padding: 4px 10px; }
 #settings-dialog .dialog-buttons { margin-top: 6px; }
-#help-content h4 { margin: 0 0 6px; }
-#help-content .how { display: flex; justify-content: space-between; gap: 14px; padding: 3px 0; font-size: 12.5px; border-bottom: 1px solid var(--border); }
-#help-content .how span:first-child { color: var(--text); white-space: nowrap; }
-#help-content .how span:last-child { color: var(--muted); text-align: right; }
 #checkup-findings { margin-bottom: 16px; }
 .finding { margin-bottom: 14px; padding-left: 12px; border-left: 3px solid var(--border); }
 .finding.fault { border-left-color: var(--warn); }

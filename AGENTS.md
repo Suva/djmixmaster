@@ -102,7 +102,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
 | `src/app/renderer/meter.ts` | The level meter beside the curves |
 | `src/app/renderer/rta.ts` | The analyser behind the EQ: what is playing, averaged and smoothed |
-| `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the help sheet and the manual |
+| `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the manual, which the **?** button and F1 open at them |
 | `src/app/renderer/theme.ts` | Dark and light: the colours canvases draw with, changed in place when the look changes. The CSS follows `data-theme` on the root element |
 | `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
 | `src/app/renderer/capture.ts` | The hidden page that captures the Record view's input with Chromium, and sends its samples to the main process |
@@ -110,6 +110,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/fader-reset.ts` | A double click on a slider puts it back to its default |
 | `src/app/renderer/output.ts` | The sound output chosen in Settings, found among the devices there are, with the default while it is not plugged in |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
+| `src/app/renderer/help.ts` | The Help window: the manual the app carries, in a frame under a toolbar of back, forward, home and a search through every page |
 | `src/app/renderer/saving.ts` | Saves made a moment after the last change, counted for scripted checks |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
 
@@ -176,7 +177,7 @@ environment variables switch on:
 |---|---|
 | `DJMASTER_SHOT=<file.png>` | After the first recording is drawn, save a picture of the window and quit |
 | `DJMASTER_SHOT_SCRIPT=<js>` | Run this JavaScript in the window first; its result is printed as `[script] ...` |
-| `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `help`) to the window before the script runs |
+| `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `settings`) to the window before the script runs |
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder, the save dialog of a single export with the name it suggests in this folder, and Settings' folder choices with it |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
@@ -509,7 +510,7 @@ the app's own code, so the manual cannot list what the app does not have:
 
 | Directive | What it puts in | From |
 |---|---|---|
-| `{{shortcuts: Playback}}` | That section of the shortcuts, Mac and Windows side by side | `src/app/shortcuts.ts`, which the help sheet shows too |
+| `{{shortcuts: Playback}}` | That section of the shortcuts, Mac and Windows side by side | `src/app/shortcuts.ts` |
 | `{{layers}}`, `{{layer-list}}` | Every kind of layer, with its picture, description and settings | `LAYER_TYPES` in `template.ts` |
 | `{{common-settings}}`, `{{style-settings}}`, `{{mask-settings}}` | The settings every layer has, the layer styles, a mask's | `COMMON_PARAMS`, `STYLE_PARAMS`, `MASK_PARAMS` |
 | `{{functions}}`, `{{music}}`, `{{text-variables}}` | The formula functions, the music values, the text variables | `FUNCTION_ABOUT`, `MUSIC_ABOUT`, `TEXT_ABOUT` |
@@ -538,9 +539,19 @@ The app carries its own copy, for its own version: `scripts/build.mjs` runs
 `scripts/build-manual.mjs`, which writes the same pages into `dist/help/`
 (packaged with the rest of `dist/`), with the links that lead to the rest of
 the website (`{{SITE}}` in `site/manual.html`, and `../` in a page) going to
-it by its address. Help → User Manual opens that copy in the browser
-(`openManual` in `main.ts`), or the website's where there is none; in check
-mode it opens nothing, and `window.api.manualAddress()` says where it would.
+it by its address, and `search.json` beside them, the text of every page's
+parts for the search. Help → User Manual shows that copy in the Help window
+(`openManual` in `main.ts`, `help.html` and `help.ts`), served from
+`djm://app/help/`, or the website's in the browser where there is none. The
+pages are shown in a frame, so Back and Forward step through their history
+alone. The window has no preload: the main process keeps it to the manual's
+pages, and a link out goes to the browser (`window.open`, which it turns
+away). A page in it takes the app's theme and leaves out its header, asking
+its parent before it draws (the script in `site/manual.html`), so
+`site/style.css` has a light palette the website itself never uses. In check
+mode the window is drawn off screen, and `window.api.checkHelp(script)` runs
+a script in it and says which links it would have opened;
+`window.api.manualAddress()` says which copy it shows.
 
 `site/screenshot.png` is also the picture in the README. It is taken with the
 app's check mode at twice the size, by one command, from a recording of about

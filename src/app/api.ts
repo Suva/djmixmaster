@@ -153,7 +153,7 @@ export interface VisualsChoice {
   shape?: Shape;
 }
 
-export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help' | 'settings';
+export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'settings';
 
 /** The view the window is in, kept for the next start: editing a template is in the Video view, with its editor open. */
 export type AppView = 'mastering' | 'video' | 'editing';
@@ -223,10 +223,19 @@ export interface Api {
   openDownloadPage(): void;
   /** Opens a web or email address in the browser or mail program; anything else is ignored. */
   openLink(url: string): void;
-  /** Opens the manual in the browser: the copy the app carries, for its own version, or else the website's. */
-  openManual(): void;
+  /**
+   * Opens the manual: the copy the app carries, for its own version, in a window of its own, or else the website's in
+   * the browser. At a page when one is given, such as "shortcuts" or "layer-types#noise".
+   */
+  openManual(page?: string): void;
   /** Where openManual opens the manual: a file of the copy the app carries, or the website's address. */
   manualAddress(): Promise<string>;
+  /**
+   * In check mode only: runs a script in the Help window. Says whether it is open and loaded, what the script gave,
+   * and the addresses its links would have opened in the browser. Given a name, a picture of the window is saved
+   * under it beside the check's own.
+   */
+  checkHelp(script: string, picture?: string): Promise<{ open: boolean; value: unknown; links: string[] }>;
   /** Stops the notice about this version from coming back. */
   skipVersion(version: string): void;
   /** Check mode only: saves a picture of the window, or of an area of it, beside the check's picture under `name`. */

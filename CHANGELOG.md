@@ -9,6 +9,13 @@ are under "Not released yet" and appear there once they are.
 - The website has moved to [dmm.clysuva.com](https://dmm.clysuva.com/). The
   app's links to it, and to the manual, go there now; the old address still
   works.
+- **The manual opens in the app.** Help → User Manual now shows it in a
+  window of its own, light or dark as the app is, rather than in your browser.
+  A toolbar goes back, forward and to the first page, and a search looks
+  through every page: choose a result to go straight to that part, with the
+  words marked. Links to the website still open in your browser. The **?**
+  button and F1 open it at its list of shortcuts, in place of the sheet they
+  showed before.
 
 ## 0.12.0 — 22 October 2026
 

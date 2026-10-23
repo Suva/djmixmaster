@@ -127,7 +127,7 @@ export interface Run<Given> {
   recording?: string | string[];
   /** The app's data folder for this run. Runs that share one see each other's saved work. */
   data: string;
-  /** A menu command to send before the function runs: 'close', 'undo', 'redo' or 'help'. */
+  /** A menu command to send before the function runs: 'close', 'undo', 'redo' or 'settings'. */
   menu?: string;
   /** The folder "Export all" saves into. */
   exportFolder?: string;

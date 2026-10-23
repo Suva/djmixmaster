@@ -1,4 +1,3 @@
-import { shortcuts } from '../shortcuts.ts';
 import { settingsDialog } from './settings.ts';
 import { OutputFollower } from './output.ts';
 import { RecordView } from './record-view.ts';
@@ -2004,7 +2003,7 @@ window.addEventListener('keydown', (event) => {
   // The Record view has none of the recording's shortcuts: a key pressed by mistake must not play or delete anything there.
   if (recordView.visible) return;
   // While a dialog is up, the keys belong to it.
-  if (exportDialog.open || checkupDialog.open || helpDialog.open || tracksDialog.open || settings.element.open) return;
+  if (exportDialog.open || checkupDialog.open || tracksDialog.open || settings.element.open) return;
   // While a template is edited, as in an image editor: Shift+⌘N adds a layer, ⌘J duplicates one, ⌘G groups it, Shift+⌘G ungroups.
   if (videoView.editing && (event.metaKey || event.ctrlKey) && (event.code === 'KeyJ' || event.code === 'KeyG' || (event.code === 'KeyN' && event.shiftKey))) {
     event.preventDefault();
@@ -2026,7 +2025,7 @@ window.addEventListener('keydown', (event) => {
     togglePlay();
   } else if (event.key === '?') {
     // F1 does the same, through the Help menu.
-    showHelp();
+    api.openManual('shortcuts');
   } else if (event.code === 'KeyA' && !event.metaKey && !event.ctrlKey) {
     setHearLevelled(!hearLevelled);
   } else if (event.code === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
@@ -2851,48 +2850,16 @@ api.onUpdateAvailable((version) => {
 });
 
 // ---------------------------------------------------------------------------
-// Help: everything the window responds to, on one page, in place of hints
-// printed permanently under each view
+// Help: the manual, in a window of its own, where every key and gesture is
+// listed under the part of the app it belongs to
 
-const helpDialog = $<HTMLDialogElement>('help-dialog');
 const onMac = navigator.userAgent.includes('Mac');
 const COMMAND = onMac ? '⌘' : 'Ctrl+';
-const OPTION = onMac ? 'Option' : 'Alt';
 $('split-here').title = `Split at playhead (${COMMAND}E): cut this mix in two where the playhead is`;
 $('undo').title = `Undo the last change (${COMMAND}Z)`;
 $('redo').title = `Redo the change just undone (Shift+${COMMAND}Z)`;
 
-const HELP = shortcuts({ command: COMMAND, option: OPTION });
-
-$('help-content').replaceChildren(
-  ...HELP.map(([title, rows]) => {
-    const section = document.createElement('section');
-    const heading = document.createElement('h4');
-    heading.textContent = title;
-    section.append(
-      heading,
-      ...rows.map(([what, does]) => {
-        const row = document.createElement('div');
-        row.className = 'how';
-        const left = document.createElement('span');
-        left.textContent = what;
-        const right = document.createElement('span');
-        right.textContent = does;
-        row.append(left, right);
-        return row;
-      }),
-    );
-    return section;
-  }),
-);
-
-function showHelp() {
-  if (!helpDialog.open) helpDialog.showModal();
-}
-
-$('help').addEventListener('click', showHelp);
-$('help-close').addEventListener('click', () => helpDialog.close());
-$('help-manual').addEventListener('click', () => api.openManual());
+$('help').addEventListener('click', () => api.openManual('shortcuts'));
 
 const settings = settingsDialog(api, new OutputFollower((id) => player.setOutput(id), (text) => ($('readout').textContent = text)));
 onThemeChange(scheduleDraw);
@@ -2901,10 +2868,6 @@ $('open-settings').title = `Settings (${COMMAND},)`;
 $('open-settings').addEventListener('click', () => settings.open());
 
 api.onMenu(async (command) => {
-  if (command === 'help') {
-    showHelp();
-    return;
-  }
   if (command === 'settings') {
     settings.open();
     return;

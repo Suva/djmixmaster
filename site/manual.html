@@ -6,6 +6,18 @@
   <title>{{TITLE}} · DJ Mix Master manual</title>
   <link rel="icon" href="../icon.png">
   <link rel="stylesheet" href="../style.css">
+  <script>
+    // Shown in the app's Help window (src/app/renderer/help.ts), a page takes the app's look, light or dark,
+    // and leaves out its header, whose links the window's toolbar replaces. Read before the page draws, so it
+    // does not flash dark first. On the website there is no parent to ask, or one that may not be asked.
+    try {
+      const frame = parent !== window && parent.document.documentElement;
+      if (frame && frame.dataset.help !== undefined) {
+        document.documentElement.classList.add('in-app');
+        document.documentElement.dataset.theme = frame.dataset.theme;
+      }
+    } catch {}
+  </script>
 </head>
 <body class="manual-page">
   <div class="wrap">

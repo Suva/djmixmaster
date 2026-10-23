@@ -2758,7 +2758,7 @@ test('a recording can be closed, and opened again from the start screen', { skip
   assert.equal(next, 'No recording open');
 });
 
-test('the keys move the playhead, switch what is heard and show the help', { skip }, async () => {
+test('the keys move the playhead, switch what is heard and open the manual at its shortcuts', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     const at: Record<string, number> = {};
     const press = async (name: string, code: string, options?: { shift?: boolean; alt?: boolean }) => {
@@ -2788,12 +2788,17 @@ test('the keys move the playhead, switch what is heard and show the help', { ski
     const afterTyping = page.playhead();
 
     page.key('Slash', { key: '?', shift: true });
-    return { at, original, levelled, afterTyping, help: page.element<HTMLDialogElement>('help-dialog').open };
+    let help = await window.api.checkHelp('document.getElementById("help-page").contentWindow?.location.href');
+    for (const start = Date.now(); !/shortcuts\.html$/.test(String(help.value)); help = await window.api.checkHelp('document.getElementById("help-page").contentWindow?.location.href')) {
+      if (Date.now() - start > 15000) throw new Error(`Waited in vain for the manual's shortcuts, at ${help.value}`);
+      await page.wait(50);
+    }
+    return { at, original, levelled, afterTyping, help: help.value };
   });
   assert.deepEqual(seen.at, { return: 0, right: 5, shiftRight: 35, optionRight: 36, left: 31, end: 530, returnAgain: 0 });
   assert.ok(seen.original && seen.levelled);
   assert.equal(seen.afterTyping, 0);
-  assert.ok(seen.help);
+  assert.match(String(seen.help), /help\/manual\/shortcuts\.html$/);
 });
 
 test('I and O put the start and the end of the mix at the playhead', { skip }, async () => {
@@ -3087,4 +3092,55 @@ test('Help opens the manual the app carries, for its own version, rather than th
   const address = await runApp({ recording: mix, data: await fresh(), timeoutMs: 30_000 }, () => window.api.manualAddress());
   assert.match(address, /[\\/]dist[\\/]help[\\/]manual[\\/]index\.html$/, address);
   assert.ok(existsSync(address), `${address} is there`);
+});
+
+test('Help shows the manual in a window of its own: its search goes to the part found, Back returns, and links out open in the browser', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    // Each step runs in the Help window, and waits there for what it is after.
+    const inHelp = async (step: string) => {
+      const until = `async (check, what) => { const start = Date.now(); while (!check()) { if (Date.now() - start > 15000) throw new Error('Waited in vain for: ' + what); await new Promise((done) => setTimeout(done, 50)); } }`;
+      return window.api.checkHelp(`(async () => { const until = ${until}; const frame = document.getElementById('help-page'); ${step} })()`);
+    };
+    window.api.openManual();
+    let opened = await inHelp('return 0');
+    for (const start = Date.now(); !opened.open; opened = await inHelp('return 0')) {
+      if (Date.now() - start > 15000) throw new Error('Waited in vain for the Help window');
+      await page.wait(50);
+    }
+    const first = await inHelp(`
+      await until(() => frame.contentDocument?.readyState === 'complete' && frame.contentDocument.querySelector('h1'), 'the first page');
+      return { page: frame.contentDocument.querySelector('h1').textContent, inApp: frame.contentDocument.documentElement.classList.contains('in-app'), back: document.getElementById('help-back').disabled };
+    `);
+    const search = await inHelp(`
+      const query = document.getElementById('help-query');
+      query.value = 'true peak';
+      query.dispatchEvent(new Event('input'));
+      await until(() => document.querySelector('#help-results li[role=option]'), 'the results');
+      const found = document.querySelector('#help-results li[role=option] .heading').textContent;
+      query.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+      await until(() => /levelling/.test(frame.contentWindow.location.href) && frame.contentDocument.readyState === 'complete' && !document.getElementById('help-back').disabled, 'the page of the result');
+      await until(() => frame.contentWindow.CSS.highlights.get('found')?.size > 0, 'the words marked');
+      return { found, at: frame.contentWindow.location.hash, marked: [...frame.contentWindow.CSS.highlights.get('found')].map(String) };
+    `);
+    const back = await inHelp(`
+      document.getElementById('help-back').click();
+      await until(() => /index\\.html/.test(frame.contentWindow.location.href) && frame.contentDocument.readyState === 'complete', 'the page before');
+      return { forward: document.getElementById('help-forward').disabled };
+    `);
+    const link = await inHelp(`
+      frame.contentDocument.querySelector('a[href^="https://github.com"]').click();
+      await new Promise((done) => setTimeout(done, 300));
+      return frame.contentWindow.location.href;
+    `);
+    return {
+      first: first.value, search: search.value as { found: string; at: string; marked: string[] }, back: back.value, stayed: link.value as string, sent: link.links,
+    };
+  });
+  assert.deepEqual(seen.first, { page: 'The manual', inApp: true, back: true });
+  assert.equal(seen.search.found, 'How it levels');
+  assert.equal(seen.search.at, '#how-it-levels');
+  assert.deepEqual([...new Set(seen.search.marked.map((word) => word.toLowerCase()))].sort(), ['peak', 'true']);
+  assert.deepEqual(seen.back, { forward: false });
+  assert.match(seen.stayed, /help\/manual\/index\.html$/, 'the window stays on the manual');
+  assert.deepEqual(seen.sent, ['https://github.com/Suva/djmixmaster']);
 });

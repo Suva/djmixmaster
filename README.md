@@ -37,7 +37,7 @@ check-up, levelling, tracks, exporting, and the videos, down to every kind of
 layer and every function a template's formulas can use. Its pages are in
 [site/manual/](site/manual/); the published one describes the latest
 release. The app carries its own copy, for its own version, and Help → User
-Manual opens it without a network.
+Manual opens it in a window of its own, with a search, without a network.
 
 ## Getting started
 

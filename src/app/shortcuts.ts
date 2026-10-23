@@ -1,6 +1,7 @@
-// The gestures and shortcuts of the window, by where they are used: shown
-// by the app's help sheet, and in the manual, which is made from this list so
-// that the two never disagree. Pure, for the window and the site's build.
+// The gestures and shortcuts of the window, by where they are used: shown in
+// the manual, which is made from this list so that it cannot list a key the
+// app does not have, and which the window's ? button and F1 open at them.
+// Pure, for the site's build.
 
 /** The modifier keys as a system writes them: ⌘ or Ctrl, Option or Alt. */
 export interface Modifiers {
@@ -72,11 +73,18 @@ export function shortcuts({ command, option }: Modifiers): Shortcuts {
       [`${command}O`, 'Open a recording'],
       [`Shift+${command}W`, 'Close the recording'],
       ['Esc', 'Cancel an analysis or an export'],
-      ['? or F1', 'Show this sheet'],
+      ['? or F1', 'Open the manual at this list'],
       [`${command},`, 'Settings: the folders for template videos and LUTs, and the check for updates'],
       ['Double-click a mix\'s tab', 'Rename it'],
       ['Rest the pointer on a control', 'See what it does'],
       ['Double-click a slider', 'Put it back to its default; Loudness goes back to working itself out'],
+    ]],
+    ['The manual', [
+      [`${command}F`, 'Search every page; the words are marked on the page shown'],
+      ['↑ ↓, Return', 'Choose a result and go to it'],
+      ['Esc', 'Close the results; again, clear the search'],
+      [`${command}[ or ${option}+←`, 'The page before'],
+      [`${command}] or ${option}+→`, 'The page after'],
     ]],
   ];
 }

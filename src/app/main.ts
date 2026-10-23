@@ -51,7 +51,7 @@ if (SCREENSHOT) app.setPath('userData', process.env.DJMASTER_SHOT_DATA ?? join(t
  */
 const SCHEME = 'djm';
 const ORIGIN = `${SCHEME}://app`;
-const APP_FILES = ['index.html', 'styles.css', 'renderer.js', 'limiter-worklet.js', 'exporter.html', 'exporter.js', 'capture.html', 'capture.js', 'capture-worklet.js'];
+const APP_FILES = ['index.html', 'styles.css', 'renderer.js', 'limiter-worklet.js', 'exporter.html', 'exporter.js', 'capture.html', 'capture.js', 'capture-worklet.js', 'help.html', 'help.js'];
 const MEDIA_TYPES: Record<string, string> = {
   '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.m4a': 'audio/mp4',
   '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.aif': 'audio/aiff', '.aiff': 'audio/aiff',
@@ -216,6 +216,12 @@ function serve(request: Request): Promise<Response> | Response {
   // The LUTs that come with the app (src/visuals/builtin-luts.ts).
   const lut = /^luts\/([a-z0-9-]+\.bin)$/.exec(file);
   if (lut && existsSync(join(__dirname, 'luts', lut[1]))) return net.fetch(pathToFileURL(join(__dirname, 'luts', lut[1])).toString());
+  // The manual the app carries, for the Help window: its pages and pictures, its style and its search. join() takes
+  // any ".." out first, so nothing outside the folder is served.
+  if (file.startsWith('help/')) {
+    const path = join(__dirname, decodeURIComponent(file));
+    if (path.startsWith(join(__dirname, 'help') + sep) && existsSync(path)) return net.fetch(pathToFileURL(path).toString());
+  }
   return new Response(null, { status: 404 });
 }
 
@@ -1218,6 +1224,8 @@ ipcMain.handle('set-theme', async (_event, theme: AppTheme) => {
   const { theme: _was, ...kept } = preferences;
   preferences = theme === 'light' ? { ...kept, theme } : kept;
   window?.setBackgroundColor(groundColour());
+  helpWindow?.setBackgroundColor(groundColour());
+  helpWindow?.webContents.executeJavaScript(`setTheme(${JSON.stringify(theme)})`).catch(() => {});
   await savePreferences();
   return settingsNow();
 });
@@ -1656,6 +1664,7 @@ function createWindow() {
     window = null;
     running?.terminate();
     captureWindow?.destroy();
+    helpWindow?.destroy();
     app.quit();
   });
 }
@@ -1769,17 +1778,79 @@ function manualAddress(): string {
   return existsSync(bundled) ? bundled : MANUAL_PAGE;
 }
 
-function openManual() {
-  // In check mode nothing is opened: a test asks where it would go instead.
-  if (SCREENSHOT) return;
-  const address = manualAddress();
-  if (address === MANUAL_PAGE) return void shell.openExternal(MANUAL_PAGE);
-  shell.openPath(address).then((problem) => {
-    if (problem) shell.openExternal(MANUAL_PAGE);
-  });
+/** The Help window, while it is open: one for the app, brought forward when the manual is asked for again. */
+let helpWindow: BrowserWindow | null = null;
+/** In check mode: the addresses a link in the Help window would have opened in the browser, for a test to read. */
+const helpLinks: string[] = [];
+
+/** Sends an address out of the Help window to the browser or the mail program; nothing else leaves it. */
+function openOutside(url: string) {
+  if (!/^(https?|mailto):/.test(url)) return;
+  if (SCREENSHOT) helpLinks.push(url);
+  else shell.openExternal(url);
 }
-ipcMain.on('open-manual', () => openManual());
+
+/**
+ * Shows the manual the app carries in a window of its own, with a toolbar to
+ * move about it and search it (help.html), at a page such as "shortcuts" or
+ * "layer-types#noise" when one is given. Without that copy, the website's
+ * opens in the browser.
+ */
+function openManual(page?: string) {
+  const at = typeof page === 'string' && /^[\w-]+(#[\w-]+)?$/.test(page) ? page : undefined;
+  if (manualAddress() === MANUAL_PAGE) {
+    // In check mode nothing is opened: a test asks where it would go instead.
+    if (!SCREENSHOT) shell.openExternal(at ? new URL(at.replace(/^[\w-]+/, '$&.html'), MANUAL_PAGE).href : MANUAL_PAGE);
+    return;
+  }
+  if (helpWindow) {
+    if (at) helpWindow.webContents.executeJavaScript(`showPage(${JSON.stringify(at)})`).catch(() => {});
+    if (!SCREENSHOT) helpWindow.show();
+    helpWindow.focus();
+    return;
+  }
+  const help = new BrowserWindow({
+    width: 1100,
+    height: 820,
+    minWidth: 560,
+    minHeight: 400,
+    title: 'DJ Mix Master Manual',
+    backgroundColor: groundColour(),
+    // The menu bar of Windows and Linux stays out of the way; its shortcuts, such as closing the window, still work.
+    autoHideMenuBar: true,
+    // Checks draw it off screen, as they do the main window.
+    show: !SCREENSHOT,
+    // No preload: the manual's pages have no business with the app.
+    webPreferences: { sandbox: true, offscreen: SCREENSHOT ? true : false },
+  });
+  // Only the manual's own pages are shown in it. Its links to the website and GitHub open in the browser.
+  const inManual = (url: string) => url.startsWith(`${ORIGIN}/help/`) || url.startsWith(`${ORIGIN}/help.html`);
+  help.webContents.on('will-frame-navigate', (event) => {
+    if (inManual(event.url)) return;
+    event.preventDefault();
+    openOutside(event.url);
+  });
+  help.webContents.setWindowOpenHandler(({ url }) => {
+    openOutside(url);
+    return { action: 'deny' };
+  });
+  help.on('closed', () => {
+    helpWindow = null;
+  });
+  help.loadURL(`${ORIGIN}/help.html?${new URLSearchParams({ theme: preferences.theme ?? 'dark', ...(at && { page: at }) })}`);
+  helpWindow = help;
+}
+ipcMain.on('open-manual', (_event, page?: string) => openManual(page));
 ipcMain.handle('manual-address', () => manualAddress());
+// In check mode only: runs a script in the Help window and gives back what it returns, with the links it sent out;
+// and, given a name, saves a picture of the window under it, as check-picture does of the main one.
+ipcMain.handle('check-help', async (_event, script: string, picture?: string) => {
+  if (!SCREENSHOT) throw new Error('The Help window is scripted in check mode only');
+  if (!helpWindow || helpWindow.webContents.isLoading()) return { open: false, value: null, links: helpLinks };
+  const value = await helpWindow.webContents.executeJavaScript(String(script));
+  if (picture) await writeFile(join(dirname(SCREENSHOT), basename(String(picture))), (await helpWindow.webContents.capturePage()).toPNG());
+  return { open: true, value, links: helpLinks };
+});
 
 function buildMenu() {
   const command = (label: string, accelerator: string, name: MenuCommand): MenuItemConstructorOptions => ({
@@ -1835,7 +1906,7 @@ function buildMenu() {
       role: 'help',
       submenu: [
         { label: 'User Manual', click: () => openManual() },
-        { label: 'Gestures and Shortcuts', accelerator: 'F1', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
+        { label: 'Shortcuts', accelerator: 'F1', click: () => openManual('shortcuts') },
         { type: 'separator' },
         // From the Store, updates come from the Store.
         ...(UPDATES_FROM_STORE ? [] : [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { type: 'separator' } as MenuItemConstructorOptions]),
