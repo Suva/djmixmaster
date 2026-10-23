@@ -2858,6 +2858,15 @@ api.onUpdateAvailable((version) => {
 const onMac = navigator.userAgent.includes('Mac');
 // The top bar stands in for the Mac's title bar (insetTitleBar in main.ts).
 if (onMac) document.documentElement.dataset.titleBar = 'inset';
+// A window drawn off screen, as the pictures for the website and the manual are, has no window buttons: the system
+// draws them on screen only. Drawn here where they would be, the pictures show the window as it looks.
+if (onMac && new URLSearchParams(location.search).has('check')) {
+  const buttons = document.createElement('div');
+  buttons.id = 'window-buttons';
+  buttons.setAttribute('aria-hidden', 'true');
+  buttons.append(...['close', 'minimise', 'zoom'].map((name) => Object.assign(document.createElement('span'), { className: name })));
+  document.body.append(buttons);
+}
 api.onFullScreen((full) => document.documentElement.toggleAttribute('data-full-screen', full));
 const COMMAND = onMac ? '⌘' : 'Ctrl+';
 $('split-here').title = `Split at playhead (${COMMAND}E): cut this mix in two where the playhead is`;

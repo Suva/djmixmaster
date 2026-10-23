@@ -1656,8 +1656,9 @@ function createWindow() {
   // In full screen the window's buttons are gone, and so is the room kept for them.
   window.on('enter-full-screen', () => window?.webContents.send('full-screen', true));
   window.on('leave-full-screen', () => window?.webContents.send('full-screen', false));
-  // Automated checks run the audio chain without making any sound.
-  window.loadURL(`${ORIGIN}/index.html${SCREENSHOT ? '?silent' : ''}`);
+  // Automated checks run the audio chain without making any sound, and draw what the system draws in a window
+  // seen on screen but not in one drawn off screen (`check`).
+  window.loadURL(`${ORIGIN}/index.html${SCREENSHOT ? '?silent&check' : ''}`);
   // Closing the window is quitting, whatever the hidden capture page: its question about a recording comes first.
   window.on('close', (event) => {
     if (!recorder.recording || quitWhileRecording) return;

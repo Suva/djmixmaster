@@ -105,6 +105,19 @@ header {
 :root[data-title-bar="inset"][data-full-screen] header { padding-left: 16px; }
 header :is(button, input, select, a, [role="group"]) { -webkit-app-region: no-drag; }
 
+/*
+ * The window buttons as macOS 26 draws them, for pictures of a window drawn
+ * off screen, which has none (renderer.ts): their size, place and colours
+ * measured from a window on screen with insetTitleBar's position. The system's
+ * colours, the same in either theme, so not the theme's.
+ */
+#window-buttons { position: fixed; top: 19.25px; left: 18.25px; z-index: 1; display: flex; gap: 10px; pointer-events: none; }
+#window-buttons span { width: 13px; height: 13px; border-radius: 50%; }
+#window-buttons .close { background: #ec6765; }
+#window-buttons .minimise { background: #f2ca44; }
+#window-buttons .zoom { background: #65c466; }
+:root[data-full-screen] #window-buttons { display: none; }
+
 .spacer { flex: 1; }
 
 #file-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

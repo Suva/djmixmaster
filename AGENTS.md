@@ -166,7 +166,10 @@ and curves in the code are block indexes unless a name says seconds.
   the Help window's toolbar move the window when dragged, and keep room for
   its buttons. Anything clickable put in them, or laid over them, needs
   `-webkit-app-region: no-drag`, or a click there moves the window instead.
-  Buttons, fields, menus and groups of buttons have it already.
+  Buttons, fields, menus and groups of buttons have it already. A window
+  drawn off screen in check mode has no window buttons, so the main window
+  draws its own in their place there (`#window-buttons`), for the pictures;
+  move one and move the other.
 - **Clicks are not drags.** Pointer handlers ignore movement under
   `DRAG_START_PX`. New drag interactions should do the same.
 
