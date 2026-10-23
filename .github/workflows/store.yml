@@ -89,8 +89,13 @@ jobs:
             Write-Output "::error::Run $env:RUN_ID has no .msix in its microsoft-store-package."
             exit 1
           }
-          Write-Output "Submitting $($package.Name)."
-          msstore publish . -i package -id $env:PRODUCT_ID
+          # The file name without spaces, and msstore's own account of what it did.
+          $clean = "package-upload"
+          New-Item -ItemType Directory -Force $clean | Out-Null
+          $name = "DJMixMaster-" + ($package.Name -replace '^.*?-(\d+\.\d+\.\d+)-.*$', '$1') + ".msix"
+          Copy-Item $package.FullName (Join-Path $clean $name)
+          Write-Output "Submitting $name."
+          msstore publish . -i $clean -id $env:PRODUCT_ID --verbose
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         env:
           PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
