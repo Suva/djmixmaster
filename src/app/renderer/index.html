@@ -23,7 +23,7 @@
     </span>
     <button id="export" class="primary" disabled>Export mix…</button>
     <button id="open-settings" class="icon round" title="Settings (⌘,)" aria-label="Settings"><svg class="line" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2"/><path d="M6.8 3.1L7.1 1.5L8.9 1.5L9.2 3.1L10.6 3.7L12.0 2.8L13.2 4.0L12.3 5.4L12.9 6.8L14.5 7.1L14.5 8.9L12.9 9.2L12.3 10.6L13.2 12.0L12.0 13.2L10.6 12.3L9.2 12.9L8.9 14.5L7.1 14.5L6.8 12.9L5.4 12.3L4.0 13.2L2.8 12.0L3.7 10.6L3.1 9.2L1.5 8.9L1.5 7.1L3.1 6.8L3.7 5.4L2.8 4.0L4.0 2.8L5.4 3.7z"/></svg></button>
-    <button id="help" class="icon round" title="The manual, at its list of keys and gestures (? or F1)" aria-label="Manual">?</button>
+    <button id="help" class="icon round" title="The manual, where it explains what is on screen (? or F1)" aria-label="Manual">?</button>
   </header>
   <div id="progress" hidden>
     <div id="progress-bar"></div>
@@ -114,6 +114,7 @@
               <button id="adjust-level" class="on" title="Dragging across the gain lane raises or lowers that stretch as a whole">Level</button>
               <button id="adjust-bass" title="Dragging across the gain lane raises or lowers the bass of that stretch only">Bass</button>
             </div>
+            <button type="button" class="help-link" data-help="adjusting" title="About adjusting by hand, in the manual" aria-label="About adjusting by hand, in the manual">?</button>
           </div>
         </div>
       </div>
@@ -241,11 +242,11 @@
           <div id="editor-layer"></div>
           </div>
           <div id="editor-about-pane" hidden>
-            <p class="note">Shown under the list of templates, and kept with the template when it is shared.</p>
+            <p class="note">Shown under the list of templates, and kept with the template when it is shared. <button type="button" class="help-link" data-help="about" title="About the About page, in the manual" aria-label="About the About page, in the manual">?</button></p>
             <div id="editor-about"></div>
           </div>
           <div id="editor-fields-pane" hidden>
-            <p class="note">What someone using the template fills in, in this order. A setting uses a number or a colour by its name in an expression, anything else between percent signs.</p>
+            <p class="note">What someone using the template fills in, in this order. A setting uses a number or a colour by its name in an expression, anything else between percent signs. <button type="button" class="help-link" data-help="fields" title="About fields, in the manual" aria-label="About fields, in the manual">?</button></p>
             <div id="editor-fields"></div>
             <div class="editor-actions">
               <select id="editor-add-field" title="Add something to fill in"><option value="">Add a field…</option></select>
@@ -331,7 +332,7 @@
       </div>
       </div>
 
-      <h2>EQ</h2>
+      <h2>EQ <button type="button" class="help-link" data-help="eq" title="About the EQ, in the manual" aria-label="About the EQ, in the manual">?</button></h2>
       <div class="control">
         <canvas id="eq-curve" role="img" aria-label="How the EQ changes the sound, from 20 Hz to 20 kHz, over the spectrum of this mix, of the other mixes and of what is playing"></canvas>
         <p class="note">Puts right how this mix was recorded, before it is levelled: a turntable's phono stage that sounds dull or harsh, or a PA mixer's EQ. Each mix has its own. Behind it are this mix's average spectrum, the other mixes' and what is playing, so a set that sounds unlike the rest of the night can be brought in line.</p>
@@ -490,6 +491,8 @@
     <div id="checkup-findings"></div>
     <dl id="checkup-facts"></dl>
     <div class="dialog-buttons">
+      <button type="button" class="help-link" data-help="checkup" title="About the check-up, in the manual" aria-label="About the check-up, in the manual">?</button>
+      <span class="spacer"></span>
       <button id="checkup-close" class="primary">Close</button>
     </div>
   </dialog>
@@ -536,6 +539,8 @@
         <input id="export-album" type="text" spellcheck="false" placeholder="For example the event and date">
       </div>
       <div class="dialog-buttons">
+        <button type="button" id="export-help" class="help-link" title="About exporting, in the manual" aria-label="About exporting, in the manual">?</button>
+        <span class="spacer"></span>
         <button type="button" id="export-cancel">Cancel</button>
         <button type="submit" id="export-go" class="primary" value="go">Choose where to save…</button>
       </div>

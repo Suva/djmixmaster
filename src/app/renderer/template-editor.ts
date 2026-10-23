@@ -18,6 +18,7 @@ import { flatten, isGroup, locate, treeOf, within, type LayerNode } from '../../
 import { scrubbable } from './scrub.ts';
 import { FIELD_KINDS, fieldsEditor, freeFieldName, newField } from './fields-editor.ts';
 import { lutPicker } from './lut-picker.ts';
+import { HELP, layerHelp } from '../help-topics.ts';
 
 /** The blends under headings, as an image editor sorts them: by what they do. Normal comes first, under none. */
 const BLEND_GROUPS: Record<string, string> = {
@@ -311,6 +312,14 @@ export class TemplateEditor {
     this.#past = [];
     this.#future = [];
     this.#options.history();
+  }
+
+  /** The page of the manual about the tab shown: the selected layer's kind, or the fields, or the About page. */
+  helpTopic(): string {
+    if (!$('editor-fields-pane').hidden) return HELP.fields;
+    if (!$('editor-about-pane').hidden) return HELP.about;
+    const layer = this.#selectedLayer;
+    return layer ? layerHelp(layer.type) : HELP.templates;
   }
 
   /** The selected layer, by its place in the template, or -1. */

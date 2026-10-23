@@ -102,7 +102,7 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/player.ts` | Playback with live gain, shelf and limiter |
 | `src/app/renderer/meter.ts` | The level meter beside the curves |
 | `src/app/renderer/rta.ts` | The analyser behind the EQ: what is playing, averaged and smoothed |
-| `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the manual, which the **?** button and F1 open at them |
+| `src/app/shortcuts.ts` | The gestures and shortcuts, by where they are used: for the manual, each section at the foot of its page and all of them on the Shortcuts page |
 | `src/app/renderer/theme.ts` | Dark and light: the colours canvases draw with, changed in place when the look changes. The CSS follows `data-theme` on the root element |
 | `src/app/renderer/settings.ts` | The Settings dialog: the choices that belong to the app, each explained |
 | `src/app/renderer/capture.ts` | The hidden page that captures the Record view's input with Chromium, and sends its samples to the main process |
@@ -110,6 +110,8 @@ and curves in the code are block indexes unless a name says seconds.
 | `src/app/renderer/fader-reset.ts` | A double click on a slider puts it back to its default |
 | `src/app/renderer/output.ts` | The sound output chosen in Settings, found among the devices there are, with the default while it is not plugged in |
 | `src/app/renderer/tooltip.ts` | The app's own tooltips, taken from each control's `title` |
+| `src/app/help-topics.ts` | Where in the manual each part of the app is explained, for F1, the ? button and the small ? beside panels; checked against the manual by its test |
+| `src/app/renderer/help-link.ts` | The small ? beside a panel that opens the manual at its part |
 | `src/app/renderer/help.ts` | The Help window: the manual the app carries, in a frame under a toolbar of back, forward, home and a search through every page |
 | `src/app/renderer/saving.ts` | Saves made a moment after the last change, counted for scripted checks |
 | `src/app/renderer/limiter-worklet.ts` | Runs the limiter in the audio thread |
@@ -177,7 +179,7 @@ environment variables switch on:
 |---|---|
 | `DJMASTER_SHOT=<file.png>` | After the first recording is drawn, save a picture of the window and quit |
 | `DJMASTER_SHOT_SCRIPT=<js>` | Run this JavaScript in the window first; its result is printed as `[script] ...` |
-| `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `settings`) to the window before the script runs |
+| `DJMASTER_SHOT_MENU=<command>` | Send this menu command (`close`, `undo`, `redo`, `help`, `settings`) to the window before the script runs |
 | `DJMASTER_SHOT_DATA=<dir>` | Use this folder for saved sessions and analyses |
 | `DJMASTER_SHOT_FOLDER=<dir>` | Answer the "Export all" folder dialog with this folder, the save dialog of a single export with the name it suggests in this folder, and Settings' folder choices with it |
 | `DJMASTER_SHOT_IMAGE=<file>` | Answer the dialog for a template's picture (a logo, a photo) with this file |
@@ -552,6 +554,15 @@ its parent before it draws (the script in `site/manual.html`), so
 mode the window is drawn off screen, and `window.api.checkHelp(script)` runs
 a script in it and says which links it would have opened;
 `window.api.manualAddress()` says which copy it shows.
+
+F1 and the **?** button open the manual at the page about what is on screen
+(`helpHere` in `renderer.ts`: an open dialog, then the view, then in the
+template editor the tab or the selected layer's kind), and a small ? beside
+a panel opens its part (`help-link.ts`). Every place they open is named in
+`src/app/help-topics.ts`, and `test/manual.test.ts` checks each against the
+manual, with every kind of layer's own part and the `data-help` of the
+window's markup. Renaming a heading the app points to means changing the
+topic too; a new view or dialog gets a topic of its own.
 
 `site/screenshot.png` is also the picture in the README. It is taken with the
 app's check mode at twice the size, by one command, from a recording of about

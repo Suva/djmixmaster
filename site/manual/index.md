@@ -22,10 +22,12 @@ Your recording is never changed, and it never leaves your computer.
 - Every key and gesture on one page: [Shortcuts](shortcuts.md).
 - Something wrong, or missing: [Reporting issues](help.md).
 
-> In the app, the **?** button at the top right (or F1) opens this manual at its [shortcuts](shortcuts.md), and resting the pointer on any control says what it does.
+> In the app, the **?** button at the top right (or F1) opens this manual where it explains what is on screen, and resting the pointer on any control says what it does.
 
 ## In the app
 
-Help → User Manual, or the **?** button, opens this manual in a window of its own, for the version you have, without a network. Its toolbar goes back, forward and home. Its search looks through every page: pick a result to go to that part of its page, where the words are marked. Links to the website open in your browser.
+Help → User Manual opens this manual in a window of its own, for the version you have, without a network. Its toolbar goes back, forward and home. Its search looks through every page: pick a result to go to that part of its page, where the words are marked. Links to the website open in your browser.
+
+The **?** button at the top right of the app, or F1, opens the page about what is on screen: the dialog that is open, the view, or in the template editor the kind of layer selected. A small **?** beside some panels, such as the EQ, the masks and the formulas, opens the part of a page about that panel.
 
 {{shortcuts: The manual}}

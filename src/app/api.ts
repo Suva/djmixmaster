@@ -153,7 +153,7 @@ export interface VisualsChoice {
   shape?: Shape;
 }
 
-export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'settings';
+export type MenuCommand = 'open' | 'close' | 'undo' | 'redo' | 'help' | 'settings';
 
 /** The view the window is in, kept for the next start: editing a template is in the Video view, with its editor open. */
 export type AppView = 'mastering' | 'video' | 'editing';

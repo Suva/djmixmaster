@@ -1906,7 +1906,9 @@ function buildMenu() {
       role: 'help',
       submenu: [
         { label: 'User Manual', click: () => openManual() },
-        { label: 'Shortcuts', accelerator: 'F1', click: () => openManual('shortcuts') },
+        // The window knows what it shows, and so which page of the manual is about it.
+        { label: 'Help for What Is Shown', accelerator: 'F1', click: () => window?.webContents.send('menu', 'help' satisfies MenuCommand) },
+        { label: 'Shortcuts', click: () => openManual('shortcuts') },
         { type: 'separator' },
         // From the Store, updates come from the Store.
         ...(UPDATES_FROM_STORE ? [] : [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { type: 'separator' } as MenuItemConstructorOptions]),

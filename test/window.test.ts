@@ -2758,7 +2758,7 @@ test('a recording can be closed, and opened again from the start screen', { skip
   assert.equal(next, 'No recording open');
 });
 
-test('the keys move the playhead, switch what is heard and open the manual at its shortcuts', { skip }, async () => {
+test('the keys move the playhead, switch what is heard and open the manual about what is shown', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     const at: Record<string, number> = {};
     const press = async (name: string, code: string, options?: { shift?: boolean; alt?: boolean }) => {
@@ -2789,8 +2789,8 @@ test('the keys move the playhead, switch what is heard and open the manual at it
 
     page.key('Slash', { key: '?', shift: true });
     let help = await window.api.checkHelp('document.getElementById("help-page").contentWindow?.location.href');
-    for (const start = Date.now(); !/shortcuts\.html$/.test(String(help.value)); help = await window.api.checkHelp('document.getElementById("help-page").contentWindow?.location.href')) {
-      if (Date.now() - start > 15000) throw new Error(`Waited in vain for the manual's shortcuts, at ${help.value}`);
+    for (const start = Date.now(); !/levelling\.html$/.test(String(help.value)); help = await window.api.checkHelp('document.getElementById("help-page").contentWindow?.location.href')) {
+      if (Date.now() - start > 15000) throw new Error(`Waited in vain for the manual's page on levelling, at ${help.value}`);
       await page.wait(50);
     }
     return { at, original, levelled, afterTyping, help: help.value };
@@ -2798,7 +2798,7 @@ test('the keys move the playhead, switch what is heard and open the manual at it
   assert.deepEqual(seen.at, { return: 0, right: 5, shiftRight: 35, optionRight: 36, left: 31, end: 530, returnAgain: 0 });
   assert.ok(seen.original && seen.levelled);
   assert.equal(seen.afterTyping, 0);
-  assert.match(String(seen.help), /help\/manual\/shortcuts\.html$/);
+  assert.match(String(seen.help), /help\/manual\/levelling\.html$/);
 });
 
 test('I and O put the start and the end of the mix at the playhead', { skip }, async () => {
@@ -3092,6 +3092,57 @@ test('Help opens the manual the app carries, for its own version, rather than th
   const address = await runApp({ recording: mix, data: await fresh(), timeoutMs: 30_000 }, () => window.api.manualAddress());
   assert.match(address, /[\\/]dist[\\/]help[\\/]manual[\\/]index\.html$/, address);
   assert.ok(existsSync(address), `${address} is there`);
+});
+
+test('the ? button opens the manual where it explains what is shown, and a panel\'s ? opens its own part', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 90_000 }, async (page) => {
+    // Where the Help window is, once it is there; or wherever it is after a while, for the assertion to name.
+    const shows = async (want: string) => {
+      let href = '';
+      for (const start = Date.now(); Date.now() - start < 10_000; await page.wait(50)) {
+        href = String((await window.api.checkHelp('document.getElementById("help-page").contentWindow?.location.href')).value ?? '');
+        if (href.endsWith(`/manual/${want}`)) break;
+      }
+      return href.replace(/^.*\/manual\//, '');
+    };
+    const at: Record<string, string> = {};
+    page.click('help');
+    at.mastering = await shows('levelling.html');
+    document.querySelector<HTMLButtonElement>('[data-help="eq"]')!.click();
+    at.eq = await shows('levelling.html#eq');
+    page.click('checkup');
+    page.click('help');
+    at.checkup = await shows('checkup.html');
+    page.element<HTMLDialogElement>('checkup-dialog').close();
+    page.click('export');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    page.click('help');
+    at.exporting = await shows('export-audio.html');
+    page.click('export-cancel');
+    page.click('view-video');
+    page.choose('template', 'ring');
+    page.click('template-edit');
+    await page.until(() => document.body.classList.contains('editing'), 'the editor to open');
+    page.click('editor-add');
+    document.querySelector<HTMLButtonElement>('#editor-add-menu button[data-type="particles"]')!.click();
+    await page.until(() => !!document.querySelector('summary .help-link[aria-label^="About masks"]'), 'the settings of the particles');
+    page.click('help');
+    at.layer = await shows('layer-types.html#particles');
+    document.querySelector<HTMLButtonElement>('summary .help-link[aria-label^="About masks"]')!.click();
+    at.masks = await shows('layer-settings.html#masks');
+    page.click('editor-tab-fields');
+    page.click('help');
+    at.fields = await shows('fields.html');
+    page.click('editor-done');
+    page.click('view-record');
+    page.click('help');
+    at.record = await shows('record.html');
+    return at;
+  });
+  assert.deepEqual(seen, {
+    mastering: 'levelling.html', eq: 'levelling.html#eq', checkup: 'checkup.html', exporting: 'export-audio.html',
+    layer: 'layer-types.html#particles', masks: 'layer-settings.html#masks', fields: 'fields.html', record: 'record.html',
+  });
 });
 
 test('Help shows the manual in a window of its own: its search goes to the part found, Back returns, and links out open in the browser', { skip }, async () => {

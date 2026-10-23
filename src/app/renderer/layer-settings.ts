@@ -24,6 +24,7 @@ import { stopBar } from './stop-bar.ts';
 import { colourInput } from './colour-input.ts';
 import { STOP_COUNT } from '../../visuals/gradient-map.ts';
 import { resetsTo } from './fader-reset.ts';
+import { helpLink } from './help-link.ts';
 import { MOTION_SOURCES, MOTION_SPEEDS, motionExpression, parseMotion, timed, type Motion, type MotionSource, type MotionSpeed } from '../../visuals/motion.ts';
 
 export interface LayerSettingsContext {
@@ -150,6 +151,11 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
     const summary = document.createElement('summary');
     summary.textContent = title;
     details.append(summary);
+    // Styles, the mask and the timing are explained in the manual for every kind of layer at once.
+    const about = keys[0] in STYLE_PARAMS ? helpLink('styles', 'About layer styles')
+      : keys[0] === 'mask' ? helpLink('masks', 'About masks')
+      : keys[0] === 'from' ? helpLink('timing', 'About a layer\'s place, size and timing') : null;
+    if (about) summary.append(about);
     // A style's heading has a dot while it is on, so that it shows folded away; so has the mask's, while the layer is one.
     if (keys[0] in STYLE_PARAMS || keys[0] === 'mask') {
       const dot = document.createElement('span');
@@ -297,7 +303,7 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
         apply();
       });
       showKind();
-      motionPanel.replaceChildren(line('Moves with', source), line('From', base), line('Amount', amount, amountShown), speedLine, periodLine, stop);
+      motionPanel.replaceChildren(line('Moves with', source, helpLink('movesWith', 'About Moves with')), line('From', base), line('Amount', amount, amountShown), speedLine, periodLine, stop);
       // Opening it sets the setting moving at once, so that what it does is seen.
       if (typeof current !== 'string' || !parseMotion(current)) apply();
     }
@@ -383,7 +389,8 @@ export function layerSettings(layer: Layer, context: LayerSettingsContext, only?
         }
       });
       input.addEventListener('scroll', () => (mirror.scrollLeft = input.scrollLeft));
-      wrap.append(mirror, input);
+      // Inside the box, at its end: the functions and music values there are to write it with, a click away.
+      wrap.append(mirror, input, helpLink('formulas', 'About formulas'));
       check();
       ticks.set(key, (resolved) => {
         const current = resolved[key];

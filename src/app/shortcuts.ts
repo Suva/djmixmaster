@@ -1,6 +1,6 @@
 // The gestures and shortcuts of the window, by where they are used: shown in
 // the manual, which is made from this list so that it cannot list a key the
-// app does not have, and which the window's ? button and F1 open at them.
+// app does not have, each section at the foot of the page it belongs to.
 // Pure, for the site's build.
 
 /** The modifier keys as a system writes them: ⌘ or Ctrl, Option or Alt. */
@@ -73,7 +73,7 @@ export function shortcuts({ command, option }: Modifiers): Shortcuts {
       [`${command}O`, 'Open a recording'],
       [`Shift+${command}W`, 'Close the recording'],
       ['Esc', 'Cancel an analysis or an export'],
-      ['? or F1', 'Open the manual at this list'],
+      ['? or F1', 'Open the manual where it explains what is shown'],
       [`${command},`, 'Settings: the folders for template videos and LUTs, and the check for updates'],
       ['Double-click a mix\'s tab', 'Rename it'],
       ['Rest the pointer on a control', 'See what it does'],

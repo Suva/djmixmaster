@@ -16,6 +16,7 @@ import {
 } from '../../visuals/template.ts';
 import { fontPicker } from './font-picker.ts';
 import { TemplateEditor } from './template-editor.ts';
+import { HELP } from '../help-topics.ts';
 import { PictureHandles } from './picture-handles.ts';
 import { PreviewVideos } from './video-sources.ts';
 import { lutPicker } from './lut-picker.ts';
@@ -589,6 +590,11 @@ export class VideoView {
 
   get editing(): boolean {
     return this.#editing !== null;
+  }
+
+  /** The page of the manual about what the view shows: the editor's, while editing, or choosing and filling in a template. */
+  helpTopic(): string {
+    return this.editing ? this.#editor.helpTopic() : HELP.video;
   }
 
   get canUndoTemplate(): boolean {

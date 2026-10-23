@@ -23,6 +23,8 @@ import { BANDS } from '../../bands.ts';
 import { Rta } from './rta.ts';
 import { chaptersOf, listTime, parseTime, parseTracklist, shownName, splitName, spreadEvenly, youtubeList, type ListedTrack, type MixTrack, type Track } from '../../tracks.ts';
 import { initTooltips } from './tooltip.ts';
+import { helpLink, initHelpLinks } from './help-link.ts';
+import { HELP } from '../help-topics.ts';
 import { initFaderReset, resetsTo } from './fader-reset.ts';
 import { cancelSave, saveDue, saveLater } from './saving.ts';
 import { SHAPES, shapeOf } from '../../visuals/shape.ts';
@@ -664,7 +666,7 @@ function showCheckup() {
           button.addEventListener('click', () => setChannelFix(finding.id, !fixed));
           const note = document.createElement('span');
           note.textContent = fixed ? 'Fixed: playback, the levelling and every export hear it put right.' : 'Playback, the levelling and every export would hear it put right.';
-          row.append(button, note);
+          row.append(button, note, helpLink('channels', 'About putting the channels right'));
           item.append(row);
         }
         return item;
@@ -2025,7 +2027,7 @@ window.addEventListener('keydown', (event) => {
     togglePlay();
   } else if (event.key === '?') {
     // F1 does the same, through the Help menu.
-    api.openManual('shortcuts');
+    api.openManual(helpHere());
   } else if (event.code === 'KeyA' && !event.metaKey && !event.ctrlKey) {
     setHearLevelled(!hearLevelled);
   } else if (event.code === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
@@ -2850,8 +2852,8 @@ api.onUpdateAvailable((version) => {
 });
 
 // ---------------------------------------------------------------------------
-// Help: the manual, in a window of its own, where every key and gesture is
-// listed under the part of the app it belongs to
+// Help: the manual, in a window of its own, opened where it explains what is
+// on screen. Each page ends with the keys of its own part of the app.
 
 const onMac = navigator.userAgent.includes('Mac');
 const COMMAND = onMac ? '⌘' : 'Ctrl+';
@@ -2859,7 +2861,27 @@ $('split-here').title = `Split at playhead (${COMMAND}E): cut this mix in two wh
 $('undo').title = `Undo the last change (${COMMAND}Z)`;
 $('redo').title = `Redo the change just undone (Shift+${COMMAND}Z)`;
 
-$('help').addEventListener('click', () => api.openManual('shortcuts'));
+/** The page of the manual, and its part, about what is on screen: an open dialog first, then the view. */
+function helpHere(): string {
+  if (settings.element.open) return HELP.settings;
+  if (checkupDialog.open) return HELP.checkup;
+  if (tracksDialog.open) return HELP.tracks;
+  if (exportDialog.open) return exportHelp();
+  if (recordView.visible) return HELP.record;
+  if (!recording) return HELP.start;
+  if (videoView.visible) return videoView.helpTopic();
+  return HELP.mastering;
+}
+
+/** The manual's page about exporting what the export dialog has chosen. */
+function exportHelp(): string {
+  if (exportSettings.format === 'original') return HELP.originalVideo;
+  return exportSettings.format === 'mp4' ? HELP.exportVideo : HELP.exportAudio;
+}
+
+$('help').addEventListener('click', () => api.openManual(helpHere()));
+$('export-help').addEventListener('click', () => api.openManual(exportHelp()));
+initHelpLinks();
 
 const settings = settingsDialog(api, new OutputFollower((id) => player.setOutput(id), (text) => ($('readout').textContent = text)));
 onThemeChange(scheduleDraw);
@@ -2868,6 +2890,10 @@ $('open-settings').title = `Settings (${COMMAND},)`;
 $('open-settings').addEventListener('click', () => settings.open());
 
 api.onMenu(async (command) => {
+  if (command === 'help') {
+    api.openManual(helpHere());
+    return;
+  }
   if (command === 'settings') {
     settings.open();
     return;

@@ -10,6 +10,7 @@ import { join } from 'node:path';
 // @ts-expect-error: a script of the site's, in plain JavaScript.
 import { contents, MANUAL, manualPages } from '../scripts/site/manual.mjs';
 import { LAYER_TYPES } from '../src/visuals/template.ts';
+import { HELP, layerHelp } from '../src/app/help-topics.ts';
 
 type Page = { name: string; title: string; html: string };
 
@@ -67,4 +68,19 @@ test('the manual the app carries builds, and every link in it to a file leads to
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
+});
+
+test('every place in the manual the app opens for help is there: each topic, each kind of layer, each ? in the window', () => {
+  const pages: Page[] = manualPages();
+  const ids = new Map(pages.map((page) => [page.name, new Set([...page.html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]))]));
+  const there = (place: string) => {
+    const [name, part] = place.split('#');
+    return ids.has(name) && (!part || ids.get(name)!.has(part));
+  };
+  for (const [topic, place] of Object.entries(HELP)) assert.ok(there(place), `${topic} opens ${place}, which the manual does not have`);
+  for (const type of Object.keys(LAYER_TYPES)) assert.ok(there(layerHelp(type)), `the ${type} layer opens ${layerHelp(type)}, which the manual does not have`);
+  const markup = readFileSync(join(import.meta.dirname, '..', 'src', 'app', 'renderer', 'index.html'), 'utf8');
+  const named = [...markup.matchAll(/data-help="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(named.length >= 4, `the window's ? buttons: ${named.length}`);
+  for (const topic of named) assert.ok(topic in HELP, `a ? in index.html names ${topic}, which help-topics.ts does not have`);
 });
