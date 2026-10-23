@@ -234,6 +234,59 @@ test('the helper records any two channels of an input, straight into the parts',
   assert.ok(Math.abs(left - -18.06) < 0.2 && Math.abs(right - -24.08) < 0.2, `peaks ${left}, ${right}`);
 });
 
+/** The helpers listening for a level only, by process id, with the process that started each. */
+function listening(): Map<number, number> {
+  const found = new Map<number, number>();
+  const list = spawnSync('ps', ['-axo', 'pid=,ppid=,args='], { encoding: 'utf8' }).stdout;
+  for (const line of list.split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+    if (m && m[3].includes('djm-capture record') && m[3].includes('--no-output')) found.set(Number(m[1]), Number(m[2]));
+  }
+  return found;
+}
+
+test('quitting stops the helper listening to the input, which holds it no longer', { skip: noHelper || (process.platform === 'win32' && 'ps lists the processes elsewhere') }, async () => {
+  const before = listening();
+  const opened = await runApp({ data: await dataFolder(work), env: PARTS, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-record');
+    await page.until(() => page.element<HTMLSelectElement>('record-device').options.length > 0, 'the devices to be listed');
+    page.choose('record-device', 'Test interface');
+    await page.until(() => page.text('record-device-note') === '4 channels, 48 kHz.', 'the test interface to be opened');
+    return page.text('record-device-note');
+  });
+  assert.equal(opened, '4 channels, 48 kHz.');
+  // Those started by this run, and left without it. Other tests' helpers still have their apps.
+  let left: number[] = [];
+  for (const start = Date.now(); Date.now() - start < 5000; await new Promise((done) => setTimeout(done, 100))) {
+    left = [...listening()].filter(([pid, parent]) => !before.has(pid) && parent === 1).map(([pid]) => pid);
+    if (!left.length) break;
+  }
+  for (const pid of left) process.kill(pid);
+  assert.deepEqual(left, [], 'no helper is left listening once the app has quit');
+});
+
+test('the helper stops listening when the app is gone without a word, but goes on recording', { skip: noHelper }, async () => {
+  const run = (args: string[]) => {
+    const child = spawn(HELPER, ['record', '--device', 'test', '--channels', '1,2', ...args], { stdio: ['pipe', 'ignore', 'pipe'] });
+    const ended = new Promise<boolean>((done) => child.on('exit', () => done(true)));
+    const started = new Promise<void>((done) => child.stderr!.on('data', (chunk) => String(chunk).includes('started') && done()));
+    return { child, ended, started };
+  };
+  const listener = run(['--no-output']);
+  const recorder = run([]);
+  await Promise.all([listener.started, recorder.started]);
+  // As when the app goes down: their stdin closes, and no "q" ever comes.
+  listener.child.stdin!.end();
+  recorder.child.stdin!.end();
+  const wait = (ms: number) => new Promise<boolean>((done) => setTimeout(() => done(false), ms));
+  const listenerEnded = await Promise.race([listener.ended, wait(3000)]);
+  const recorderEnded = await Promise.race([recorder.ended, wait(1000)]);
+  listener.child.kill();
+  recorder.child.kill();
+  assert.equal(listenerEnded, true, 'listening ends with its stdin');
+  assert.equal(recorderEnded, false, 'recording carries on without its stdin');
+});
+
 test('a recording the helper goes on with after the app is gone is picked up, stopped and opened', { skip: noHelper }, async () => {
   const folder = join(work, 'carried on');
   await mkdir(folder);

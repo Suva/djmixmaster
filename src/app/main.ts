@@ -540,9 +540,10 @@ function writeStored(file: string, data: string | Uint8Array): Promise<void> {
 // Quitting waits for what is being saved: a change made a moment before, sent as the window closed, is kept.
 // By now the windows are closed and all has been told to quit, so once written the app exits: asked to quit again
 // from here, it may not.
+// Listening to an input for its level stops too, and lets go of the input; a recording carries on (recorder.ts).
 app.on('will-quit', (event) => {
   event.preventDefault();
-  Promise.allSettled([saving, ...writing]).then(() => app.exit(0));
+  Promise.allSettled([saving, ...writing, recorder.close()]).then(() => app.exit(0));
 });
 
 /** Drops the analyses that have gone unused the longest. */

@@ -376,9 +376,12 @@ Do not write test data there.
   (AVFoundation) it drops about a tenth of the sound, heard as crackle.
   - **The capture helper** (`native/capture/capture.c`, on miniaudio) lists
     the inputs with all their channels and records any two. Monitoring runs
-    it with `--no-output`; recording runs another, detached, whose stdout is
-    the writing ffmpeg's stdin, so the sound never passes through the app and
-    a recording carries on if the app goes down. Only its level comes back,
+    it with `--no-output`, and that one also stops when its stdin closes, so
+    that listening never holds the input once the app is gone, however it
+    went; quitting stops it as well (`will-quit` in `main.ts`). Recording
+    runs another, detached, whose stdout is the writing ffmpeg's stdin, so
+    the sound never passes through the app and a recording carries on if the
+    app goes down. Only its level comes back,
     as JSON on stderr. It stops on a `q`; one picked up after a restart
     (`adopt`, both process ids in the lock file) is ended by signals, and
     ffmpeg finishes its part as its input ends. It is found through

@@ -21,8 +21,10 @@
  *       {"lost": n}   frames that could not be kept, should the writing ever fall 10 s behind
  *       {"error": "..."}   and then it ends
  *     A "q" on stdin stops it, once what it holds has been written. A stdin
- *     that closes does not: should the app go down, the recording goes on, and
- *     ends when ffmpeg, reading stdout, does.
+ *     that closes does not while it records: should the app go down, the
+ *     recording goes on, and ends when ffmpeg, reading stdout, does. With
+ *     --no-output it does, as nobody is left to read the level: listening
+ *     must not hold the input once the app has gone, however it went.
  *
  * The device's callback only copies into a ring buffer; the main thread
  * writes from it. Nothing is dropped silently.
@@ -93,6 +95,8 @@ static ma_uint32 pick[2];
 static ma_uint32 device_channels;
 static volatile ma_uint64 lost;
 static volatile int stop_asked;
+/* Whether a stdin that closes stops it too: when only listening, with nothing on stdout. */
+static int stop_with_stdin;
 
 /* ------------------------------------------------------------------ */
 /* Text out */
@@ -227,7 +231,7 @@ static void *generate(void *unused) {
   return 0;
 }
 
-/* Waits for a "q" on stdin. A stdin that closes is not one. */
+/* Waits for a "q" on stdin. A stdin that closes is one only when listening (stop_with_stdin). */
 #ifdef _WIN32
 static DWORD WINAPI watch_stdin(LPVOID unused) {
 #else
@@ -238,9 +242,10 @@ static void *watch_stdin(void *unused) {
   while ((c = getchar()) != EOF) {
     if (c == 'q') {
       stop_asked = 1;
-      break;
+      return 0;
     }
   }
+  if (stop_with_stdin) stop_asked = 1;
   return 0;
 }
 
@@ -305,6 +310,7 @@ static int record(ma_context *context, const char *device_text, ma_uint32 a, ma_
     return 1;
   }
 
+  stop_with_stdin = !to_stdout;
 #ifdef _WIN32
   CreateThread(NULL, 0, watch_stdin, NULL, 0, NULL);
 #else

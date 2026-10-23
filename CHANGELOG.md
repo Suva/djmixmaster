@@ -25,6 +25,10 @@ are under "Not released yet" and appear there once they are.
 - **No title bar on the Mac.** The window's own top bar takes its place, with
   the window's buttons in it: drag it to move the window, double-click it to
   zoom. The manual's window does the same.
+- **The microphone is let go when the app quits.** Listening to an input for
+  the Record view's meters kept going after the app had quit or crashed,
+  holding the input, which on a Mac kept the microphone light on. It now
+  stops with the app. A recording still carries on if the app goes down.
 
 ## 0.12.0 — 22 October 2026
 
