@@ -89,14 +89,24 @@ jobs:
             Write-Output "::error::Run $env:RUN_ID has no .msix in its microsoft-store-package."
             exit 1
           }
-          # The file name without spaces, and msstore's own account of what it did.
-          $clean = "package-upload"
-          New-Item -ItemType Directory -Force $clean | Out-Null
-          $name = "DJMixMaster-" + ($package.Name -replace '^.*?-(\d+\.\d+\.\d+)-.*$', '$1') + ".msix"
-          Copy-Item $package.FullName (Join-Path $clean $name)
+          # msstore's Electron support picks up only .appx files: given the .msix, it publishes "0 files" and
+          # commits the submission with the package it had before. The two formats are the same, so the package
+          # goes in under a .appx name, as electron-builder names it by default.
+          $version = $package.Name -replace '^.*?-(\d+\.\d+\.\d+)-.*$', '$1'
+          $upload = "package-upload"
+          New-Item -ItemType Directory -Force $upload | Out-Null
+          $name = "DJ Mix Master-$version-Microsoft-Store.appx"
+          Copy-Item $package.FullName (Join-Path $upload $name)
           Write-Output "Submitting $name."
-          msstore publish . -i $clean -id $env:PRODUCT_ID --verbose
+          msstore publish . -i $upload -id $env:PRODUCT_ID --verbose | Tee-Object -Variable published
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # msstore says it succeeded either way; the packages it lists at the end say whether this one went in.
+          $text = $published -join "`n"
+          $listed = if ($text -match 'Packages:') { ($text -split 'Packages:')[-1] } else { '' }
+          if ($listed -notmatch [regex]::Escape("-$version-")) {
+            Write-Output "::error::The submission does not have the $version package: msstore did not upload it. Its packages are listed above."
+            exit 1
+          }
         env:
           PRODUCT_ID: ${{ vars.STORE_PRODUCT_ID }}
           RUN_ID: ${{ inputs.run-id }}

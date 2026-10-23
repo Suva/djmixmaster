@@ -461,7 +461,8 @@ Do not write test data there.
   calls `.github/workflows/store.yml`, which hands it to Partner Center as a
   new submission (`msstore publish`, given a checkout of the sources the
   package was built from, which it reads to know the app is an Electron one,
-  and the folder the package is in),
+  and the folder the package is in, under a `.appx` name, as msstore's
+  Electron support passes over a `.msix` and says it succeeded all the same),
   once the variable `STORE_PRODUCT_ID` and the four `PARTNER_CENTER_*`
   secrets are set, committed so that Microsoft certifies it (an uncommitted
   upload is never attached to the submission, which keeps its old package).
