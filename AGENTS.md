@@ -161,6 +161,12 @@ and curves in the code are block indexes unless a name says seconds.
 - **Colours come from the theme.** In CSS use the variables at the top of `styles.css`, which `[data-theme="light"]` redefines; on a canvas use `colours` from `theme.ts`. A new hard-coded colour would stay dark-looking in the light theme.
 - **Every slider has a default.** Give a new one its default with
   `resetsTo` (`fader-reset.ts`), which a double click puts it back to.
+- **The top bar is the Mac's title bar.** The windows have none of their
+  own there (`insetTitleBar` in `main.ts`): the main window's `header` and
+  the Help window's toolbar move the window when dragged, and keep room for
+  its buttons. Anything clickable put in them, or laid over them, needs
+  `-webkit-app-region: no-drag`, or a click there moves the window instead.
+  Buttons, fields, menus and groups of buttons have it already.
 - **Clicks are not drags.** Pointer handlers ignore movement under
   `DRAG_START_PX`. New drag interactions should do the same.
 
@@ -548,11 +554,16 @@ parts for the search. Help → User Manual shows that copy in the Help window
 pages are shown in a frame, so Back and Forward step through their history
 alone. The window has no preload: the main process keeps it to the manual's
 pages, and a link out goes to the browser (`window.open`, which it turns
-away). A page in it takes the app's theme and leaves out its header, asking
+away). Esc is taken by the main process before the page sees it
+(`before-input-event`), which asks `escapePressed` in `help.ts` first and
+hides the window when the search has nothing left to close; hidden, it keeps
+its history for the next time it is opened. A page in it takes the app's theme and leaves out its header, asking
 its parent before it draws (the script in `site/manual.html`), so
 `site/style.css` has a light palette the website itself never uses. In check
 mode the window is drawn off screen, and `window.api.checkHelp(script)` runs
-a script in it and says which links it would have opened;
+a script in it, after pressing a key there as a person would when given one
+(`{ key: 'Escape' }`), and says which links it would have opened and whether
+it is hidden;
 `window.api.manualAddress()` says which copy it shows.
 
 F1 and the **?** button open the manual at the page about what is on screen

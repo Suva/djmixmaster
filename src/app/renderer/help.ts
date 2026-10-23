@@ -28,6 +28,13 @@ const back = $<HTMLButtonElement>('help-back');
 const forward = $<HTMLButtonElement>('help-forward');
 
 const onMac = navigator.userAgent.includes('Mac');
+// The toolbar stands in for the Mac's title bar (insetTitleBar in main.ts).
+if (onMac) document.documentElement.dataset.titleBar = 'inset';
+/** In full screen the window's buttons are gone, and so is the room kept for them; the main process calls this. */
+function setFullScreen(full: boolean) {
+  document.documentElement.toggleAttribute('data-full-screen', full);
+}
+Object.assign(window, { setFullScreen });
 // As src/app/shortcuts.ts lists them for the manual: ⌘[ as in a Mac's browsers, Alt+← as in the others', and both everywhere.
 back.title = `The page before (${onMac ? '⌘[' : 'Alt+←'})`;
 forward.title = `The page after (${onMac ? '⌘]' : 'Alt+→'})`;
@@ -348,16 +355,28 @@ query.addEventListener('keydown', (event) => {
     event.preventDefault();
     if (found[chosen] && !results.hidden) open(found[chosen]);
     else void showResults();
-  } else if (event.key === 'Escape') {
-    // Not the search box's own clearing, which would take the words away along with the list.
-    event.preventDefault();
-    // First the list, then the search itself, and with it the marks on the page.
-    if (!results.hidden) closeResults();
-    else {
-      query.value = '';
-      markFound();
-    }
   }
 });
+
+/**
+ * Esc, wherever it is pressed in the window: the main process takes it before
+ * the page does and asks here first. It closes the list of results, then
+ * clears the search and its marks on the page; when there is neither, it says
+ * so, and the main process hides the window, as the sheet of shortcuts this
+ * replaced was closed.
+ */
+function escapePressed(): boolean {
+  if (!results.hidden) {
+    closeResults();
+    return true;
+  }
+  if (query.value) {
+    query.value = '';
+    markFound();
+    return true;
+  }
+  return false;
+}
+Object.assign(window, { escapePressed });
 
 initTooltips();

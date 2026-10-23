@@ -2856,6 +2856,9 @@ api.onUpdateAvailable((version) => {
 // on screen. Each page ends with the keys of its own part of the app.
 
 const onMac = navigator.userAgent.includes('Mac');
+// The top bar stands in for the Mac's title bar (insetTitleBar in main.ts).
+if (onMac) document.documentElement.dataset.titleBar = 'inset';
+api.onFullScreen((full) => document.documentElement.toggleAttribute('data-full-screen', full));
 const COMMAND = onMac ? '⌘' : 'Ctrl+';
 $('split-here').title = `Split at playhead (${COMMAND}E): cut this mix in two where the playhead is`;
 $('undo').title = `Undo the last change (${COMMAND}Z)`;

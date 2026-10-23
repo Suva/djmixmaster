@@ -13,7 +13,8 @@ are under "Not released yet" and appear there once they are.
   window of its own, light or dark as the app is, rather than in your browser.
   A toolbar goes back, forward and to the first page, and a search looks
   through every page: choose a result to go straight to that part, with the
-  words marked. Links to the website still open in your browser.
+  words marked. Links to the website still open in your browser. Esc puts
+  the window away, and it comes back where you left it.
 - **Help for what is on screen.** The **?** button and F1 open the manual at
   the page about what you are looking at: the open dialog, the Mastering,
   Video or Record view, or in the template editor the kind of layer selected.
@@ -21,6 +22,9 @@ are under "Not released yet" and appear there once they are.
   export dialog, layer styles, masks, "Moves with…" and formulas opens the
   part about that. They replace the sheet of shortcuts, which the manual
   lists page by page, and on its Shortcuts page (Help → Shortcuts).
+- **No title bar on the Mac.** The window's own top bar takes its place, with
+  the window's buttons in it: drag it to move the window, double-click it to
+  zoom. The manual's window does the same.
 
 ## 0.12.0 — 22 October 2026
 

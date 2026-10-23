@@ -3088,6 +3088,34 @@ test('keys typed into the layer search are letters, not the window\'s shortcuts'
   assert.deepEqual(seen, { searching: 'search', bypassed: false, playing: false });
 });
 
+test('on a Mac the top bars stand in for the title bar: dragged to move the window, clear of its buttons but in full screen', { skip: skip || process.platform !== 'darwin' }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    const header = document.querySelector('header')!;
+    const region = (element: Element) => getComputedStyle(element).getPropertyValue('-webkit-app-region');
+    const main = { bar: region(header), button: region(page.element('open')), group: region(page.element('undo').parentElement!), room: getComputedStyle(header).paddingLeft };
+    document.documentElement.toggleAttribute('data-full-screen', true);
+    const full = getComputedStyle(header).paddingLeft;
+    document.documentElement.toggleAttribute('data-full-screen', false);
+    window.api.openManual();
+    let help = await window.api.checkHelp('0');
+    for (const start = Date.now(); !help.open; help = await window.api.checkHelp('0')) {
+      if (Date.now() - start > 15000) throw new Error('Waited in vain for the Help window');
+      await page.wait(50);
+    }
+    help = await window.api.checkHelp(`(() => {
+      const region = (element) => getComputedStyle(element).getPropertyValue('-webkit-app-region');
+      const bar = document.getElementById('help-bar');
+      return { bar: region(bar), search: region(document.getElementById('help-query')), back: region(document.getElementById('help-back')), room: getComputedStyle(bar).paddingLeft };
+    })()`);
+    return { main, full, help: help.value };
+  });
+  assert.deepEqual(seen, {
+    main: { bar: 'drag', button: 'no-drag', group: 'no-drag', room: '86px' },
+    full: '16px',
+    help: { bar: 'drag', search: 'no-drag', back: 'no-drag', room: '82px' },
+  });
+});
+
 test('Help opens the manual the app carries, for its own version, rather than the website\'s', { skip }, async () => {
   const address = await runApp({ recording: mix, data: await fresh(), timeoutMs: 30_000 }, () => window.api.manualAddress());
   assert.match(address, /[\\/]dist[\\/]help[\\/]manual[\\/]index\.html$/, address);
@@ -3143,6 +3171,47 @@ test('the ? button opens the manual where it explains what is shown, and a panel
     mastering: 'levelling.html', eq: 'levelling.html#eq', checkup: 'checkup.html', exporting: 'export-audio.html',
     layer: 'layer-types.html#particles', masks: 'layer-settings.html#masks', fields: 'fields.html', record: 'record.html',
   });
+});
+
+test('Esc in the Help window closes the results, then clears the search, then hides the window, which comes back with its history', { skip }, async () => {
+  const seen = await runApp({ recording: mix, data: await fresh(), timeoutMs: 60_000 }, async (page) => {
+    const state = `(() => {
+      const frame = document.getElementById('help-page');
+      return { results: !document.getElementById('help-results').hidden, query: document.getElementById('help-query').value, at: frame.contentWindow.location.href.replace(/^.*\\/manual\\//, ''), back: !document.getElementById('help-back').disabled };
+    })()`;
+    // Waits in the Help window until the frame shows a page, and that page is the one given.
+    const showing = async (want: string) => {
+      for (const start = Date.now(); ; await page.wait(50)) {
+        const now = await window.api.checkHelp(`document.getElementById('help-page').contentDocument?.readyState === 'complete' && document.getElementById('help-page').contentWindow.location.href`);
+        if (now.open && String(now.value).endsWith(`/manual/${want}`)) return;
+        if (Date.now() - start > 15000) throw new Error(`Waited in vain for the Help window to show ${want}, at ${now.value}`);
+      }
+    };
+    window.api.openManual('levelling');
+    await showing('levelling.html');
+    await window.api.checkHelp(`(async () => {
+      const query = document.getElementById('help-query');
+      query.focus();
+      query.value = 'limiter';
+      query.dispatchEvent(new Event('input'));
+      for (let i = 0; i < 100 && document.getElementById('help-results').hidden; i++) await new Promise((done) => setTimeout(done, 50));
+    })()`);
+    const steps = [];
+    for (let i = 0; i < 3; i++) {
+      const after = await window.api.checkHelp(state, { key: 'Escape' });
+      steps.push({ ...(after.value as object), hidden: after.hidden });
+    }
+    window.api.openManual('video');
+    await showing('video.html');
+    const back = await window.api.checkHelp(state);
+    return { steps, back: { ...(back.value as object), hidden: back.hidden } };
+  });
+  assert.deepEqual(seen.steps, [
+    { results: false, query: 'limiter', at: 'levelling.html', back: false, hidden: false },
+    { results: false, query: '', at: 'levelling.html', back: false, hidden: false },
+    { results: false, query: '', at: 'levelling.html', back: false, hidden: true },
+  ]);
+  assert.deepEqual(seen.back, { results: false, query: '', at: 'video.html', back: true, hidden: false });
 });
 
 test('Help shows the manual in a window of its own: its search goes to the part found, Back returns, and links out open in the browser', { skip }, async () => {

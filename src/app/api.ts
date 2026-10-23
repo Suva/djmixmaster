@@ -231,11 +231,11 @@ export interface Api {
   /** Where openManual opens the manual: a file of the copy the app carries, or the website's address. */
   manualAddress(): Promise<string>;
   /**
-   * In check mode only: runs a script in the Help window. Says whether it is open and loaded, what the script gave,
-   * and the addresses its links would have opened in the browser. Given a name, a picture of the window is saved
-   * under it beside the check's own.
+   * In check mode only: presses `key` in the Help window as a person would, if given, then runs a script there. Says
+   * whether it is open and loaded, whether Esc has hidden it, what the script gave, and the addresses its links would
+   * have opened in the browser. Given a `picture` name, a picture of the window is saved under it beside the check's own.
    */
-  checkHelp(script: string, picture?: string): Promise<{ open: boolean; value: unknown; links: string[] }>;
+  checkHelp(script: string, options?: { picture?: string; key?: string }): Promise<{ open: boolean; hidden: boolean; value: unknown; links: string[] }>;
   /** Stops the notice about this version from coming back. */
   skipVersion(version: string): void;
   /** Check mode only: saves a picture of the window, or of an area of it, beside the check's picture under `name`. */
@@ -280,6 +280,8 @@ export interface Api {
   /** The view the window was in when last used. */
   view(): Promise<AppView>;
   setView(view: AppView): void;
+  /** The window has gone into full screen, or come out of it. */
+  onFullScreen(listener: (full: boolean) => void): void;
   /** A command chosen from the menu bar or by its keyboard shortcut. */
   onMenu(listener: (command: MenuCommand) => void): void;
   /** A recording handed to the app from outside while it is running. */

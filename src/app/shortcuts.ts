@@ -82,7 +82,7 @@ export function shortcuts({ command, option }: Modifiers): Shortcuts {
     ['The manual', [
       [`${command}F`, 'Search every page; the words are marked on the page shown'],
       ['↑ ↓, Return', 'Choose a result and go to it'],
-      ['Esc', 'Close the results; again, clear the search'],
+      ['Esc', 'Close the results, then clear the search, then put the manual away; it comes back as it was'],
       [`${command}[ or ${option}+←`, 'The page before'],
       [`${command}] or ${option}+→`, 'The page after'],
     ]],

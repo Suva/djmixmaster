@@ -95,6 +95,16 @@ header {
   background: var(--panel);
 }
 
+/*
+ * On a Mac the window has no title bar: the top bar is dragged to move the
+ * window, double-clicked to zoom it, and starts clear of the window's buttons
+ * (insetTitleBar in main.ts), except in full screen, where they are gone.
+ * What is clicked in it has to say so, or the click moves the window.
+ */
+:root[data-title-bar="inset"] header { padding-left: 86px; -webkit-app-region: drag; }
+:root[data-title-bar="inset"][data-full-screen] header { padding-left: 16px; }
+header :is(button, input, select, a, [role="group"]) { -webkit-app-region: no-drag; }
+
 .spacer { flex: 1; }
 
 #file-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

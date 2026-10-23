@@ -26,7 +26,7 @@ Your recording is never changed, and it never leaves your computer.
 
 ## In the app
 
-Help → User Manual opens this manual in a window of its own, for the version you have, without a network. Its toolbar goes back, forward and home. Its search looks through every page: pick a result to go to that part of its page, where the words are marked. Links to the website open in your browser.
+Help → User Manual opens this manual in a window of its own, for the version you have, without a network. Its toolbar goes back, forward and home. Its search looks through every page: pick a result to go to that part of its page, where the words are marked. Links to the website open in your browser. Esc puts the window away, once any search is closed and cleared; it comes back where you left it.
 
 The **?** button at the top right of the app, or F1, opens the page about what is on screen: the dialog that is open, the view, or in the template editor the kind of layer selected. A small **?** beside some panels, such as the EQ, the masks and the formulas, opens the part of a page about that panel.
 

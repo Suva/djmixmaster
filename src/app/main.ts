@@ -1641,6 +1641,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: groundColour(),
     title: 'DJ Mix Master',
+    ...insetTitleBar(52),
     // Automated checks draw off screen, so they also run while the display is asleep.
     show: !SCREENSHOT,
     webPreferences: {
@@ -1652,6 +1653,9 @@ function createWindow() {
   if (SCREENSHOT) {
     window.webContents.on('console-message', (event) => console.log(`[window] ${event.message}`));
   }
+  // In full screen the window's buttons are gone, and so is the room kept for them.
+  window.on('enter-full-screen', () => window?.webContents.send('full-screen', true));
+  window.on('leave-full-screen', () => window?.webContents.send('full-screen', false));
   // Automated checks run the audio chain without making any sound.
   window.loadURL(`${ORIGIN}/index.html${SCREENSHOT ? '?silent' : ''}`);
   // Closing the window is quitting, whatever the hidden capture page: its question about a recording comes first.
@@ -1778,8 +1782,18 @@ function manualAddress(): string {
   return existsSync(bundled) ? bundled : MANUAL_PAGE;
 }
 
+/**
+ * On a Mac the windows have no title bar of their own: their top bars take its
+ * place, with the window's buttons inset into them at this place, which centres
+ * them on a bar of that height. The bars make room for them (styles.css, help.html).
+ */
+const insetTitleBar = (barHeight: number): Partial<Electron.BrowserWindowConstructorOptions> =>
+  process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 18, y: Math.round((barHeight - 14) / 2) } } : {};
+
 /** The Help window, while it is open: one for the app, brought forward when the manual is asked for again. */
 let helpWindow: BrowserWindow | null = null;
+/** Whether Esc has hidden the Help window: a check cannot ask the window, which it never shows. */
+let helpHidden = false;
 /** In check mode: the addresses a link in the Help window would have opened in the browser, for a test to read. */
 const helpLinks: string[] = [];
 
@@ -1804,6 +1818,7 @@ function openManual(page?: string) {
     return;
   }
   if (helpWindow) {
+    helpHidden = false;
     if (at) helpWindow.webContents.executeJavaScript(`showPage(${JSON.stringify(at)})`).catch(() => {});
     if (!SCREENSHOT) helpWindow.show();
     helpWindow.focus();
@@ -1816,6 +1831,7 @@ function openManual(page?: string) {
     minHeight: 400,
     title: 'DJ Mix Master Manual',
     backgroundColor: groundColour(),
+    ...insetTitleBar(46),
     // The menu bar of Windows and Linux stays out of the way; its shortcuts, such as closing the window, still work.
     autoHideMenuBar: true,
     // Checks draw it off screen, as they do the main window.
@@ -1837,19 +1853,42 @@ function openManual(page?: string) {
   help.on('closed', () => {
     helpWindow = null;
   });
+  // Esc steps back out of a search, and then hides the window (escapePressed in help.ts). Hidden, not closed: it
+  // comes back as it was, with its history, and an Esc pressed by mistake loses nothing.
+  help.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || input.key !== 'Escape' || input.meta || input.control || input.alt || input.shift) return;
+    event.preventDefault();
+    help.webContents.executeJavaScript('escapePressed()').then((handled) => {
+      if (handled) return;
+      helpHidden = true;
+      help.hide();
+      // The main window is where the reader goes back to, as when a sheet over it closes.
+      window?.focus();
+    }).catch(() => {});
+  });
+  // In full screen the window's buttons are gone, and so is the room kept for them.
+  help.on('enter-full-screen', () => help.webContents.executeJavaScript('setFullScreen(true)').catch(() => {}));
+  help.on('leave-full-screen', () => help.webContents.executeJavaScript('setFullScreen(false)').catch(() => {}));
   help.loadURL(`${ORIGIN}/help.html?${new URLSearchParams({ theme: preferences.theme ?? 'dark', ...(at && { page: at }) })}`);
   helpWindow = help;
 }
 ipcMain.on('open-manual', (_event, page?: string) => openManual(page));
 ipcMain.handle('manual-address', () => manualAddress());
-// In check mode only: runs a script in the Help window and gives back what it returns, with the links it sent out;
-// and, given a name, saves a picture of the window under it, as check-picture does of the main one.
-ipcMain.handle('check-help', async (_event, script: string, picture?: string) => {
+// In check mode only: presses a key in the Help window as a person would, if asked, then runs a script there and gives
+// back what it returns, with the links it sent out and whether Esc has hidden it; and, given a name, saves a picture
+// of the window under it, as check-picture does of the main one.
+ipcMain.handle('check-help', async (_event, script: string, options?: { picture?: string; key?: string }) => {
   if (!SCREENSHOT) throw new Error('The Help window is scripted in check mode only');
-  if (!helpWindow || helpWindow.webContents.isLoading()) return { open: false, value: null, links: helpLinks };
+  if (!helpWindow || helpWindow.webContents.isLoading()) return { open: false, hidden: helpHidden, value: null, links: helpLinks };
+  if (options?.key) {
+    helpWindow.webContents.sendInputEvent({ type: 'keyDown', keyCode: String(options.key) });
+    helpWindow.webContents.sendInputEvent({ type: 'keyUp', keyCode: String(options.key) });
+    // What the key sets off runs in the window and comes back; a round trip there lets it finish first.
+    await helpWindow.webContents.executeJavaScript('new Promise((done) => setTimeout(done, 50))');
+  }
   const value = await helpWindow.webContents.executeJavaScript(String(script));
-  if (picture) await writeFile(join(dirname(SCREENSHOT), basename(String(picture))), (await helpWindow.webContents.capturePage()).toPNG());
-  return { open: true, value, links: helpLinks };
+  if (options?.picture) await writeFile(join(dirname(SCREENSHOT), basename(String(options.picture))), (await helpWindow.webContents.capturePage()).toPNG());
+  return { open: true, hidden: helpHidden, value, links: helpLinks };
 });
 
 function buildMenu() {
