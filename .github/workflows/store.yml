@@ -98,12 +98,15 @@ jobs:
           $name = "DJ Mix Master-$version-Microsoft-Store.appx"
           Copy-Item $package.FullName (Join-Path $upload $name)
           Write-Output "Submitting $name."
-          msstore publish . -i $upload -id $env:PRODUCT_ID --verbose | Tee-Object -Variable published
+          # Both of its streams, as text: what it prints does not all come out on the first.
+          msstore publish . -i $upload -id $env:PRODUCT_ID --verbose 2>&1 | ForEach-Object { "$_" } | Tee-Object -Variable published
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           # msstore says it succeeded either way; the packages it lists at the end say whether this one went in.
-          $text = $published -join "`n"
-          $listed = if ($text -match 'Packages:') { ($text -split 'Packages:')[-1] } else { '' }
-          if ($listed -notmatch [regex]::Escape("-$version-")) {
+          # Its colours are taken out first, as they can come between the words.
+          $text = ($published -join "`n") -replace "\e\[[0-9;]*m", ''
+          if ($text -notmatch 'Packages:') {
+            Write-Output "::warning::Could not read msstore's list of the submission's packages: see that it lists $name in Partner Center."
+          } elseif (($text -split 'Packages:')[-1] -notmatch [regex]::Escape("-$version-")) {
             Write-Output "::error::The submission does not have the $version package: msstore did not upload it. Its packages are listed above."
             exit 1
           }
