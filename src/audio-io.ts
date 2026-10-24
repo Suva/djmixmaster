@@ -58,9 +58,9 @@ export function ffmpeg(): string {
   if (!ffmpegPath) {
     const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
     const dirs = [...(process.env.PATH ?? '').split(delimiter).filter(Boolean), ...FALLBACK_DIRS];
-    const candidates = [process.env.DJMASTER_FFMPEG, ...dirs.map((dir) => join(dir, exe))];
+    const candidates = [process.env.DJMASTER_FFMPEG, ...dirs.map((dir) => join(dir, exe)), process.env.DJMASTER_FFMPEG_FALLBACK];
     ffmpegPath = candidates.find((path) => path && existsSync(path));
-    if (!ffmpegPath) throw new Error('ffmpeg not found. Install it (for example "brew install ffmpeg") or add it to PATH');
+    if (!ffmpegPath) throw new Error('ffmpeg not found. Install it (for example "brew install ffmpeg" or "winget install ffmpeg") or add it to PATH');
   }
   return ffmpegPath;
 }

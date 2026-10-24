@@ -38,6 +38,11 @@ if (process.platform === 'linux' && process.env.APPIMAGE) app.commandLine.append
 // The packaged app carries its own ffmpeg; workers inherit this when they start.
 const bundledFfmpeg = join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
 if (app.isPackaged && existsSync(bundledFfmpeg)) process.env.DJMASTER_FFMPEG = bundledFfmpeg;
+// From the project, with no ffmpeg installed, the copy that npm install fetched is the last resort.
+else if (!app.isPackaged) {
+  const fetched = join(app.getAppPath(), 'node_modules', 'ffmpeg-static', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+  if (existsSync(fetched)) process.env.DJMASTER_FFMPEG_FALLBACK = fetched;
+}
 
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'flac', 'm4a', 'aac', 'aif', 'aiff', 'ogg', 'opus'];
 /** Development aid: save a picture of the window here once a file is drawn, then quit. */
