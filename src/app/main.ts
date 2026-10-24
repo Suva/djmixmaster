@@ -1954,13 +1954,28 @@ function buildMenu() {
         // From the Store, updates come from the Store.
         ...(UPDATES_FROM_STORE ? [] : [{ label: 'Check for Updates…', click: checkForUpdatesNow }, { type: 'separator' } as MenuItemConstructorOptions]),
         { label: 'DJ Mix Master Website', click: () => shell.openExternal(DOWNLOAD_PAGE) },
+        // A Mac has About in the app's own menu; elsewhere it goes at the foot of Help, where Windows has it.
+        ...(process.platform === 'darwin' ? [] : [{ type: 'separator' } as MenuItemConstructorOptions, { role: 'about', label: 'About DJ Mix Master' } as MenuItemConstructorOptions]),
       ],
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+/** What the About box says, the same on every system; each shows what of it it can. */
+function setAbout() {
+  const icon = join(__dirname, 'help', 'icon.png');
+  app.setAboutPanelOptions({
+    applicationName: 'DJ Mix Master',
+    applicationVersion: app.getVersion(),
+    copyright: 'Free software under the GNU General Public License, version 3 or later.',
+    website: DOWNLOAD_PAGE,
+    ...(existsSync(icon) && { iconPath: icon }),
+  });
+}
+
 app.whenReady().then(async () => {
+  setAbout();
   protocol.handle(SCHEME, serve);
   // Reading a small local file; the network is not touched before the window is up.
   checksAutomatically = (await loadUpdateSettings()).automatic;

@@ -9,6 +9,8 @@ are under "Not released yet" and appear there once they are.
 - **Drag with the right mouse button to move along the recording** or the
   mix, with any mouse. Before, only a sideways swipe or tilt of the wheel
   did, which most mice on Windows do not have.
+- **About DJ Mix Master on Windows and Linux**, at the foot of the Help menu,
+  with the version. On a Mac it stays in the app's own menu.
 
 ## 0.13.0 — 23 October 2026
 
