@@ -6,6 +6,9 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **On Windows the window has no title bar of its own**, as on the Mac: the
+  top bar takes its place, with the window's buttons at its right end. The
+  menus (File, Edit, View, Window, Help) open from a menu button at its left.
 - **Drag with the right mouse button to move along the recording** or the
   mix, with any mouse. Before, only a sideways swipe or tilt of the wheel
   did, which most mice on Windows do not have.

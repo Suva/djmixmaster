@@ -277,6 +277,8 @@ export interface Api {
   onRecordLevels(listener: (levels: Levels) => void): void;
   /** Looks for a newer version now, and says what was found. */
   checkUpdatesNow(): void;
+  /** Opens the menu bar's menus as one menu at this place in the window, where the bar itself is not shown (Windows). */
+  showAppMenu(x: number, y: number): void;
   /** The view the window was in when last used. */
   view(): Promise<AppView>;
   setView(view: AppView): void;

@@ -103,6 +103,8 @@ header {
  */
 :root[data-title-bar="inset"] header { padding-left: 86px; -webkit-app-region: drag; }
 :root[data-title-bar="inset"][data-full-screen] header { padding-left: 16px; }
+/* On Windows the window's buttons sit over the right end of the bar: env() is the room left of them. */
+:root[data-title-bar="overlay"] header { padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 16px); -webkit-app-region: drag; }
 header :is(button, input, select, a, [role="group"]) { -webkit-app-region: no-drag; }
 
 /*
@@ -123,7 +125,7 @@ header :is(button, input, select, a, [role="group"]) { -webkit-app-region: no-dr
 #file-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #file-name.loaded { color: var(--text); font-weight: 600; }
 #checkup { flex: none; font-size: 12px; padding: 4px 10px; color: var(--muted); }
-#checkup[hidden] { display: none; }
+#checkup[hidden], #app-menu[hidden] { display: none; }
 #checkup.faults { color: var(--warn); border-color: var(--warn-line); }
 #settings-dialog { width: 620px; }
 #settings-dialog .setting-block { padding: 14px 0; border-top: 1px solid var(--border); }

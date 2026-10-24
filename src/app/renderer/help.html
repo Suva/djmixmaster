@@ -11,6 +11,7 @@
     /* A point more above, where the window's own light edge is drawn over the bar's first. */
     :root[data-title-bar="inset"] #help-bar { padding-top: 9px; padding-left: 82px; -webkit-app-region: drag; }
     :root[data-title-bar="inset"][data-full-screen] #help-bar { padding-left: 12px; }
+    :root[data-title-bar="overlay"] #help-bar { padding-right: calc(100vw - env(titlebar-area-width, 100vw) + 12px); -webkit-app-region: drag; }
     #help-bar :is(button, input) { -webkit-app-region: no-drag; }
     /* The list of results hangs below the bar, over the page, where a drag would only get in its way. */
     #help-results { -webkit-app-region: no-drag; }

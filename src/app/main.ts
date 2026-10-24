@@ -1231,6 +1231,10 @@ ipcMain.handle('set-theme', async (_event, theme: AppTheme) => {
   preferences = theme === 'light' ? { ...kept, theme } : kept;
   window?.setBackgroundColor(groundColour());
   helpWindow?.setBackgroundColor(groundColour());
+  if (process.platform === 'win32') {
+    window?.setTitleBarOverlay(overlayColours());
+    helpWindow?.setTitleBarOverlay(overlayColours());
+  }
   helpWindow?.webContents.executeJavaScript(`setTheme(${JSON.stringify(theme)})`).catch(() => {});
   await savePreferences();
   return settingsNow();
@@ -1243,6 +1247,10 @@ ipcMain.handle('set-output', async (_event, output: AudioOutput | null) => {
   return settingsNow();
 });
 ipcMain.on('check-updates-now', () => checkForUpdatesNow());
+ipcMain.on('show-app-menu', (_event, x: unknown, y: unknown) => {
+  if (!window || typeof x !== 'number' || typeof y !== 'number') return;
+  Menu.getApplicationMenu()?.popup({ window, x: Math.round(x), y: Math.round(y) });
+});
 
 // ---------------------------------------------------------------------------
 // Recording from an audio input (recorder.ts)
@@ -1794,8 +1802,16 @@ function manualAddress(): string {
  * place, with the window's buttons inset into them at this place, which centres
  * them on a bar of that height. The bars make room for them (styles.css, help.html).
  */
-const insetTitleBar = (barHeight: number): Partial<Electron.BrowserWindowConstructorOptions> =>
-  process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 18, y: Math.round((barHeight - 14) / 2) } } : {};
+const insetTitleBar = (barHeight: number): Partial<Electron.BrowserWindowConstructorOptions> => {
+  if (process.platform === 'darwin') return { titleBarStyle: 'hidden', trafficLightPosition: { x: 18, y: Math.round((barHeight - 14) / 2) } };
+  // On Windows the system keeps drawing minimise, maximise and close at the right, over the bar.
+  if (process.platform === 'win32') return { titleBarStyle: 'hidden', titleBarOverlay: { ...overlayColours(), height: barHeight } };
+  return {};
+};
+
+/** The colours of the Windows buttons laid over a top bar: the bar's own, in the theme in use. */
+const overlayColours = () =>
+  preferences.theme === 'light' ? { color: '#ffffff', symbolColor: '#1c2028' } : { color: '#1b1e24', symbolColor: '#e6e8ec' };
 
 /** The Help window, while it is open: one for the app, brought forward when the manual is asked for again. */
 let helpWindow: BrowserWindow | null = null;

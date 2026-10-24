@@ -2895,6 +2895,17 @@ api.onUpdateAvailable((version) => {
 const onMac = navigator.userAgent.includes('Mac');
 // The top bar stands in for the Mac's title bar (insetTitleBar in main.ts).
 if (onMac) document.documentElement.dataset.titleBar = 'inset';
+// On Windows the system's buttons stay at the right, over the bar, which keeps clear of them.
+else if (navigator.userAgent.includes('Windows')) {
+  document.documentElement.dataset.titleBar = 'overlay';
+  // Without the system's title bar there is no menu bar either: its menus open from a button in the corner.
+  const menu = $('app-menu');
+  menu.hidden = false;
+  menu.addEventListener('click', () => {
+    const box = menu.getBoundingClientRect();
+    api.showAppMenu(box.left, box.bottom);
+  });
+}
 // A window drawn off screen, as the pictures for the website and the manual are, has no window buttons: the system
 // draws them on screen only. Drawn here where they would be, the pictures show the window as it looks.
 if (onMac && new URLSearchParams(location.search).has('check')) {

@@ -30,6 +30,7 @@ const forward = $<HTMLButtonElement>('help-forward');
 const onMac = navigator.userAgent.includes('Mac');
 // The toolbar stands in for the Mac's title bar (insetTitleBar in main.ts).
 if (onMac) document.documentElement.dataset.titleBar = 'inset';
+else if (navigator.userAgent.includes('Windows')) document.documentElement.dataset.titleBar = 'overlay';
 /** In full screen the window's buttons are gone, and so is the room kept for them; the main process calls this. */
 function setFullScreen(full: boolean) {
   document.documentElement.toggleAttribute('data-full-screen', full);

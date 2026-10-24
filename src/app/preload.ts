@@ -48,6 +48,7 @@ const api: Api = {
   onRecordStatus: (listener) => ipcRenderer.on('record-status', (_event, status) => listener(status)),
   onRecordLevels: (listener) => ipcRenderer.on('record-levels', (_event, levels) => listener(levels)),
   checkUpdatesNow: () => ipcRenderer.send('check-updates-now'),
+  showAppMenu: (x, y) => ipcRenderer.send('show-app-menu', x, y),
   view: () => ipcRenderer.invoke('view'),
   setView: (view) => ipcRenderer.send('set-view', view),
   onFullScreen: (listener) => ipcRenderer.on('full-screen', (_event, full: boolean) => listener(full)),
