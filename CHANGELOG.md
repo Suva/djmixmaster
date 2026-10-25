@@ -14,6 +14,8 @@ are under "Not released yet" and appear there once they are.
   did, which most mice on Windows do not have.
 - **About DJ Mix Master on Windows and Linux**, at the foot of the Help menu,
   with the version. On a Mac it stays in the app's own menu.
+- **The Record view keeps the channels you chose.** Channels other than 1
+  and 2 went back to 1 and 2 when you left the view or restarted the app.
 
 ## 0.13.0 — 23 October 2026
 

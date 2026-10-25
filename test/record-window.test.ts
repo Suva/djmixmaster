@@ -234,6 +234,35 @@ test('the helper records any two channels of an input, straight into the parts',
   assert.ok(Math.abs(left - -18.06) < 0.2 && Math.abs(right - -24.08) < 0.2, `peaks ${left}, ${right}`);
 });
 
+test('the channels chosen are still chosen on coming back to the Record view, and at the next start', { skip: noHelper }, async () => {
+  const data = await dataFolder(work);
+  const choose = await runApp({ data, env: PARTS, timeoutMs: 60_000 }, async (page) => {
+    const channels = () => page.element<HTMLSelectElement>('record-channels').value;
+    page.click('view-record');
+    await page.until(() => page.element<HTMLSelectElement>('record-device').options.length > 0, 'the devices to be listed');
+    page.choose('record-device', 'Test interface');
+    await page.until(() => page.text('record-device-note') === '4 channels, 48 kHz.', 'the test interface to be opened');
+    page.choose('record-channels', '2,3');
+    const meter = page.element('record-meter');
+    await page.until(() => meter.dataset.level === '-18.1,-24.1', 'the level of channels 3 and 4');
+    page.click('view-mastering');
+    await page.until(() => page.text('record-state') === 'Not recording', 'the input to be closed');
+    page.click('view-record');
+    await page.until(() => page.text('record-state').startsWith('Ready'), 'the test interface to be opened again');
+    return channels();
+  });
+  const next = await runApp({ data, env: PARTS, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-record');
+    await page.until(() => page.text('record-device-note') === '4 channels, 48 kHz.', 'the test interface to be opened');
+    const meter = page.element('record-meter');
+    await page.until(() => meter.dataset.level === '-18.1,-24.1', 'the level of channels 3 and 4');
+    return page.element<HTMLSelectElement>('record-channels').value;
+  });
+  assert.equal(choose, '2,3');
+  assert.equal(next, '2,3');
+  assert.deepEqual(JSON.parse(readFileSync(join(data, 'preferences.json'), 'utf8')).recording.channels, [2, 3]);
+});
+
 /** The helpers listening for a level only, by process id, with the process that started each. */
 function listening(): Map<number, number> {
   const found = new Map<number, number>();

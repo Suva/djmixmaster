@@ -180,8 +180,13 @@ export class RecordView {
     );
     const wanted = this.#settings.channels.join(',');
     channels.value = [...channels.options].some((o) => o.value === wanted) ? wanted : channels.options[0]?.value ?? '';
-    const [a, b] = channels.value.split(',').map(Number);
-    if (channels.value) this.#settings = { ...this.#settings, channels: [a, b] };
+    // Until the device is open its channels are not known, and the pair last
+    // used is kept rather than put back to the first two of a guess.
+    if (input && channels.value && channels.value !== wanted) {
+      const [a, b] = channels.value.split(',').map(Number);
+      this.#settings = { ...this.#settings, channels: [a, b] };
+      if (!busy) this.#api.recordChannels([a, b]);
+    }
     const folder = $('record-folder');
     folder.textContent = `‎${this.#settings.folder}‎`;
     folder.title = this.#settings.folder;
