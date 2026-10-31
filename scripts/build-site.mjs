@@ -26,7 +26,10 @@ const escape = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').repla
 
 const release = newestRelease();
 const asset = (extension) => release?.assets.find((a) => a.name.endsWith(extension));
-const mac = asset('.dmg');
+// The Intel installer's name ends in -x64.dmg; the Apple Silicon one is the other .dmg (in older releases its name
+// has no -arm64 at the end).
+const macIntel = asset('-x64.dmg');
+const mac = release?.assets.find((a) => a.name.endsWith('.dmg') && a !== macIntel);
 const windows = asset('.exe');
 const linux = asset('.AppImage');
 
@@ -41,6 +44,8 @@ const values = {
   VERSION_LINE: version,
   MAC_URL: mac?.browser_download_url ?? releasesUrl,
   MAC_DETAIL: mac ? `Apple Silicon · ${megabytes(mac.size)}` : 'Apple Silicon',
+  MAC_INTEL_URL: macIntel?.browser_download_url ?? releasesUrl,
+  MAC_INTEL_DETAIL: macIntel ? `Intel · ${megabytes(macIntel.size)}` : 'Intel',
   WINDOWS_URL: windows?.browser_download_url ?? releasesUrl,
   WINDOWS_DETAIL: windows ? `64-bit · ${megabytes(windows.size)}` : '64-bit',
   LINUX_URL: linux?.browser_download_url ?? releasesUrl,

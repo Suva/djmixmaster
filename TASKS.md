@@ -106,14 +106,6 @@ https://dmm.clysuva.com/, republished after every release.
 - Update the screenshot in `site/` when the window changes noticeably. See
   the AGENTS.md section on the website for how it is taken.
 
-### Intel and universal Mac builds — small
-
-The packaged app does not run on Intel Macs.
-
-- Build for `x64` or as a universal app.
-- The bundled ffmpeg has to match: `ffmpeg-static` installs one binary for
-  the machine it is installed on, so the other has to be fetched as well.
-
 ### A native ARM64 build for Windows — medium, needs an ARM machine to test
 
 The Windows installer and the Microsoft Store package are x64 only, and the

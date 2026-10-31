@@ -51,6 +51,7 @@
       "target": [
         "dmg"
       ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "category": "public.app-category.music",
       "icon": "build/icon.icns",
       "identity": "-",

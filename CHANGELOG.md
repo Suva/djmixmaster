@@ -4,6 +4,11 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
+## Not released yet
+
+- **A download for Intel Macs.** Macs with an Intel processor have an
+  installer of their own, beside the one for Apple Silicon.
+
 ## 0.13.1 — 25 October 2026
 
 - **On Windows the window has no title bar of its own**, as on the Mac: the

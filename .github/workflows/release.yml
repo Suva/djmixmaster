@@ -23,6 +23,12 @@ jobs:
             os: macos-latest
             ffmpeg: node_modules/ffmpeg-static/ffmpeg
             installer: release/*.dmg
+          # Intel Macs get an installer of their own, built on one of GitHub's Intel Macs: ffmpeg-static and the
+          # capture helper both come out for the machine they are built on, so everything in it is Intel.
+          - name: macOS Intel
+            os: macos-15-intel
+            ffmpeg: node_modules/ffmpeg-static/ffmpeg
+            installer: release/*.dmg
           - name: Windows
             os: windows-latest
             ffmpeg: node_modules/ffmpeg-static/ffmpeg.exe

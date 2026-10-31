@@ -4,7 +4,7 @@ Download the installer for your system from the [website](../index.html). Nothin
 
 | System | Needs |
 |---|---|
-| Mac | Apple Silicon (M1 or later), macOS 13 or later |
+| Mac | macOS 13 or later; Apple Silicon (M1 or later) or Intel, each with its own download |
 | Windows | 64-bit Windows 10 or later |
 | Linux | 64-bit, Intel or AMD processor |
 
@@ -21,8 +21,6 @@ If macOS says the app is damaged, open Terminal and run:
 ```
 xattr -dr com.apple.quarantine "/Applications/DJ Mix Master.app"
 ```
-
-There is no version for Intel Macs yet.
 
 ## Windows
 

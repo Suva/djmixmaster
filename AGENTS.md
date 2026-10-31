@@ -452,8 +452,9 @@ Do not write test data there.
   release workflow leaves them out (`DJMASTER_SKIP_WINDOW_TESTS`) until that
   trial has shown them to be dependable there.
 - **Releases are built by GitHub.** Pushing a tag such as `v0.2.0` runs
-  `.github/workflows/release.yml`, which tests and packages on macOS,
-  Windows and Linux and publishes the three installers. The version comes
+  `.github/workflows/release.yml`, which tests and packages on macOS (an
+  Apple Silicon machine and an Intel one, each building its own `.dmg`),
+  Windows and Linux and publishes the four installers. The version comes
   from the tag. None is signed for distribution.
 - **A package for the Microsoft Store** (`.msix`) is built beside the Windows
   installer and kept with the workflow run, under its downloads, not put on
