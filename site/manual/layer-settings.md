@@ -11,6 +11,7 @@ Amounts are not percentages but go from 0 to 1, as the [music values](functions.
 {{common-settings}}
 
 - **Anchor** says which part of the layer sits at its position: its centre, an edge or a corner.
+- **Motion blur** smears a layer along the way it moves, turns or grows, as a camera does when something moves fast in front of it. At 1 it smears over where the layer goes in a twentieth of a second, centred on where it is; higher values smear further. Only the layer's own movement from its placement is blurred: what moves inside it, such as glitter drifting or a spectrum's bars, stays sharp, and a video brings its own blur. Effects and a solid colour have none. A layer that jumps from one place to another, on the beat say, is not smeared across the jump. While paused, a layer keeps the blur it had when the music stopped. After a jump in the mix, or when a field is filled in, it starts sharp until the music plays again.
 - **Shown from** and **Shown until, before the end** are in seconds from the start and from the end of the mix: a title can show for the first minute only. **Fade in** and **Fade out** soften those edges.
 
 The settings in **Placement** can also be set on the picture, by dragging the layer's outline and corners.

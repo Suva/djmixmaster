@@ -91,6 +91,10 @@ export const COMMON_PARAMS: Record<string, ParamSpec> = {
   anchor: choice('Anchor', 'centre', ['centre', 'top', 'bottom', 'left', 'right', 'top left', 'top right', 'bottom left', 'bottom right']),
   scale: number('Scale', 100, 0, 400, '%'),
   rotation: number('Rotation', 0, -180, 180, '°'),
+  // How much a layer smears along the way it moves, turns and grows, as a camera's open shutter would.
+  // At 1 it covers where it goes in a twentieth of a second (MOTION_BLUR_SECONDS); 0, the default, is sharp.
+  // Only for layers that draw and have a place: an effect changes the picture beneath, and has no movement of its own.
+  motionBlur: number('Motion blur', 0, 0, 1),
   from: number('Shown from', 0, 0, 36000, 's'),
   until: number('Shown until, before the end', 0, 0, 36000, 's'),
   fadeIn: number('Fade in', 0, 0, 30, 's'),
@@ -421,7 +425,7 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
     // Its layers are drawn together, then laid on the picture as one: shown or not, faded, mixed in, and moved:
     // Across and Down are where the middle of what it holds goes, 50% and 50% leaving it where its layers put it.
     params: {},
-    common: ['visible', 'opacity', 'blend', 'x', 'y', 'scale', 'rotation', 'from', 'until', 'fadeIn', 'fadeOut'],
+    common: ['visible', 'opacity', 'blend', 'x', 'y', 'scale', 'rotation', 'motionBlur', 'from', 'until', 'fadeIn', 'fadeOut'],
   },
   split: {
     label: 'Colour split',
@@ -605,7 +609,9 @@ export const LAYER_TYPES: Record<string, LayerSpec> = {
  * it, its styles and its mask if it draws, then its own.
  */
 export function settingsOf(spec: LayerSpec): Record<string, ParamSpec> {
-  const common = spec.common ? Object.fromEntries(spec.common.map((key) => [key, COMMON_PARAMS[key]])) : COMMON_PARAMS;
+  const common = spec.common ? Object.fromEntries(spec.common.map((key) => [key, COMMON_PARAMS[key]])) : { ...COMMON_PARAMS };
+  // Effects have no movement of their own to blur, even those with every setting.
+  if (spec.effect) delete common.motionBlur;
   return { ...common, ...(spec.effect ? {} : STYLE_PARAMS), ...(spec.effect ? {} : MASK_PARAMS), ...spec.params };
 }
 

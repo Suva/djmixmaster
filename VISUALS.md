@@ -58,6 +58,7 @@ template works at any size; times are in seconds unless they say beats.
 | Anchor | choice | Centre, a corner or an edge |
 | Scale | number | 100% is the layer's own size |
 | Rotation | number, degrees | |
+| Motion blur | number 0–1 | Smears the layer along the way it moves, turns and grows; at 1, over a twentieth of a second. Not on effects or a solid colour |
 | Shown from, until | time or marker | Start of the mix, end, a marker, or a time |
 | Fade in, fade out | seconds | When it appears and disappears |
 

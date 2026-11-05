@@ -2068,6 +2068,115 @@ test('trails leave what moves behind while playing, and nothing while paused', {
   assert.ok(seen.paused < seen.without * 1.5, `paused, only the word: ${seen.paused} against ${seen.without}`);
 });
 
+test('a layer with a motion blur smears along the way it moves, and stays smeared while paused', { skip }, async () => {
+  const file = join(work, 'Motion blur.djmtemplate');
+  // A white bar sliding across at 60% of the picture a second; its motion blur switched on by a field.
+  await writeFile(file, JSON.stringify({
+    format: 3,
+    name: 'Motion blur',
+    fields: [{ key: 'on', label: 'On', kind: 'number', default: 0, min: 0, max: 100 }],
+    layers: [
+      { type: 'solid', params: { colour: '#000000' } },
+      { type: 'shape', name: 'Bar', params: { width: 10, height: 30, colour1: '#ffffff', colour5: '', x: '20 + (time * 60) % 60', motionBlur: 'on > 50' } },
+    ],
+  }));
+  const seen = await runApp({ recording: mix, data: await fresh(), template: file, timeoutMs: 60_000 }, async (page) => {
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Motion blur', 'the template to be added');
+    const picture = page.element<HTMLCanvasElement>('picture');
+    /** Across the middle, the pixels neither black nor white: a sharp bar has hardly any, a smeared one a ramp at each end. */
+    const grey = () => {
+      const data = picture.getContext('2d')!.getImageData(0, Math.floor(picture.height / 2), picture.width, 1).data;
+      let n = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i] > 30 && data[i] < 225) n++;
+      return n;
+    };
+    const on = (value: number) => {
+      const control = page.element<HTMLInputElement>('field-on');
+      control.value = String(value);
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    const playing = () => page.element('play').classList.contains('playing');
+    page.key('Space');
+    await page.until(playing, 'playback to start');
+    await page.wait(800);
+    const without = grey();
+    on(100);
+    await page.wait(800);
+    const blurred = grey();
+    const widthPlaying = picture.width;
+    page.key('Space');
+    await page.until(() => !playing(), 'playback to stop');
+    // Paused, an edit draws the picture again, still moving as fast as it was; the editor opening, which makes
+    // the picture narrower, is not taken for a movement. (A field filled in starts the template over, as a new
+    // choice does, and forgets how it moved, as it forgets trails.)
+    page.click('template-edit');
+    const row = [...document.querySelectorAll<HTMLElement>('.layer-row')].find((r) => r.querySelector('.layer-name')!.textContent === 'Bar')!;
+    row.dispatchEvent(new MouseEvent('mousedown', { clientX: 10, clientY: row.getBoundingClientRect().top + 5, bubbles: true }));
+    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    const height = document.querySelector<HTMLInputElement>('#editor-layer .setting[data-key="height"] input[type="number"]')!;
+    height.value = '32';
+    height.dispatchEvent(new Event('input', { bubbles: true }));
+    await page.drawn();
+    return { without, blurred, paused: grey(), width: widthPlaying, widthPaused: picture.width };
+  });
+  // At 60% a second over a twentieth of a second, the bar smears over 3% of the picture at each end.
+  const expected = 0.03 * seen.width;
+  assert.ok(seen.without <= 4, `sharp without it: ${seen.without} grey pixels`);
+  assert.ok(seen.blurred > expected * 0.8 && seen.blurred < expected * 2.5, `smeared with it: ${seen.blurred} grey pixels, about ${2 * expected} expected`);
+  assert.ok(seen.paused > expected * 0.8 * (seen.widthPaused / seen.width), `still smeared while paused: ${seen.paused} grey pixels, ${JSON.stringify(seen)}`);
+});
+
+test('a motion blur is exported as the view shows it', { skip }, async () => {
+  const file = join(work, 'Exported blur.djmtemplate');
+  // The bar of the test before, sliding across at 60% of the picture a second, always blurred.
+  await writeFile(file, JSON.stringify({
+    format: 3,
+    name: 'Exported blur',
+    fields: [],
+    layers: [
+      { type: 'solid', params: { colour: '#000000' } },
+      { type: 'shape', params: { width: 10, height: 30, colour1: '#ffffff', colour5: '', x: '20 + (time * 60) % 60', motionBlur: 1 } },
+    ],
+  }));
+  const folder = join(work, 'blurred');
+  await mkdir(folder);
+  const status = await runApp({ recording: mix, data: await fresh(), template: file, exportFolder: folder, timeoutMs: 150_000 }, async (page) => {
+    // A mix of the first ten seconds.
+    page.key('Enter');
+    for (let i = 0; i < 2; i++) page.key('ArrowRight');
+    await page.wait(100);
+    page.key('KeyO');
+    page.key('Enter');
+    await page.saved();
+    page.click('view-video');
+    page.click('template-import');
+    await page.until(() => page.element<HTMLSelectElement>('template').selectedOptions[0]?.text === 'Exported blur', 'the template to be added');
+    page.click('export-all');
+    await page.until(() => page.element<HTMLDialogElement>('export-dialog').open, 'the export dialog');
+    document.querySelector<HTMLButtonElement>('[data-format=mp4]')!.click();
+    page.click('export-go');
+    await page.until(() => /^Export/.test(page.text('export-status')), 'the export to finish', 120_000);
+    return page.text('export-status');
+  });
+  assert.match(status, /^Exported 1 mix\./, status);
+  const [exported] = await readdir(folder);
+  const video = join(folder, exported);
+  // Across the middle of a frame half a second in, and of the first: the first has no frame before it, and is sharp.
+  // Two rows, as the picture's colour is stored for pairs of them; the first is read.
+  const row = (seconds: number) => {
+    const rows = execFileSync(ffmpeg(), ['-v', 'error', '-ss', String(seconds), '-i', video, '-frames:v', '1', '-vf', 'crop=iw:2:0:ih/2', '-f', 'rawvideo', '-pix_fmt', 'gray', '-']);
+    return [...rows.subarray(0, rows.length / 2)];
+  };
+  const grey = (seconds: number) => row(seconds).filter((v) => v > 30 && v < 225).length;
+  const width = row(0).length;
+  const expected = 0.03 * width;
+  const [first, later] = [grey(0), grey(0.5)];
+  assert.ok(first <= 8, `the first frame sharp: ${first} grey pixels`);
+  assert.ok(later > expected * 0.8 && later < expected * 2.5, `smeared half a second in: ${later} grey pixels of ${width}, about ${2 * expected} expected`);
+});
+
 test('an effect in a group replaces the group\'s layers, rather than leaving them showing through', { skip }, async () => {
   const file = join(work, 'Grouped kaleidoscope.djmtemplate');
   await writeFile(file, JSON.stringify({

@@ -117,6 +117,34 @@ interface Memory {
   /** A trails layer's picture of the frames before, and a canvas to move it on with; both in half floats. */
   trail?: OffscreenCanvas;
   past?: OffscreenCanvas;
+  /** Where the layer was placed when last drawn, and at what moment, for its motion blur. */
+  placed?: Placement;
+  placedAt?: number;
+  /** How fast it was moving then, a second: kept while paused, so that a still frame is blurred as the export's is. */
+  velocity?: Placement;
+}
+
+/**
+ * A layer's place on the picture: its anchor in percent of the picture, as its
+ * settings have it, so that the picture changing size (the editor opening
+ * beside it) is not taken for a movement; its turn in degrees; its size as a
+ * fraction.
+ */
+interface Placement {
+  x: number;
+  y: number;
+  rotation: number;
+  scale: number;
+}
+
+/** How long the shutter is open at a motion blur of 1, in seconds: a layer smears over where it goes in that time. */
+export const MOTION_BLUR_SECONDS = 1 / 20;
+/** The most copies a layer is smeared with: past it, the copies are further apart than a pixel or so. */
+const MOTION_BLUR_SAMPLES = 48;
+
+/** Where a layer placed so draws what it drew at its own origin, on a picture of this size: moved, turned about it, then sized. */
+function placementMatrix(p: Placement, width: number, height: number): DOMMatrix {
+  return new DOMMatrix().translateSelf((p.x / 100) * width, (p.y / 100) * height).rotateSelf(p.rotation).scaleSelf(p.scale);
 }
 
 /** The switches of a layer's styles: any of them on, and the layer is drawn on its own. */
@@ -179,6 +207,8 @@ export class FrameDrawer {
   #memories: Memory[] = [];
   /** Particle pictures, drawn once per shape, colour and size. */
   readonly #sprites = new Map<string, OffscreenCanvas>();
+  /** Where a layer's smeared copies are added up, in half floats: in bytes, forty-eight faint copies would band. */
+  #smear: OffscreenCanvas | null = null;
 
   constructor(canvas: Canvas) {
     this.#canvas = canvas;
@@ -423,6 +453,7 @@ export class FrameDrawer {
     const opacity = num(params, 'opacity') * appear;
     if (opacity <= 0) return;
     const memory = (this.#memories[index] ??= {});
+    const blur = this.#motionOf(params, frame, memory);
     // A group's layers are drawn first, on a canvas of their own, which is then laid on the picture as one layer.
     const group = layer.type === 'group' ? this.#drawGroup(layers, index + 1, index + 1 + inside, frame) : null;
     if (group) this.#moveGroupBoxes(index, inside, params);
@@ -431,7 +462,8 @@ export class FrameDrawer {
     const burn = str(params, 'blend') === 'linear burn';
     // A layer with a style (a shadow, a stroke, a glow) is drawn on its own too, the style made from its shape.
     const styled = !LAYER_TYPES[layer.type]?.effect && STYLES.some((key) => params[key] === true);
-    const alone = burn || styled;
+    // A layer that moves with a motion blur is drawn on its own too, then smeared along its way, styles and all.
+    const alone = burn || styled || blur !== null;
     const [beneath, onto] = [this.#surface, this.#ctx];
     if (alone) this.#ctx = this.#layerCanvas();
     const into = this.#ctx;
@@ -472,6 +504,7 @@ export class FrameDrawer {
     if (!alone) return;
     this.#ctx = onto;
     if (styled) this.#style(params);
+    if (blur) this.#smearAlong(blur, index);
     if (burn) return this.#linearBurn(Math.min(1, opacity), beneath, onto);
     onto.save();
     onto.setTransform(1, 0, 0, 1, 0, 0);
@@ -741,6 +774,100 @@ export class FrameDrawer {
       rotation: num(params, 'rotation'),
       circle: false,
     };
+  }
+
+  /**
+   * How a layer is moving, for its motion blur; null where it has none or
+   * stands still. Worked out from where it was placed the frame before, and
+   * how long ago in the mix that was, so the preview, at the screen's rate,
+   * and the export, at its own, blur alike. Paused, it is the last speed it
+   * had, so the frame looks as it will in the export; after a jump (the view
+   * forgets what layers remember), or a leap too big to be a movement, such
+   * as a position that changes on the beat, there is none until it moves on.
+   */
+  #motionOf(params: ResolvedParams, frame: Frame, memory: Memory): { now: Placement; velocity: Placement; shutter: number } | null {
+    const now: Placement = {
+      x: num(params, 'x'),
+      y: num(params, 'y'),
+      rotation: num(params, 'rotation'),
+      scale: num(params, 'scale') / 100,
+    };
+    const [before, at] = [memory.placed, memory.placedAt];
+    [memory.placed, memory.placedAt] = [now, frame.seconds];
+    const passed = at === undefined ? 0 : frame.seconds - at;
+    if (before && passed > 0) {
+      const leapt = passed > 0.25
+        || Math.hypot(now.x - before.x, now.y - before.y) > 25
+        || Math.abs(now.rotation - before.rotation) > 90
+        || Math.abs(now.scale - before.scale) > Math.max(0.5, Math.abs(before.scale)) * 0.5;
+      memory.velocity = leapt ? undefined : {
+        x: (now.x - before.x) / passed,
+        y: (now.y - before.y) / passed,
+        rotation: (now.rotation - before.rotation) / passed,
+        scale: (now.scale - before.scale) / passed,
+      };
+    } else if (!before || passed < -0.25) {
+      // Back in time further than a pause settling the playhead: a jump, which tells nothing of how it moves.
+      memory.velocity = undefined;
+    }
+    const shutter = Math.max(0, num(params, 'motionBlur')) * MOTION_BLUR_SECONDS;
+    const velocity = memory.velocity;
+    if (shutter <= 0 || !velocity || Math.abs(now.scale) < 1e-6) return null;
+    if (velocity.x === 0 && velocity.y === 0 && velocity.rotation === 0 && velocity.scale === 0) return null;
+    return { now, velocity, shutter };
+  }
+
+  /**
+   * Smears the layer just drawn on its own (the 6th scratch canvas) along the
+   * way it moves while the shutter is open, centred on where it is now, as a
+   * camera's would be: copies of it, moved, turned and sized as it would be a
+   * moment before and after, averaged. As many as it takes for the copies to
+   * lie a pixel or two apart at the edge of the layer that moves furthest.
+   */
+  #smearAlong({ now, velocity, shutter }: { now: Placement; velocity: Placement; shutter: number }, index: number) {
+    const { width, height } = this.#canvas;
+    // How far the furthest part of the layer goes: its box's corner furthest from its anchor, or the picture's corner.
+    const box = this.boxes[index];
+    const reach = box
+      ? Math.max(...[[box.left, box.top], [box.left + box.w, box.top], [box.left, box.top + box.h], [box.left + box.w, box.top + box.h]]
+        .map(([x, y]) => Math.hypot(x, y))) * Math.abs(now.scale)
+      : Math.hypot(width, height);
+    const travel = shutter * (Math.hypot((velocity.x / 100) * width, (velocity.y / 100) * height)
+      + Math.abs((velocity.rotation * Math.PI) / 180) * reach
+      + (Math.abs(velocity.scale) / Math.abs(now.scale)) * reach);
+    if (travel < 0.5) return;
+    const samples = Math.max(2, Math.min(MOTION_BLUR_SAMPLES, Math.ceil(travel / 1.5) + 1));
+    const layer = this.#extraCanvas(6);
+    if (!this.#smear || this.#smear.width !== width || this.#smear.height !== height) this.#smear = new OffscreenCanvas(width, height);
+    const s = this.#smear.getContext('2d', { colorType: 'float16' })!;
+    s.setTransform(1, 0, 0, 1, 0, 0);
+    s.globalAlpha = 1;
+    s.filter = 'none';
+    s.globalCompositeOperation = 'source-over';
+    s.clearRect(0, 0, width, height);
+    // Added up, each a share of it: the average of the copies, transparent where only some of them cover.
+    s.globalCompositeOperation = 'lighter';
+    s.globalAlpha = 1 / samples;
+    s.imageSmoothingQuality = 'high';
+    const back = placementMatrix(now, width, height).invertSelf();
+    for (let i = 0; i < samples; i++) {
+      const t = (i / (samples - 1) - 0.5) * shutter;
+      const then: Placement = {
+        x: now.x + velocity.x * t,
+        y: now.y + velocity.y * t,
+        rotation: now.rotation + velocity.rotation * t,
+        scale: now.scale + velocity.scale * t,
+      };
+      s.setTransform(placementMatrix(then, width, height).multiplySelf(back));
+      s.drawImage(layer, 0, 0);
+    }
+    const l = layer.getContext('2d')!;
+    l.setTransform(1, 0, 0, 1, 0, 0);
+    l.globalAlpha = 1;
+    l.filter = 'none';
+    l.globalCompositeOperation = 'copy';
+    l.drawImage(this.#smear, 0, 0);
+    l.globalCompositeOperation = 'source-over';
   }
 
   /** How far a layer is shown at this moment: its time on screen, and its fades in and out. */
