@@ -510,7 +510,7 @@ test('the Video view draws the selected mix, and the mix keeps its template', { 
   });
   assert.deepEqual(first.mastering, { pictureShown: false, curvesShown: true });
   assert.deepEqual(first.video, { pictureShown: true, curvesShown: false, templateShown: true, levellingShown: false });
-  assert.deepEqual(first.options, ['glitter', 'ring', 'waveform', 'photo', 'original']);
+  assert.deepEqual(first.options, ['glitter', 'ring', 'waveform', 'photo', 'tunnel', 'retrowave', 'chrome', 'pulse', 'mono', 'kaleido', 'original']);
   assert.ok(first.lit > 50, 'the picture is not blank');
   assert.ok(first.back, 'the bar at the bottom switches back');
 
@@ -779,7 +779,7 @@ test('a template of your own: duplicated, renamed, kept, shared and deleted', { 
   });
   assert.ok(first.nameHidden, 'no name field outside the editor');
   assert.equal(first.shownName, 'My glitter', 'the name shown under the list');
-  assert.deepEqual(first.groups, [['Comes with the app', ['Glitter', 'Spectrum ring', 'Waveform', 'Photo', 'Original video']], ['Yours', ['Glitter copy']]]);
+  assert.deepEqual(first.groups, [['Comes with the app', ['Glitter', 'Spectrum ring', 'Waveform', 'Photo', 'Tunnel', 'Retrowave', 'Liquid chrome', 'Bass ring', 'Monochrome', 'Kaleido', 'Original video']], ['Yours', ['Glitter copy']]]);
   assert.equal(first.chosen, 'My glitter');
   assert.ok(first.deletable);
   const stored = await readdir(join(data, 'templates'));

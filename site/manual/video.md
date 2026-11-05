@@ -14,6 +14,12 @@ Pick one from the list under **Template**. These come with the app:
 - **Spectrum ring**: the spectrum round your logo.
 - **Waveform**: the sound going by.
 - **Photo**: a photo of your own behind the names.
+- **Tunnel**: a ring of the sound streaming outwards into an endless tunnel, faster on the kick.
+- **Retrowave**: a striped sun behind a skyline of the spectrum, over a grid floor running to the horizon.
+- **Liquid chrome**: liquid metal that swells with the bass, with a sheen in your colour.
+- **Bass ring**: three rings of the spectrum round your logo, over a photo that shakes with the bass.
+- **Monochrome**: black and white for techno, the spectrum in halftone dots, a glitch on the hardest kicks.
+- **Kaleido**: patterns turning slowly in a kaleidoscope in time with the music, as a backdrop for a live set.
 - **Original video**: the recording's own picture, for a set that was filmed.
 
 What you choose is kept with the mix, and undone like any other change. The **⋯** button beside the list creates a new, empty template, duplicates, imports, exports or deletes templates, and shows who made one.

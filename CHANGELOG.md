@@ -6,6 +6,10 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Six new video templates**: Tunnel, Retrowave, Liquid chrome, Bass ring,
+  Monochrome and Kaleido, in the looks people put to mixes today. Each asks
+  only for a colour, a font and, where it has one, your logo, and moves in
+  time with the music.
 - **Save settings under a name** and use them again on any recording.
   Saved settings, at the foot of the settings beside Apply to all mixes,
   keeps the levelling and limiter you like; pick one from its list to use it
