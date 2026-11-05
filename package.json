@@ -37,6 +37,7 @@
   },
   "build": {
     "appId": "com.djmixmaster.app",
+    "afterPack": "scripts/linux-launcher.cjs",
     "productName": "DJ Mix Master",
     "directories": {
       "output": "release",

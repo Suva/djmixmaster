@@ -480,7 +480,12 @@ Do not write test data there.
   updates to the Store, as the Store's rules ask: no check of its own, no
   pointer to the download page. Nobody has installed such a package yet. The Windows app has been
   used on a real machine; the Linux AppImage is only started once by the
-  workflow, on a short recording, before it is published. Changes are
+  workflow, on a short recording, before it is published. On Linux the
+  packaged app's executable is a small launcher (`scripts/linux-launcher.cjs`,
+  electron-builder's `afterPack`) in front of the real one, `djmaster.bin`: it
+  adds `--no-sandbox` under Firejail, as the AppImage catalog runs apps, where
+  Chromium's sandbox cannot start and the window stays empty. The switch has
+  to be on the command line; set from `main.ts` it comes too late. Changes are
   developed and checked on macOS.
 
 ## Releasing a version
