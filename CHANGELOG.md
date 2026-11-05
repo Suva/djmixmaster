@@ -6,6 +6,10 @@ are under "Not released yet" and appear there once they are.
 
 ## Not released yet
 
+- **Save settings under a name** and use them again on any recording.
+  Saved settings, at the foot of the settings beside Apply to all mixes,
+  keeps the levelling and limiter you like; pick one from its list to use it
+  on the selected mix.
 - **The Linux app opens inside Firejail**, the sandbox some people run apps
   in. Its window used to stay empty there.
 

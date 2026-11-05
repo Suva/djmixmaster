@@ -2328,6 +2328,156 @@ $('apply-all').addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Saved settings: a mix's levelling and limiter kept under a name, for this
+// recording or the next. Like "Apply to all mixes" they leave out the EQ, the
+// fades and the hand adjustments, which belong to one mix of one recording.
+
+interface SavedSettings extends Defaults {
+  name: string;
+}
+
+let savedSettings: SavedSettings[] = [];
+
+/** One saved entry as read back from disk, or null where it is not one. Unknown or mistyped options are left out. */
+function checkedSaved(value: unknown): SavedSettings | null {
+  const entry = value as Partial<SavedSettings> | null;
+  if (typeof entry?.name !== 'string' || !entry.name.trim() || typeof entry.options !== 'object' || !entry.options) return null;
+  const options: LevelOptions = { ...DEFAULT_LEVEL_OPTIONS };
+  const given = entry.options as unknown as Record<string, unknown>;
+  for (const key of Object.keys(DEFAULT_LEVEL_OPTIONS) as (keyof LevelOptions)[]) {
+    if (typeof given[key] === typeof DEFAULT_LEVEL_OPTIONS[key]) (options as unknown as Record<string, unknown>)[key] = given[key];
+  }
+  if (isNumber(given.targetLufs)) options.targetLufs = given.targetLufs;
+  if (isNumber(given.fixedGainDb)) options.fixedGainDb = given.fixedGainDb;
+  return {
+    name: entry.name.trim(),
+    options,
+    ceilingDb: isNumber(entry.ceilingDb) ? clamp(entry.ceilingDb, -3, 0) : DEFAULT_CEILING_DB,
+    ...(isPreset(entry.loudness) ? { loudness: entry.loudness } : {}),
+  };
+}
+
+const sameName = (a: string, b: string) => a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0;
+
+function keepSaved() {
+  savedSettings.sort((a, b) => a.name.localeCompare(b.name));
+  api.keepSavedSettings(savedSettings);
+  listSaved();
+}
+
+function listSaved() {
+  const list = $('saved-list');
+  list.replaceChildren();
+  if (savedSettings.length === 0) {
+    const none = document.createElement('p');
+    none.className = 'saved-none';
+    none.textContent = 'Nothing saved yet. Name this mix\'s settings below to keep them.';
+    list.append(none);
+  }
+  for (const saved of savedSettings) {
+    const row = document.createElement('div');
+    row.className = 'saved-row';
+    const use = document.createElement('button');
+    use.className = 'saved-use';
+    use.setAttribute('role', 'menuitem');
+    use.textContent = saved.name;
+    use.title = `Use ${saved.name} on this mix: its levelling and limiter. Undo takes it back.`;
+    use.addEventListener('click', () => useSaved(saved));
+    const remove = document.createElement('button');
+    remove.className = 'saved-delete';
+    remove.textContent = '×';
+    remove.title = `Delete ${saved.name}. Mixes that use these settings keep them.`;
+    remove.setAttribute('aria-label', `Delete ${saved.name}`);
+    remove.addEventListener('click', (event) => {
+      event.stopPropagation();
+      savedSettings = savedSettings.filter((other) => other !== saved);
+      keepSaved();
+      $('readout').textContent = `Deleted the saved settings ${saved.name}.`;
+      $<HTMLButtonElement>('saved-settings').focus();
+      closeSaved();
+    });
+    row.append(use, remove);
+    list.append(row);
+  }
+  nameChanged();
+}
+
+/** The Save button says Replace when the name is taken, so nobody overwrites one by surprise. */
+function nameChanged() {
+  const name = $<HTMLInputElement>('saved-name').value.trim();
+  const taken = savedSettings.find((saved) => sameName(saved.name, name));
+  const button = $<HTMLButtonElement>('saved-save');
+  button.textContent = taken ? 'Replace' : 'Save';
+  button.disabled = !name;
+}
+
+function useSaved(saved: SavedSettings) {
+  closeSaved();
+  if (!recording || busy) return;
+  mix.options = { ...saved.options };
+  mix.ceilingDb = saved.ceilingDb;
+  if (saved.loudness) mix.loudness = saved.loudness;
+  else delete mix.loudness;
+  syncControls();
+  scheduleRecompute();
+  $('readout').textContent = `${mix.name} now uses the settings ${saved.name}. Undo takes it back.`;
+}
+
+function closeSaved() {
+  $('saved-menu').hidden = true;
+  $('saved-settings').classList.remove('on');
+}
+
+$('saved-settings').addEventListener('click', (event) => {
+  event.stopPropagation();
+  const menu = $('saved-menu');
+  if (!menu.hidden) return closeSaved();
+  listSaved();
+  menu.hidden = false;
+  $('saved-settings').classList.add('on');
+  menu.querySelector<HTMLButtonElement>('.saved-use')?.focus() ?? $('saved-name').focus();
+});
+
+$('saved-name').addEventListener('input', nameChanged);
+
+$('saved-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const field = $<HTMLInputElement>('saved-name');
+  const name = field.value.trim();
+  if (!name || !recording) return;
+  const entry: SavedSettings = { name, options: { ...mix.options }, ceilingDb: mix.ceilingDb, ...(mix.loudness ? { loudness: mix.loudness } : {}) };
+  const replaced = savedSettings.some((saved) => sameName(saved.name, name));
+  savedSettings = [...savedSettings.filter((saved) => !sameName(saved.name, name)), entry];
+  keepSaved();
+  field.value = '';
+  closeSaved();
+  $('readout').textContent = replaced ? `Replaced the saved settings ${name} with this mix's.` : `Saved this mix's settings as ${name}.`;
+});
+
+$('saved-menu').addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeSaved();
+    $('saved-settings').focus();
+  } else if (event.target instanceof HTMLButtonElement && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+    const items = [...$('saved-menu').querySelectorAll<HTMLElement>('.saved-use, #saved-name')];
+    const at = items.indexOf(event.target);
+    items[event.key === 'ArrowDown' ? Math.min(items.length - 1, at + 1) : Math.max(0, at - 1)]?.focus();
+  } else return;
+  event.preventDefault();
+  event.stopPropagation();
+});
+
+document.addEventListener('mousedown', (event) => {
+  const menu = $('saved-menu');
+  if (!menu.hidden && !menu.contains(event.target as Node) && !$('saved-settings').contains(event.target as Node)) closeSaved();
+});
+
+api.savedSettings().then((list) => {
+  savedSettings = (Array.isArray(list) ? list : []).map(checkedSaved).filter((saved): saved is SavedSettings => saved !== null);
+  savedSettings.sort((a, b) => a.name.localeCompare(b.name));
+});
+
+// ---------------------------------------------------------------------------
 // The EQ: a mix's own, for putting right how it was recorded
 
 /** The bands as the panel has them: a slider for the gain, one for the frequency, and how the readout puts the two together. */

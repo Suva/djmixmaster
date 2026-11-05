@@ -718,6 +718,13 @@ ipcMain.on('remember', (_event, path: string, remembered: Remembered) => {
     .catch((error) => console.error('Could not save the session:', error));
 });
 
+// Settings saved under names, for any recording. The window checks what it reads back.
+const savedSettingsFile = () => join(app.getPath('userData'), 'saved-settings.json');
+ipcMain.handle('saved-settings', () => readJson(savedSettingsFile()));
+ipcMain.on('keep-saved-settings', (_event, list: unknown) => {
+  writeStored(savedSettingsFile(), JSON.stringify(list)).catch((error) => console.error('Could not keep the saved settings:', error));
+});
+
 ipcMain.handle('render', async (_event, request: RenderRequest) => {
   if (resolve(request.output) === resolve(request.input)) {
     throw new Error('Choose a different name: this would overwrite the recording itself');

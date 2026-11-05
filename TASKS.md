@@ -68,16 +68,6 @@ sits small in a tall picture, with empty space above and below.
   in their expressions where a layer should sit or size otherwise.
 - Done when each looks made for the shape in a screenshot of each.
 
-### Named settings presets — small
-
-"Apply to all mixes" copies one mix's settings to the rest of a recording. A
-favourite setup is also worth keeping for the next recording.
-
-- Named presets that can be saved, applied and deleted, stored with the
-  app's other data.
-- Like "Apply to all mixes", a preset holds the settings only, not fades or
-  hand adjustments.
-
 ### Cue sheets on export — medium
 
 MP3, AAC and MP4 exports carry the mix's track markers as chapters; WAV and
@@ -166,7 +156,9 @@ Releases include an AppImage. GitHub starts it once on a short recording
 before publishing, which shows it opens and finds its ffmpeg, but nobody has
 used it on a desktop. Worth a check: playback and sound output, the file
 dialogs, dropping files on the window, and whether it starts on Ubuntu 24.04
-without extra steps. It runs without Chromium's sandbox (see `main.ts`).
+without extra steps. Chromium's sandbox is turned off where it cannot start:
+by the AppImage's own start script where user namespaces are missing, and by
+`scripts/linux-launcher.cjs` under Firejail.
 
 ### An LGPL build of ffmpeg — medium
 

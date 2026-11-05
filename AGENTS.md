@@ -257,6 +257,7 @@ Linux), the same for `npm start` and the packaged app.
 | `analyses/` | One measurement per recording, keyed on its fingerprint, modified time and `ANALYSIS_VERSION`; the 20 most recently used are kept |
 | `sessions/` | The mixes, settings, hand adjustments and track markers per recording, stored twice: under its path, and under its fingerprint for when it has been moved |
 | `last-settings.json` | Settings last in use, for recordings opened for the first time |
+| `saved-settings.json` | Settings saved under names in the settings panel's Saved settings menu, to use on any recording: each a name with the levelling options, ceiling and loudness choice |
 | `templates/` | The user's own video templates, one JSON file each, named by an id; a mix chooses one as `user:<id>` |
 | `media/` | Videos up to 25 MB added to templates, and those in template files imported, named by their fingerprint; Settings can put them elsewhere |
 | `preferences.json` | Choices that belong to the app rather than a recording: the folder for template videos and the LUT folder, `theme` (kept only when `light`; dark is the default whatever the system says) and `output`, the sound output by the window's id for it and its name (absent for the system's default), chosen in Settings, `recording`, the Record view's device, channels, format and folder last used, and the view the window was left in (`mastering`, `video` or `editing`), to start in next time |

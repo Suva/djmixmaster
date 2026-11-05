@@ -203,6 +203,53 @@ test('a fixed gain in place of levelling, set by hand and carried back', { skip 
   assert.equal(seen.choice, 'custom', 'a level set by hand stays set by hand');
 });
 
+test('settings saved under a name are used again in another recording, undone and deleted', { skip }, async () => {
+  const data = await fresh();
+  const saved = await runApp({ recording: mix, data }, async (page) => {
+    page.slide('boost', 0);
+    page.slide('cut', 6);
+    page.click('saved-settings');
+    const empty = page.text('saved-list');
+    page.type('saved-name', 'Club night');
+    page.click('saved-save');
+    page.click('saved-settings');
+    page.type('saved-name', 'club NIGHT');
+    const sameName = page.text('saved-save');
+    return { empty, sameName, listed: page.text('saved-list'), readout: page.text('readout') };
+  });
+  assert.match(saved.empty, /Nothing saved yet/);
+  assert.equal(saved.sameName, 'Replace', 'a name already taken, in other capitals, is replaced rather than doubled');
+  assert.match(saved.listed, /Club night/);
+  const kept = JSON.parse(readFileSync(join(data, 'saved-settings.json'), 'utf8'));
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0].options.maxBoostDb, 0);
+  assert.equal(kept[0].options.maxCutDb, 6);
+
+  const used = await runApp({ recording: night, data }, async (page) => {
+    // The last settings in use carry over to a new recording by themselves; put back the defaults first.
+    page.click('reset');
+    await page.saved();
+    const before = page.text('cut-value');
+    page.click('saved-settings');
+    document.querySelector<HTMLButtonElement>('#saved-list .saved-use')!.click();
+    const menuClosed = page.element('saved-menu').hidden;
+    const applied = { cut: page.text('cut-value'), boost: page.text('boost-value') };
+    await page.saved();
+    page.click('undo');
+    await page.until(() => page.text('cut-value') === before, 'undo to take the saved settings back');
+    page.click('saved-settings');
+    document.querySelector<HTMLButtonElement>('#saved-list .saved-delete')!.click();
+    page.click('saved-settings');
+    return { before, menuClosed, applied, afterDelete: page.text('saved-list') };
+  });
+  assert.doesNotMatch(used.before, /6\.0 dB/);
+  assert.ok(used.menuClosed);
+  assert.match(used.applied.cut, /6\.0 dB/);
+  assert.match(used.applied.boost, /0\.0 dB/);
+  assert.match(used.afterDelete, /Nothing saved yet/);
+  assert.deepEqual(JSON.parse(readFileSync(join(data, 'saved-settings.json'), 'utf8')), []);
+});
+
 test('a mix can be split, deleted with Backspace, and both undone', { skip }, async () => {
   const seen = await runApp({ recording: mix, data: await fresh() }, async (page) => {
     await page.saved();

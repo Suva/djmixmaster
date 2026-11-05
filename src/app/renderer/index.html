@@ -410,6 +410,17 @@
       <div class="settings-buttons">
         <button id="reset" title="Put this mix's levelling and limiter back to the defaults. The EQ stays as it is.">Reset settings</button>
         <button id="apply-all" title="Give every other mix in this recording the same levelling and limiter as this one. Their EQs, fades and hand adjustments stay as they are." disabled>Apply to all mixes</button>
+        <div class="saved-holder">
+          <button id="saved-settings" title="Settings saved under a name, to use again on this mix or in another recording" aria-haspopup="menu">Saved settings</button>
+          <div id="saved-menu" class="template-menu saved-menu" role="menu" hidden>
+            <div id="saved-list"></div>
+            <hr>
+            <form id="saved-form" class="saved-form">
+              <input id="saved-name" type="text" placeholder="Name these settings" aria-label="Name for these settings" maxlength="60" spellcheck="false">
+              <button id="saved-save" type="submit" title="Save this mix's levelling and limiter under this name. Its EQ, fades and hand adjustments are not part of it.">Save</button>
+            </form>
+          </div>
+        </div>
       </div>
       </div>
     </aside>
