@@ -15,7 +15,7 @@ free; if it helps you, you can [sponsor it](https://github.com/sponsors/Suva).
 
 ## Download and install
 
-Installers for macOS (Apple Silicon), Windows and Linux are on the
+Installers for macOS (Apple Silicon and Intel), Windows and Linux are on the
 [website](https://dmm.clysuva.com/) and the
 [releases page](https://github.com/Suva/djmixmaster/releases); on Windows it
 is also in the
@@ -25,9 +25,6 @@ are not signed, so each system warns about them the first time; the manual's
 [Installing](https://dmm.clysuva.com/manual/install.html) page
 says how to get past that. What changed in each release is in
 [CHANGELOG.md](CHANGELOG.md).
-
-There is no build for Intel Macs yet. On those, the tool can be run
-[from source](#running-from-source).
 
 ## The manual
 
