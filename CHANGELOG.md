@@ -8,6 +8,16 @@ are under "Not released yet" and appear there once they are.
 
 - **A download for Intel Macs.** Macs with an Intel processor have an
   installer of their own, beside the one for Apple Silicon.
+- **Save settings under a name** and use them again on any recording.
+  Saved settings, at the foot of the settings beside Apply to all mixes,
+  keeps the levelling and limiter you like; pick one from its list to use it
+  on the selected mix.
+- **Motion blur for layers in a video.** Each layer that draws, and each
+  group, has a Motion blur setting under Placement: a layer that moves, turns
+  or grows quickly is smeared along its way, as a camera would show it. It
+  looks the same in the picture and in the export.
+- **The Linux app opens inside Firejail**, the sandbox some people run apps
+  in. Its window used to stay empty there.
 
 ## 0.13.1 — 25 October 2026
 

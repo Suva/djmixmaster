@@ -28,6 +28,8 @@ It levels track against track, not moment against moment. A slow gain curve foll
 | Most boost, Most cut | How far a quiet track may be raised, and a loud one lowered. |
 | True-peak ceiling | The highest level the output may reach. |
 
+**Saved settings**, at the foot of the settings, keeps a setup you like for the next recording. Type a name and press Save; a name already used is replaced. Pick a name from the list to use it on the selected mix, or × to delete it. A saved setup holds the settings above, not the EQ, fades or adjustments of a mix, and undo takes back using one.
+
 ## EQ
 
 Under the levelling settings is an EQ, for putting right how a mix was recorded before it is levelled: a turntable's phono stage that makes records sound dull or harsh, a PA mixer's EQ left on, rumble from a turntable. The levelling measures the mix as the EQ makes it sound, so the loudness figures and the curves follow it.

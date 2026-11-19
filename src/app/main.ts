@@ -29,12 +29,6 @@ import { checkNow, checkQuietly, DOWNLOAD_PAGE, loadUpdateSettings, MANUAL_PAGE,
 // The same name, and so the same data folder, whether run from the project or as the packaged app.
 app.setName('DJ Mix Master');
 
-// An AppImage cannot carry Chromium's sandbox helper in the form it needs, and
-// recent Ubuntu also blocks the other way the sandbox starts, so without this
-// the app would not open there. The window only ever shows the app's own
-// pages, served from inside it, never anything from the internet.
-if (process.platform === 'linux' && process.env.APPIMAGE) app.commandLine.appendSwitch('no-sandbox');
-
 // The packaged app carries its own ffmpeg; workers inherit this when they start.
 const bundledFfmpeg = join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
 if (app.isPackaged && existsSync(bundledFfmpeg)) process.env.DJMASTER_FFMPEG = bundledFfmpeg;
@@ -722,6 +716,13 @@ ipcMain.on('remember', (_event, path: string, remembered: Remembered) => {
     // Last, and allowed to fail: the recording may be gone by the time its mixes are saved.
     .then(async () => writeStored(await sessionByContent(path), JSON.stringify(remembered.session)))
     .catch((error) => console.error('Could not save the session:', error));
+});
+
+// Settings saved under names, for any recording. The window checks what it reads back.
+const savedSettingsFile = () => join(app.getPath('userData'), 'saved-settings.json');
+ipcMain.handle('saved-settings', () => readJson(savedSettingsFile()));
+ipcMain.on('keep-saved-settings', (_event, list: unknown) => {
+  writeStored(savedSettingsFile(), JSON.stringify(list)).catch((error) => console.error('Could not keep the saved settings:', error));
 });
 
 ipcMain.handle('render', async (_event, request: RenderRequest) => {

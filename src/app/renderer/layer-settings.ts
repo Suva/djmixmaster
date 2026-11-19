@@ -92,7 +92,7 @@ export function freeName(wanted: string, taken: Iterable<string>): string {
 
 /** Settings shown under the layer's own, folded away until wanted. */
 const GROUPS: [string, string[], boolean][] = [
-  ['Placement', ['x', 'y', 'anchor', 'scale', 'rotation'], true],
+  ['Placement', ['x', 'y', 'anchor', 'scale', 'rotation', 'motionBlur'], true],
   ['Drop shadow', ['dropShadow', 'dropColour', 'dropOpacity', 'dropAngle', 'dropDistance', 'dropSize'], false],
   ['Stroke', ['stroke', 'strokeColour', 'strokeOpacity', 'strokeWidth'], false],
   ['Outer glow', ['outerGlow', 'glowColour', 'glowOpacity', 'glowSize', 'glowSpread'], false],

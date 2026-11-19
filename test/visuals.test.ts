@@ -4,7 +4,7 @@ import { parseHex, toHex, toLch, type Colour } from '../src/visuals/colour.ts';
 import { compile, type Value } from '../src/visuals/expression.ts';
 import { parseMotion } from '../src/visuals/motion.ts';
 import { MUSIC_NAMES, MusicReader } from '../src/visuals/music.ts';
-import { checkTemplate, fieldNameProblem, fillText, imagesOf, prepare, renameField, TEXT_VARIABLES, TEMPLATE_FORMAT, upgradeTemplate } from '../src/visuals/template.ts';
+import { checkTemplate, fieldNameProblem, LAYER_TYPES, settingsOf, fillText, imagesOf, prepare, renameField, TEXT_VARIABLES, TEMPLATE_FORMAT, upgradeTemplate } from '../src/visuals/template.ts';
 import { BAND_COUNT, FEATURE_RATE, type Features } from '../src/features.ts';
 
 const value = (text: string, values: Record<string, number> = {}) => {
@@ -425,4 +425,14 @@ test('a template of format 2 has its gradients\' colours made stops, where they 
   assert.ok(!('fillColour' in layers[4]));
   const { problems } = checkTemplate(old, MUSIC_NAMES, TEXT_VARIABLES);
   assert.deepEqual(problems, [], 'nothing left over that the layers no longer have');
+});
+
+test('motion blur is offered on layers that move as a whole, and not on effects or a solid colour', () => {
+  for (const type of ['text', 'shape', 'image', 'video', 'particles', 'group']) assert.ok('motionBlur' in settingsOf(LAYER_TYPES[type]), type);
+  for (const type of ['solid', 'blur', 'glow', 'transform', 'kaleidoscope', 'trails']) assert.ok(!('motionBlur' in settingsOf(LAYER_TYPES[type])), type);
+  const { problems } = checkTemplate({
+    format: TEMPLATE_FORMAT, name: 'Blurred', fields: [],
+    layers: [{ type: 'text', params: { motionBlur: 'bass' } }, { type: 'blur', params: { motionBlur: 1 } }],
+  }, music, textNames);
+  assert.deepEqual(problems.map((p) => `${p.where}: ${p.message}`), ['Layer 2 (Blur): Blur has no setting called motionBlur']);
 });

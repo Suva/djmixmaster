@@ -200,6 +200,10 @@ export interface Api {
   measure(path: string): Promise<Examination>;
   recall(path: string): Promise<Remembered>;
   remember(path: string, remembered: Remembered): void;
+  /** The settings saved under names, to use again on any recording; what the window last stored, unchecked. */
+  savedSettings(): Promise<unknown>;
+  /** Keeps the whole list of saved settings in place of the one before. */
+  keepSavedSettings(list: unknown): void;
   /**
    * Decodes the stretch from `start` to `end` seconds and returns its shape in
    * `perSecond` slices a second. Requests are served one after another.
