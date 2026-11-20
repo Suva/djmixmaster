@@ -4,7 +4,7 @@ The changes in each release of DJ Mix Master that someone using it would
 notice. The website shows this list; changes that are not yet in a release
 are under "Not released yet" and appear there once they are.
 
-## Not released yet
+## 0.14.0 — 20 November 2026
 
 - **Six new video templates**: Tunnel, Retrowave, Liquid chrome, Bass ring,
   Monochrome and Kaleido, in the looks people put to mixes today. Each asks
